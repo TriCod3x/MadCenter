@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Madcenter Entregas</title>
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">MC</div>
+        <div>
+          <strong>Madcenter</strong>
+          <span>Construção</span>
+        </div>
+      </div>
+      <nav class="nav-menu" id="navMenu">
+        <button class="nav-link active" data-page="dashboard"><span>▦</span> Dashboard</button>
+        <button class="nav-link" data-page="cargas"><span>▣</span> Pedidos/Cargas</button>
+        <button class="nav-link" data-page="motoristas"><span>◉</span> Motoristas</button>
+        <button class="nav-link" data-page="caminhoes"><span>▰</span> Caminhões</button>
+        <button class="nav-link" data-page="rotas"><span>⌁</span> Rotas</button>
+        <button class="nav-link" data-page="mapa"><span>⌖</span> Mapa de Entregas</button>
+        <button class="nav-link" data-page="unificar"><span>⇄</span> Unificar Entregas</button>
+        <button class="nav-link" data-page="clientes"><span>◇</span> Clientes</button>
+        <button class="nav-link" data-page="configuracoes"><span>⚙</span> Configurações</button>
+      </nav>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <button class="icon-button mobile-only" id="menuToggle" aria-label="Abrir menu">☰</button>
+        <div>
+          <h1 id="pageTitle">Dashboard</h1>
+          <span class="topbar-subtitle">Madcenter Entregas · Gestão de cargas, rotas e entregas</span>
+        </div>
+        <div class="topbar-actions">
+          <input id="quickSearch" class="quick-search" type="search" placeholder="Buscar pedido, cliente, motorista ou cidade...">
+          <button class="theme-toggle" id="themeToggle" type="button">Tema</button>
+          <div class="admin-pill">
+            <span class="admin-dot"></span>
+            Admin Madcenter
+          </div>
+        </div>
+      </header>
+
+      <main class="content">
+        <section class="page active" id="page-dashboard">
+          <div class="hero-strip">
+            <div>
+              <strong>Central de entregas Madcenter</strong>
+              <span>Pedidos de obra, frota, rotas e entregas por município em um só painel.</span>
+            </div>
+          </div>
+          <div class="metrics-grid" id="dashboardMetrics"></div>
+          <div class="dashboard-grid">
+            <div class="panel">
+              <div class="panel-header"><h2>Últimos pedidos/cargas</h2></div>
+              <div id="latestCargas" class="stack-list"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><h2>Próximas rotas de entrega</h2></div>
+              <div id="nextRotas" class="stack-list"></div>
+            </div>
+            <div class="panel alerts-panel">
+              <div class="panel-header"><h2>Alertas da operação</h2></div>
+              <div id="alertsList" class="stack-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="page-cargas">
+          <div class="section-intro">
+            <h2>Pedidos/Cargas</h2>
+            <p>Controle pedidos de materiais de construção, separação, saída e entrega ao cliente.</p>
+          </div>
+          <div class="page-toolbar">
+            <div class="filters-grid" id="cargasFilters"></div>
+            <button class="primary-button" data-action="new" data-entity="cargas">Novo pedido/carga</button>
+          </div>
+          <div class="table-card"><div class="table-wrap"><table id="cargasTable"></table></div></div>
+        </section>
+
+        <section class="page" id="page-motoristas">
+          <div class="section-intro">
+            <h2>Motoristas</h2>
+            <p>Motoristas responsáveis pelas entregas da loja. Acompanhe disponibilidade, cidade atual e histórico de entregas.</p>
+          </div>
+          <div class="page-toolbar">
+            <input class="filter-input" id="motoristasSearch" type="search" placeholder="Buscar motorista">
+            <button class="primary-button" data-action="new" data-entity="motoristas">Novo motorista</button>
+          </div>
+          <div class="table-card"><div class="table-wrap"><table id="motoristasTable"></table></div></div>
+        </section>
+
+        <section class="page" id="page-caminhoes">
+          <div class="section-intro">
+            <h2>Caminhões</h2>
+            <p>Frota de entrega da Madcenter para materiais leves, volumosos e cargas pesadas.</p>
+          </div>
+          <div class="page-toolbar">
+            <input class="filter-input" id="caminhoesSearch" type="search" placeholder="Buscar caminhão">
+            <button class="primary-button" data-action="new" data-entity="caminhoes">Novo caminhão</button>
+          </div>
+          <div class="table-card"><div class="table-wrap"><table id="caminhoesTable"></table></div></div>
+        </section>
+
+        <section class="page" id="page-rotas">
+          <div class="section-intro">
+            <h2>Planejamento de rotas de entrega</h2>
+            <p>Organize saídas, paradas e entregas por município.</p>
+          </div>
+          <div class="page-toolbar">
+            <input class="filter-input" id="rotasSearch" type="search" placeholder="Buscar rota">
+            <button class="primary-button" data-action="new" data-entity="rotas">Nova rota</button>
+          </div>
+          <div class="table-card"><div class="table-wrap"><table id="rotasTable"></table></div></div>
+        </section>
+
+        <section class="page" id="page-mapa">
+          <div class="map-command-layout">
+            <aside class="panel map-command-side">
+              <div class="panel-header"><h2>Mapa de Entregas</h2></div>
+              <div class="base-card">
+                <strong>Madcenter Construção</strong>
+                <span>Sede e ponto de saída das entregas · Timon/MA</span>
+              </div>
+              <div class="map-summary-grid" id="mapSummary"></div>
+              <div class="map-filter-block">
+                <h3>Filtros</h3>
+                <div class="map-filter-grid" id="mapFilters">
+                  <select id="mapStatusFilter"></select>
+                  <select id="mapDriverFilter"></select>
+                  <select id="mapTruckFilter"></select>
+                  <select id="mapCityFilter"></select>
+                  <select id="mapVehicleTypeFilter"></select>
+                </div>
+              </div>
+              <div class="map-filter-block">
+                <h3>Camadas</h3>
+                <div class="layer-grid" id="mapLayerControls">
+                  <label><input type="checkbox" data-layer="showStore" checked> Mostrar sede</label>
+                  <label><input type="checkbox" data-layer="showPending" checked> Entregas pendentes</label>
+                  <label><input type="checkbox" data-layer="showInProgress" checked> Entregas em andamento</label>
+                  <label><input type="checkbox" data-layer="showCompleted" checked> Entregas concluídas</label>
+                  <label><input type="checkbox" data-layer="showPlannedRoutes" checked> Rotas planejadas</label>
+                  <label><input type="checkbox" data-layer="showActiveRoutes" checked> Rotas em andamento</label>
+                  <label><input type="checkbox" data-layer="showCompletedRoutes" checked> Rotas concluídas</label>
+                  <label><input type="checkbox" data-layer="showDrivers" checked> Mostrar motoristas</label>
+                  <label><input type="checkbox" data-layer="showLegend" checked> Mostrar legenda</label>
+                </div>
+              </div>
+              <div id="mapWarnings" class="map-warnings"></div>
+              <div class="map-routes-list" id="mapRouteCards"></div>
+            </aside>
+            <div class="map-stage">
+              <div class="map-floating-controls">
+                <button class="secondary-button" id="mapReloadRoutes" type="button">Recalcular rotas</button>
+                <button class="secondary-button" id="mapFitRoutes" type="button">Ver todas</button>
+              </div>
+              <div id="mapLegend" class="map-legend"></div>
+              <div id="logisticsMap" class="map-canvas"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" id="page-unificar">
+          <div class="section-intro">
+            <h2>Unificar Entregas</h2>
+            <p>Veja pedidos que podem sair juntos para economizar tempo, combustível e viagem.</p>
+          </div>
+          <div class="suggestions-grid" id="unificationSuggestions"></div>
+        </section>
+
+        <section class="page" id="page-clientes">
+          <div class="section-intro">
+            <h2>Clientes</h2>
+            <p>Clientes encontrados nos pedidos/cargas cadastrados no sistema.</p>
+          </div>
+          <div class="table-card"><div class="table-wrap"><table id="clientesTable"></table></div></div>
+        </section>
+
+        <section class="page" id="page-configuracoes">
+          <div class="settings-layout">
+            <form class="panel form-grid" id="settingsForm"></form>
+            <div class="panel danger-zone">
+              <div class="panel-header"><h2>Dados do protótipo</h2></div>
+              <p class="muted">Use estas ações para limpar ou restaurar as informações salvas no navegador.</p>
+              <div class="button-row">
+                <button class="secondary-button" id="restoreSeedBtn" type="button">Restaurar dados exemplo</button>
+                <button class="danger-button" id="clearDataBtn" type="button">Limpar dados</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2 id="modalTitle">Cadastro</h2>
+        <button class="icon-button" id="modalClose" type="button" aria-label="Fechar">×</button>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
