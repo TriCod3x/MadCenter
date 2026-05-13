@@ -1,12 +1,10 @@
-const DB_KEYS = {
+﻿const DB_KEYS = {
   cargas: "madcenter:cargas",
   motoristas: "madcenter:motoristas",
-  caminhoes: "madcenter:caminhoes",
   rotas: "madcenter:rotas",
   settings: "madcenter:settings",
   seeded: "madcenter:seeded",
-  version: "madcenter:version",
-  routeGeometryCache: "madcenter:routeGeometryCache"
+  version: "madcenter:version"
 };
 
 function cloneData(data) {
@@ -22,48 +20,13 @@ function writeCollection(name, value) {
 }
 
 function initStorage(force = false) {
-  if (!localStorage.getItem(DB_KEYS.seeded) || force || localStorage.getItem(DB_KEYS.version) !== "map-osrm-v1") {
+  if (!localStorage.getItem(DB_KEYS.seeded) || force || localStorage.getItem(DB_KEYS.version) !== "madcenter-v1") {
     writeCollection("cargas", cloneData(SEED_DATA.cargas));
     writeCollection("motoristas", cloneData(SEED_DATA.motoristas));
-    writeCollection("caminhoes", cloneData(SEED_DATA.caminhoes));
     writeCollection("rotas", cloneData(SEED_DATA.rotas));
     localStorage.setItem(DB_KEYS.settings, JSON.stringify(cloneData(DEFAULT_SETTINGS)));
     localStorage.setItem(DB_KEYS.seeded, "true");
-    localStorage.setItem(DB_KEYS.version, "map-osrm-v1");
-    localStorage.setItem(DB_KEYS.routeGeometryCache, JSON.stringify({}));
-  } else {
-    migrateFreightFields();
-  }
-}
-
-function migrateFreightFields() {
-  const settings = { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(DB_KEYS.settings) || "{}") };
-  localStorage.setItem(DB_KEYS.settings, JSON.stringify(settings));
-
-  const cargas = getCargas().map((carga) => ({
-    ...carga,
-    origemEmpresa: carga.origemEmpresa || STORE_LOCATION.name,
-    origemMunicipio: STORE_LOCATION.city,
-    origemEstado: STORE_LOCATION.state,
-    origemLat: Number(settings.latitudeLoja || STORE_LOCATION.lat),
-    origemLng: Number(settings.longitudeLoja || STORE_LOCATION.lng),
-    veiculoTipo: carga.veiculoTipo || suggestVehicleByWeight(Number(carga.peso || 0))?.id || "caminhonete",
-    distanciaKm: Number(carga.distanciaKm || 0),
-    valorFrete: Number(carga.valorFrete || 0)
-  }));
-  writeCollection("cargas", cargas);
-
-  const rotas = getRotas().map((rota) => ({
-    ...rota,
-    origemMunicipio: STORE_LOCATION.city,
-    origemEstado: STORE_LOCATION.state,
-    veiculoTipo: rota.veiculoTipo || "caminhonete",
-    freteTotal: Number(rota.freteTotal || rota.custo || 0)
-  }));
-  writeCollection("rotas", rotas);
-  localStorage.setItem(DB_KEYS.version, "map-osrm-v1");
-  if (!localStorage.getItem(DB_KEYS.routeGeometryCache)) {
-    localStorage.setItem(DB_KEYS.routeGeometryCache, JSON.stringify({}));
+    localStorage.setItem(DB_KEYS.version, "madcenter-v1");
   }
 }
 
@@ -74,12 +37,10 @@ function clearAllData() {
 function resetToEmptyData() {
   writeCollection("cargas", []);
   writeCollection("motoristas", []);
-  writeCollection("caminhoes", []);
   writeCollection("rotas", []);
   localStorage.setItem(DB_KEYS.settings, JSON.stringify(cloneData(DEFAULT_SETTINGS)));
   localStorage.setItem(DB_KEYS.seeded, "true");
-  localStorage.setItem(DB_KEYS.version, "map-osrm-v1");
-  localStorage.setItem(DB_KEYS.routeGeometryCache, JSON.stringify({}));
+  localStorage.setItem(DB_KEYS.version, "madcenter-v1");
 }
 
 function makeId(prefix) {
@@ -112,10 +73,7 @@ function deleteItem(name, id) {
 }
 
 function getCargas() { return readCollection("cargas"); }
-function saveCarga(data) {
-  const cargas = getCargas();
-  return createItem("cargas", { ...data, id: makeId("car"), codigo: nextCode("PD", cargas, "codigo") });
-}
+function saveCarga(data) { return createItem("cargas", { ...data, id: makeId("car"), codigo: nextCode("PD", getCargas(), "codigo") }); }
 function updateCarga(id, data) { return updateItem("cargas", id, data); }
 function deleteCarga(id) { deleteItem("cargas", id); }
 
@@ -124,16 +82,8 @@ function saveMotorista(data) { return createItem("motoristas", { ...data, id: ma
 function updateMotorista(id, data) { return updateItem("motoristas", id, data); }
 function deleteMotorista(id) { deleteItem("motoristas", id); }
 
-function getCaminhoes() { return readCollection("caminhoes"); }
-function saveCaminhao(data) { return createItem("caminhoes", { ...data, id: makeId("cam") }); }
-function updateCaminhao(id, data) { return updateItem("caminhoes", id, data); }
-function deleteCaminhao(id) { deleteItem("caminhoes", id); }
-
 function getRotas() { return readCollection("rotas"); }
-function saveRota(data) {
-  const rotas = getRotas();
-  return createItem("rotas", { ...data, id: makeId("rot"), codigo: nextCode("RT", rotas, "codigo") });
-}
+function saveRota(data) { return createItem("rotas", { ...data, id: makeId("rot"), codigo: nextCode("RT", getRotas(), "codigo") }); }
 function updateRota(id, data) { return updateItem("rotas", id, data); }
 function deleteRota(id) { deleteItem("rotas", id); }
 
@@ -143,22 +93,4 @@ function getSettings() {
 
 function saveSettings(data) {
   localStorage.setItem(DB_KEYS.settings, JSON.stringify({ ...getSettings(), ...data }));
-}
-
-function getRouteGeometryCache() {
-  return JSON.parse(localStorage.getItem(DB_KEYS.routeGeometryCache) || "{}");
-}
-
-function getCachedRouteGeometry(key) {
-  return getRouteGeometryCache()[key] || null;
-}
-
-function setCachedRouteGeometry(key, value) {
-  const cache = getRouteGeometryCache();
-  cache[key] = value;
-  localStorage.setItem(DB_KEYS.routeGeometryCache, JSON.stringify(cache));
-}
-
-function clearRouteGeometryCache() {
-  localStorage.setItem(DB_KEYS.routeGeometryCache, JSON.stringify({}));
 }

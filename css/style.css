@@ -573,13 +573,15 @@ tr:hover td {
 .badge-red { background: #fee2e2; color: #991b1b; }
 .badge-gray { background: #e5e7eb; color: #374151; }
 .badge-orange { background: #ffedd5; color: #9a4b00; }
+ .badge-purple { background: #f5e8ff; color: #5f2d82; }
 
-[data-theme="dark"] .badge-yellow { background: #5b4b18; color: #ffeaa0; }
-[data-theme="dark"] .badge-blue { background: #193f31; color: #b7f2d5; }
-[data-theme="dark"] .badge-green { background: #174b34; color: #b6f2cf; }
-[data-theme="dark"] .badge-red { background: #5b2525; color: #ffd0d0; }
-[data-theme="dark"] .badge-gray { background: #374151; color: #e5e7eb; }
-[data-theme="dark"] .badge-orange { background: #5b351b; color: #ffd0a0; }
+ [data-theme="dark"] .badge-yellow { background: #5b4b18; color: #ffeaa0; }
+ [data-theme="dark"] .badge-blue { background: #193f31; color: #b7f2d5; }
+ [data-theme="dark"] .badge-green { background: #174b34; color: #b6f2cf; }
+ [data-theme="dark"] .badge-red { background: #5b2525; color: #ffd0d0; }
+ [data-theme="dark"] .badge-gray { background: #374151; color: #e5e7eb; }
+ [data-theme="dark"] .badge-orange { background: #5b351b; color: #ffd0a0; }
+ [data-theme="dark"] .badge-purple { background: #4d3166; color: #f9d7ff; }
 
 .modal-backdrop {
   position: fixed;
@@ -589,10 +591,10 @@ tr:hover td {
   justify-content: center;
   padding: 20px;
   background: rgba(8, 28, 18, .62);
-  z-index: 50;
+  z-index: 60;
 }
 
-.modal-backdrop.open { display: flex; }
+.modal-backdrop.active { display: flex; }
 
 .modal {
   width: min(980px, 100%);
