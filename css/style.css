@@ -940,6 +940,10 @@ tr:hover td {
 }
 
 .map-route-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
   padding: 13px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -965,9 +969,16 @@ tr:hover td {
 .map-route-title {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.map-route-card > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
 }
 
 .map-route-card p {

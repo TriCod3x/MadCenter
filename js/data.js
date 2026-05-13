@@ -1,9 +1,9 @@
 ﻿const STORE_LOCATION = {
-  name: "Madcenter Construção",
-  city: "Timon",
-  state: "MA",
-  lat: -4.760287,
-  lng: -42.573777
+  name: "Madcenter Construção - Sede",
+  city: "José de Freitas",
+  state: "PI",
+  lat: -4.43028,
+  lng: -42.62778
 };
 
 const VEHICLE_TYPES = [
@@ -16,6 +16,7 @@ const VEHICLE_TYPES = [
 
 const MUNICIPIOS_COORDS = {
   "timon-ma": { nome: "Timon", estado: "MA", lat: -4.760287, lng: -42.573777 },
+  "jose de freitas-pi": { nome: "José de Freitas", estado: "PI", lat: -4.43028, lng: -42.62778 },
   "teresina-pi": { nome: "Teresina", estado: "PI", lat: -5.0892, lng: -42.8016 },
   "caxias-ma": { nome: "Caxias", estado: "MA", lat: -4.8589, lng: -43.3561 },
   "codo-ma": { nome: "Codó", estado: "MA", lat: -4.4556, lng: -43.8924 },
@@ -26,7 +27,7 @@ const MUNICIPIOS_COORDS = {
 const DEFAULT_SETTINGS = {
   empresa: "Madcenter Construção",
   telefone: "(86) 99999-4500",
-  endereco: "Av. Principal, 1200 - Timon/MA",
+  endereco: "Av. Principal, 1200 - José de Freitas/PI",
   cidadeBase: STORE_LOCATION.city,
   estado: STORE_LOCATION.state,
   latitudeLoja: STORE_LOCATION.lat,
@@ -199,6 +200,7 @@ const SEED_DATA = {
       id: "rot-001",
       codigo: "RT-2001",
       nome: "Teresina - Tintas e elétricos",
+      tipoRota: "Rodoviária",
       destinoMunicipio: "Teresina",
       destinoEstado: "PI",
       motoristaId: "mot-001",

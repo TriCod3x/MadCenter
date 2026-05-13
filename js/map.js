@@ -1,5 +1,6 @@
 ﻿let logisticsMap;
 let mapBounds;
+const ROUTE_CACHE = {};
 
 function normalizeCityName(text) {
   return String(text || "")
@@ -12,6 +13,52 @@ function normalizeCityName(text) {
 
 function coordKey(city, state) {
   return `${normalizeCityName(city)}-${String(state || "").trim().toLowerCase()}`;
+}
+
+function routeStyle(route) {
+  const color = routeStatusColor(route.status);
+  const weight = route.tipoRota === "Urbana" ? 4 : route.tipoRota === "Mista" ? 5 : 6;
+  let dashArray = null;
+  let opacity = 0.92;
+
+  if (route.status === "planejada") {
+    dashArray = "6 6";
+    opacity = 0.82;
+  }
+
+  if (route.status === "cancelada") {
+    dashArray = "4 6";
+    opacity = 0.7;
+  }
+
+  if (route.status === "em andamento") {
+    dashArray = null;
+    opacity = 1;
+  }
+
+  if (route.status === "concluída") {
+    dashArray = null;
+    opacity = 0.95;
+  }
+
+  return { color, weight, opacity, dashArray };
+}
+
+async function getRouteGeometry(origin, destination) {
+  const key = `${origin.lat},${origin.lng}:${destination.lat},${destination.lng}`;
+  if (ROUTE_CACHE[key]) return ROUTE_CACHE[key];
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`;
+    const response = await fetch(url);
+    const data = await response.json();
+    if (data?.routes?.[0]?.geometry) {
+      ROUTE_CACHE[key] = data.routes[0].geometry;
+      return data.routes[0].geometry;
+    }
+  } catch (error) {
+    console.warn("OSRM route fetch falhou", error);
+  }
+  return null;
 }
 
 function getCityCoordinates(city, state) {
@@ -50,7 +97,7 @@ function extendBounds(point) {
   if (point) mapBounds.extend(point);
 }
 
-function renderLogisticsMap(filters = {}) {
+async function renderLogisticsMap(filters = {}) {
   const map = initMap();
   if (!map) return [];
   clearMapLayers();
@@ -58,13 +105,13 @@ function renderLogisticsMap(filters = {}) {
   const routeCards = [];
   drawStoreMarker(store);
   const routes = getRotas().filter((route) => routeVisibleByFilters(route, filters));
-  routes.forEach((route) => {
+  await Promise.all(routes.map(async (route) => {
     const destination = getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
     if (!destination) return;
-    drawRouteLine(store, destination, route);
+    await drawRouteLine(store, destination, route);
     drawDestinationMarker(destination, route);
     routeCards.push(route);
-  });
+  }));
   renderMapSummary(routeCards);
   renderRouteCards(routeCards);
   if (mapBounds.isValid()) logisticsMap.fitBounds(mapBounds, { padding: [22, 22], maxZoom: 13 });
@@ -98,13 +145,15 @@ function routeStatusColor(status) {
   }[status] || "#6b7280";
 }
 
-function drawRouteLine(origin, destination, route) {
-  const line = L.polyline([[origin.lat, origin.lng], [destination.lat, destination.lng]], {
-    color: routeStatusColor(route.status),
-    weight: 5,
-    opacity: 0.85,
-    dashArray: route.status === "planejada" ? "8 6" : null
-  });
+async function drawRouteLine(origin, destination, route) {
+  const geometry = await getRouteGeometry(origin, destination);
+  let line;
+  const style = routeStyle(route);
+  if (geometry) {
+    line = L.geoJSON(geometry, { style });
+  } else {
+    line = L.polyline([[origin.lat, origin.lng], [destination.lat, destination.lng]], style);
+  }
   line.addTo(logisticsMap);
   extendBounds([origin.lat, origin.lng]);
   extendBounds([destination.lat, destination.lng]);
@@ -116,13 +165,15 @@ function destinationMarkerIcon(status) {
 
 function drawDestinationMarker(destination, route) {
   const marker = L.marker([destination.lat, destination.lng], { icon: destinationMarkerIcon(route.status) });
+  const driver = driverName(route.motoristaId);
   marker.bindPopup(`
     <strong>${route.codigo} · ${route.nome}</strong><br>
-    ${route.destinoMunicipio}/${route.destinoEstado}<br>
-    ${route.cargasIds?.length || 0} pedidos<br>
+    ${route.destinoMunicipio}/${route.destinoEstado} · ${route.tipoRota || "Rodoviária"}<br>
+    <strong>Motorista:</strong> ${driver}<br>
+    ${route.cargasIds?.length || 0} pedido(s)<br>
     ${route.status}<br>
     ${route.tempo ? `Tempo: ${route.tempo}<br>` : ""}
-    ${route.freightTotal ? `Frete total: ${money.format(Number(route.freightTotal || 0))}` : ""}
+    ${route.freteTotal ? `Frete total: ${money.format(Number(route.freteTotal || 0))}` : ""}
   `);
   marker.addTo(logisticsMap);
   extendBounds([destination.lat, destination.lng]);
@@ -154,13 +205,12 @@ function renderRouteCards(routes) {
   }
   list.innerHTML = routes.map((route) => {
     const driver = getMotoristas().find((m) => m.id === route.motoristaId);
-    const cityKey = coordKey(route.destinoMunicipio, route.destinoEstado);
     return `
       <div class="map-route-card" data-route-id="${route.id}">
         <div>
           <strong>${route.codigo}</strong>
           <span>${route.nome}</span>
-          <small>${route.destinoMunicipio}/${route.destinoEstado}</small>
+          <small>${route.destinoMunicipio}/${route.destinoEstado} · ${route.tipoRota || "Rodoviária"}</small>
         </div>
         <div>
           <span>${driver?.nome || "Sem motorista"}</span>

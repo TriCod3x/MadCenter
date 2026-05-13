@@ -61,6 +61,7 @@ const fields = {
   ],
   rotas: [
     ["nome", "Nome da rota", "text", true],
+    ["tipoRota", "Tipo de rota", "select:Rodoviária,Urbana,Mista", true],
     ["destinoMunicipio", "Município de destino", "city", true],
     ["destinoEstado", "Estado de destino", "text", true],
     ["motoristaId", "Motorista", "driver", true],
@@ -339,7 +340,7 @@ function defaultItem(entity) {
     return { nome: "", telefone: "", categoria: "D", capacidade: 1800, cidade: "Timon", estado: "MA", status: "disponível", observacoes: "" };
   }
   if (entity === "rotas") {
-    return { nome: "", destinoMunicipio: "Timon", destinoEstado: "MA", motoristaId: "", saida: "", chegada: "", status: "planejada", observacoes: "" };
+    return { nome: "", tipoRota: "Rodoviária", destinoMunicipio: "Timon", destinoEstado: "MA", motoristaId: "", saida: "", chegada: "", status: "planejada", observacoes: "" };
   }
   return {};
 }
@@ -516,6 +517,14 @@ function vehicleName(id) {
   return VEHICLE_TYPES.find((vehicle) => vehicle.id === id)?.nome || "Não informado";
 }
 
+function inferRouteType(cargas) {
+  const totalWeight = cargas.reduce((sum, carga) => sum + Number(carga.peso || 0), 0);
+  const anyUrgent = cargas.some((carga) => carga.prioridade === "urgente");
+  if (anyUrgent) return "Urbana";
+  if (totalWeight > 1200) return "Rodoviária";
+  return "Mista";
+}
+
 function driverName(id) {
   return getMotoristas().find((driver) => driver.id === id)?.nome || "Não vinculado";
 }
@@ -606,8 +615,10 @@ function generateRoutesByMunicipality() {
     });
 
     if (!assigned.length) return;
+    const routeType = inferRouteType(assigned);
     const route = saveRota({
       nome: `${group.municipio} · ${driver.nome}`,
+      tipoRota: routeType,
       destinoMunicipio: group.municipio,
       destinoEstado: group.estado,
       motoristaId: driver.id,
@@ -749,11 +760,15 @@ function renderMapPanel() {
         driver: document.getElementById("mapDriverFilter").value,
         city: document.getElementById("mapCityFilter").value
       };
-      renderLogisticsMap(App.mapFilters);
+      renderLogisticsMap(App.mapFilters).catch(() => {
+        toast("Não foi possível atualizar o mapa. Verifique a conexão ou a API de rotas.");
+      });
     });
   });
 
-  renderLogisticsMap(App.mapFilters);
+  renderLogisticsMap(App.mapFilters).catch(() => {
+    toast("Não foi possível carregar o mapa. Verifique a conexão ou a API de rotas.");
+  });
 }
 
 function applyTheme(theme) {
