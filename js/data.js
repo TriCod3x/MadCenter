@@ -103,6 +103,13 @@ const SEED_DATA = {
       enderecoColeta: "Madcenter Construção - Hidráulica", destinoMunicipio: "José de Freitas", destinoEstado: "PI", enderecoEntrega: "Rua Central, 77",
       cliente: "João Materiais", telefone: "(86) 98222-3030", coleta: "2026-05-13", entrega: "2026-05-14",
       prioridade: "baixa", veiculoTipo: "caminhonete", distanciaKm: 2.1, valorFrete: 30.25, status: "entregue", observacoes: "Entrega finalizada."
+    },
+    {
+      id: "car-009", codigo: "PD-1009", descricao: "Tubos PVC, madeiras e materiais de acabamento", tipo: "Acabamento", peso: 1200, volume: "18 volumes",
+      origemMunicipio: "Timon", origemEstado: "MA", origemEmpresa: "Madcenter Construção", origemLat: STORE_LOCATION.lat, origemLng: STORE_LOCATION.lng,
+      enderecoColeta: "Madcenter Construção - Depósito e Madeireira", destinoMunicipio: "Campo Maior", destinoEstado: "PI", enderecoEntrega: "Obra Residencial, Rua das Acácias, s/n",
+      cliente: "Construtora Alfa", telefone: "(86) 99888-5544", coleta: "2026-05-18", entrega: "2026-05-18",
+      prioridade: "normal", veiculoTipo: "carroceria-aberta", distanciaKm: 71.5, valorFrete: 585, status: "aguardando rota", observacoes: "Materiais para acabamento externo. Carga volumosa."
     }
   ],
   motoristas: [
@@ -115,7 +122,8 @@ const SEED_DATA = {
     { id: "cam-001", placa: "MDC4C21", marca: "Mercedes-Benz", modelo: "Caminhão baú leve", ano: 2021, carroceria: "Baú leve", capacidade: 3500, cidade: "Timon", estado: "MA", status: "em rota", motoristaId: "mot-001", observacoes: "Ideal para tintas, elétrica e ferramentas." },
     { id: "cam-002", placa: "MAD8J44", marca: "Fiat", modelo: "Caminhonete", ano: 2022, carroceria: "Caminhonete", capacidade: 500, cidade: "Timon", estado: "MA", status: "disponível", motoristaId: "mot-002", observacoes: "Entregas médias." },
     { id: "cam-003", placa: "CTR2F19", marca: "Ford", modelo: "Caminhão 3/4", ano: 2019, carroceria: "Carga seca", capacidade: 5000, cidade: "Timon", estado: "MA", status: "disponível", motoristaId: "mot-003", observacoes: "Bom para rotas intermunicipais." },
-    { id: "cam-004", placa: "MOT0A12", marca: "Honda", modelo: "Moto entrega rápida", ano: 2023, carroceria: "Baú de moto", capacidade: 20, cidade: "Timon", estado: "MA", status: "em rota", motoristaId: "mot-004", observacoes: "Pequenas entregas." }
+    { id: "cam-004", placa: "MOT0A12", marca: "Honda", modelo: "Moto entrega rápida", ano: 2023, carroceria: "Baú de moto", capacidade: 20, cidade: "Timon", estado: "MA", status: "em rota", motoristaId: "mot-004", observacoes: "Pequenas entregas." },
+    { id: "cam-005", placa: "VOL5A20", marca: "Volkswagen", modelo: "Caminhão carroceria aberta", ano: 2020, carroceria: "Carroceria aberta", capacidade: 5000, cidade: "Timon", estado: "MA", status: "disponível", motoristaId: "", observacoes: "Usado para tubos, madeiras e materiais volumosos." }
   ],
   rotas: [
     {
@@ -145,6 +153,13 @@ const SEED_DATA = {
       paradas: "", cargasIds: ["car-007"], caminhaoId: "cam-004", motoristaId: "mot-004", veiculoTipo: "moto",
       saida: "2026-05-15T09:00", chegada: "2026-05-15T10:30", distancia: 44.4, freteTotal: 61.28, tempo: "1h05", custo: 61.28,
       status: "em andamento", observacoes: "Pequena entrega de ferramentas."
+    },
+    {
+      id: "rot-005", codigo: "RT-2005", nome: "Rota Campo Maior - Materiais de acabamento",
+      origemMunicipio: "Timon", origemEstado: "MA", destinoMunicipio: "Campo Maior", destinoEstado: "PI",
+      paradas: "", cargasIds: ["car-009"], caminhaoId: "cam-005", motoristaId: "mot-001", veiculoTipo: "carroceria-aberta",
+      saida: "2026-05-18T07:00", chegada: "2026-05-18T10:30", distancia: 71.5, freteTotal: 585, tempo: "1h50", custo: 585,
+      status: "planejada", observacoes: "Tubos PVC, madeiras e materiais de acabamento para Campo Maior/PI."
     }
   ]
 };

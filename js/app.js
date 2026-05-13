@@ -39,7 +39,7 @@ const statusColors = {
   manutenção: "orange",
   planejada: "yellow",
   "em andamento": "blue",
-  concluída: "green",
+  "concluída": "green",
   cancelada: "red",
   baixa: "gray",
   normal: "blue",
@@ -822,6 +822,14 @@ function bindMapPanelEvents() {
       renderMapPanel();
     });
   });
+
+  // Botão "Limpar filtros": redefine todos os filtros para o estado padrão
+  document.getElementById("mapClearFilters")?.addEventListener("click", () => {
+    App.mapFilters = { status: "todos", driver: "todos", truck: "todos", city: "todos", vehicleType: "todos" };
+    renderMapPanel();
+    toast("Filtros limpos.");
+  });
+
   document.querySelectorAll("#mapLayerControls input[type='checkbox']").forEach((input) => {
     input.addEventListener("change", () => {
       App.mapLayers[input.dataset.layer] = input.checked;
@@ -847,7 +855,9 @@ function renderMapFilters() {
   document.getElementById("mapDriverFilter").innerHTML = `<option value="todos">Todos os motoristas</option>${getMotoristas().map((driver) => `<option value="${driver.id}" ${App.mapFilters.driver === driver.id ? "selected" : ""}>${driver.nome}</option>`).join("")}`;
   document.getElementById("mapTruckFilter").innerHTML = `<option value="todos">Todos os veículos/frota</option>${getCaminhoes().map((truck) => `<option value="${truck.id}" ${App.mapFilters.truck === truck.id ? "selected" : ""}>${truck.placa} - ${truck.modelo}</option>`).join("")}`;
   const cities = {};
-  getRotas().forEach((route) => cities[coordKey(route.destinoMunicipio, route.destinoEstado)] = `${route.destinoMunicipio}/${route.destinoEstado}`);
+  getRotas().forEach((route) => {
+    cities[coordKey(route.destinoMunicipio, route.destinoEstado)] = `${route.destinoMunicipio}/${route.destinoEstado}`;
+  });
   document.getElementById("mapCityFilter").innerHTML = `<option value="todos">Todas as cidades</option>${Object.entries(cities).map(([value, label]) => `<option value="${value}" ${App.mapFilters.city === value ? "selected" : ""}>${label}</option>`).join("")}`;
   document.getElementById("mapVehicleTypeFilter").innerHTML = `<option value="todos">Todos os tipos</option>${VEHICLE_TYPES.map((vehicle) => `<option value="${vehicle.id}" ${App.mapFilters.vehicleType === vehicle.id ? "selected" : ""}>${vehicle.nome}</option>`).join("")}`;
 }
@@ -875,7 +885,7 @@ function renderMapSummary(routes) {
 
 function renderMapRouteCards(routes) {
   document.getElementById("mapRouteCards").innerHTML = routes.length ? routes.map((route) => `
-    <div class="map-route-card" style="border-left-color:${route.color}">
+    <div class="map-route-card" data-route-id="${route.id}" style="border-left-color:${route.color}">
       <div class="map-route-title">
         <strong>${route.nome}</strong>
         ${badge(route.status)}
@@ -887,7 +897,7 @@ function renderMapRouteCards(routes) {
       <p><b>Paradas:</b> ${route.paradas}</p>
       <p><b>Distância:</b> ${formatDistance(route.distanciaKm)} · <b>Tempo:</b> ${route.tempo}</p>
       <p><b>Frete:</b> ${money.format(route.freteTotal)} · <b>Pedidos:</b> ${route.pedidos.length}</p>
-      ${route.fallback ? '<p class="map-card-warning">Distância aproximada em linha reta. Rota por estrada indisponível no momento.</p>' : ""}
+      ${route.fallback ? '<p class="map-card-warning">Rota por estrada indisponível no momento. Exibindo distância aproximada em linha reta.</p>' : ""}
       <div class="map-card-actions">
         <button class="secondary-button" type="button" onclick="focusRoute('${route.id}')">Focar no mapa</button>
         <button class="secondary-button" type="button" onclick="openMapRouteDetails('${route.id}')">Ver detalhes</button>
@@ -899,18 +909,39 @@ function renderMapRouteCards(routes) {
 function openMapRouteDetails(routeId) {
   const route = getMapRouteViewData().find((item) => item.id === routeId);
   if (!route) return toast("Rota não encontrada no mapa.");
-  document.getElementById("modalTitle").textContent = route.nome;
+  document.getElementById("modalTitle").textContent = `${route.codigo} · ${route.nome}`;
   document.getElementById("modalBody").innerHTML = `
     <div class="details-grid">
+      <div class="detail-item"><span>Código</span><strong>${route.codigo}</strong></div>
+      <div class="detail-item"><span>Status</span><strong>${route.status}</strong></div>
       <div class="detail-item"><span>Motorista</span><strong>${route.motorista}</strong></div>
       <div class="detail-item"><span>Veículo</span><strong>${route.veiculo}</strong></div>
-      <div class="detail-item"><span>Status</span><strong>${route.status}</strong></div>
-      <div class="detail-item"><span>Pedidos</span><strong>${route.pedidos.map((load) => load.codigo).join(", ")}</strong></div>
-      <div class="detail-item"><span>Distância</span><strong>${formatDistance(route.distanciaKm)}</strong></div>
-      <div class="detail-item"><span>Tempo</span><strong>${route.tempo}</strong></div>
+      <div class="detail-item"><span>Placa</span><strong>${route.placa || "Não informada"}</strong></div>
+      <div class="detail-item"><span>Origem</span><strong>${route.origem}</strong></div>
+      <div class="detail-item"><span>Destino</span><strong>${route.destino}</strong></div>
+      <div class="detail-item"><span>Paradas</span><strong>${route.paradas}</strong></div>
+      <div class="detail-item"><span>Distância</span><strong>${formatDistance(route.distanciaKm)}${route.fallback ? " (aproximada)" : ""}</strong></div>
+      <div class="detail-item"><span>Tempo estimado</span><strong>${route.tempo}</strong></div>
       <div class="detail-item"><span>Frete total</span><strong>${money.format(route.freteTotal)}</strong></div>
+      <div class="detail-item"><span>Pedidos vinculados</span><strong>${route.pedidos.map((load) => load.codigo).join(", ") || "Nenhum"}</strong></div>
       <div class="detail-item"><span>Cidades atendidas</span><strong>${route.cidades.join(", ")}</strong></div>
+      <div class="detail-item"><span>Previsão de saída</span><strong>${formatDate(route.saida)}</strong></div>
+      <div class="detail-item"><span>Previsão de chegada</span><strong>${formatDate(route.chegada)}</strong></div>
     </div>
+    ${route.pedidos.length ? `
+      <h3 style="margin:18px 0 10px;font-size:15px">Pedidos desta rota</h3>
+      <div class="stack-list">
+        ${route.pedidos.map((load) => `
+          <div class="list-item">
+            <div>
+              <strong>${load.codigo} · ${load.descricao}</strong>
+              <span>${load.cliente} · ${load.destinoMunicipio}/${load.destinoEstado} · ${load.peso} kg</span>
+            </div>
+            ${badge(load.status)}
+          </div>
+        `).join("")}
+      </div>
+    ` : ""}
   `;
   openModal();
 }

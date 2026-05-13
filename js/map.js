@@ -12,14 +12,16 @@ const DRIVER_ROUTE_COLORS = ["#008c45", "#2374c6", "#f28c28", "#7c3aed", "#8b1e1
 function normalizeCityName(text) {
   return String(text || "")
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
 }
 
+// BUG FIX: toUpperCase() foi alterado para toLowerCase() para que a chave gerada
+// corresponda às chaves em MUNICIPIOS_COORDS (ex: "timon-ma", "teresina-pi").
 function coordKey(city, state) {
-  return `${normalizeCityName(city)}-${String(state || "").trim().toUpperCase()}`;
+  return `${normalizeCityName(city)}-${String(state || "").trim().toLowerCase()}`;
 }
 
 function getCityCoordinates(city, state) {
@@ -64,10 +66,10 @@ function initMap() {
   const lat = Number(settings.latitudeLoja || STORE_LOCATION.lat);
   const lng = Number(settings.longitudeLoja || STORE_LOCATION.lng);
   if (!logisticsMap) {
-    logisticsMap = L.map("logisticsMap").setView([lat, lng], 15);
+    logisticsMap = L.map("logisticsMap").setView([lat, lng], 14);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
-      attribution: "&copy; OpenStreetMap"
+      attribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a>"
     }).addTo(logisticsMap);
   } else {
     logisticsMap.setView([lat, lng], 14);
@@ -154,9 +156,11 @@ async function loadMapRoutes(filters = {}, layers = {}) {
   renderMapLegend(mapRouteData, layerOptions);
 
   if (warningsBox) {
-    warningsBox.innerHTML = warnings.length
-      ? warnings.map((warning) => `<div class="warning-line">${warning}</div>`).join("")
-      : '<div class="badge badge-green">Rotas do mapa carregadas</div>';
+    if (warnings.length) {
+      warningsBox.innerHTML = warnings.map((warning) => `<div class="warning-line">${warning}</div>`).join("");
+    } else {
+      warningsBox.innerHTML = '<div class="badge badge-green">Rotas carregadas com sucesso.</div>';
+    }
   }
 
   if (mapBounds.isValid()) logisticsMap.fitBounds(mapBounds, { padding: [32, 32], maxZoom: 14 });
@@ -172,7 +176,12 @@ function drawStoreMarker() {
   const lat = Number(settings.latitudeLoja || STORE_LOCATION.lat);
   const lng = Number(settings.longitudeLoja || STORE_LOCATION.lng);
   const marker = L.marker([lat, lng], { icon: storeMarkerIcon(), zIndexOffset: 1000 });
-  marker.bindPopup("<b>Madcenter Construção</b><br>Sede da loja<br>Ponto de saída das entregas<br>Timon/MA");
+  marker.bindPopup(
+    "<b>Madcenter Construção</b><br>" +
+    "<strong>Sede da loja</strong><br>" +
+    "Ponto de saída de todas as entregas<br>" +
+    "<em>Timon / MA</em>"
+  );
   addLayer(marker);
   extendBounds([lat, lng]);
 }
@@ -180,19 +189,24 @@ function drawStoreMarker() {
 function storeMarkerIcon() {
   return L.divIcon({
     className: "store-div-icon",
-    html: '<div class="store-pin">MC</div>',
+    html: '<div class="store-pin"></div>',
     iconSize: [42, 42],
     iconAnchor: [21, 21]
   });
 }
 
 function deliveryMarkerIcon(status) {
-  const className = status === "entregue" ? "delivery-pin completed" : status === "em rota" ? "delivery-pin active" : "delivery-pin pending";
+  const classMap = {
+    entregue: "delivery-pin completed",
+    "em rota": "delivery-pin active",
+    cancelado: "delivery-pin cancelled"
+  };
+  const className = classMap[status] || "delivery-pin pending";
   return L.divIcon({
     className: "delivery-div-icon",
     html: `<div class="${className}"></div>`,
-    iconSize: [18, 18],
-    iconAnchor: [9, 9]
+    iconSize: [20, 20],
+    iconAnchor: [10, 10]
   });
 }
 
@@ -213,7 +227,7 @@ function drawDeliveryMarkers(routes, layers, warnings) {
     if (["aguardando rota", "aguardando separação"].includes(load.status) && !layers.showPending) return;
     const coord = getCityCoordinates(load.destinoMunicipio, load.destinoEstado);
     if (!coord) {
-      warnings.push(`Este município ainda não possui coordenada cadastrada: ${load.destinoMunicipio}/${load.destinoEstado}.`);
+      warnings.push(`Município sem coordenada cadastrada: ${load.destinoMunicipio}/${load.destinoEstado}.`);
       return;
     }
     const route = routes.find((item) => (item.cargasIds || []).includes(load.id));
@@ -221,17 +235,17 @@ function drawDeliveryMarkers(routes, layers, warnings) {
     const truck = getCaminhoes().find((item) => item.id === route?.caminhaoId);
     const marker = L.marker([coord.lat, coord.lng], { icon: deliveryMarkerIcon(load.status) });
     marker.bindPopup(`
-      <b>${load.codigo} - ${load.descricao}</b><br>
+      <b>${load.codigo} · ${load.descricao}</b>
       ${popupLine("Cliente", load.cliente)}
       ${popupLine("Material/produto", load.tipo)}
       ${popupLine("Cidade de destino", `${load.destinoMunicipio}/${load.destinoEstado}`)}
       ${popupLine("Endereço", load.enderecoEntrega)}
       ${popupLine("Motorista", driver?.nome)}
       ${popupLine("Veículo", vehicleName(load.veiculoTipo || route?.veiculoTipo))}
-      ${popupLine("Placa", truck?.placa)}
+      ${truck?.placa ? popupLine("Placa", truck.placa) : ""}
       ${popupLine("Peso", `${load.peso} kg`)}
       ${popupLine("Distância estimada", formatDistance(load.distanciaKm))}
-      ${popupLine("Tempo estimado", route?.tempo)}
+      ${route?.tempo ? popupLine("Tempo estimado", route.tempo) : ""}
       ${popupLine("Frete", money.format(Number(load.valorFrete || 0)))}
       ${popupLine("Status", load.status)}
       ${popupLine("Previsão de entrega", load.entrega)}
@@ -260,7 +274,7 @@ async function drawRoute(route, layers, warnings) {
     distanceKm = estimateRouteFallbackDistance(points);
     durationText = route.tempo || "Indisponível";
     fallback = true;
-    warnings.push(`Distância aproximada em linha reta para ${route.nome}. Rota por estrada indisponível no momento.`);
+    warnings.push(`Rota por estrada indisponível no momento. Exibindo distância aproximada em linha reta para ${route.nome}.`);
   }
 
   routeLayerIndex[route.id] = layer;
@@ -271,18 +285,23 @@ async function drawRoute(route, layers, warnings) {
 
 function buildRoutePoints(route, warnings) {
   const settings = getSettings();
-  const points = [{ label: "Madcenter Construção", lat: Number(settings.latitudeLoja || STORE_LOCATION.lat), lng: Number(settings.longitudeLoja || STORE_LOCATION.lng), type: "store" }];
+  const points = [{
+    label: "Madcenter Construção",
+    lat: Number(settings.latitudeLoja || STORE_LOCATION.lat),
+    lng: Number(settings.longitudeLoja || STORE_LOCATION.lng),
+    type: "store"
+  }];
 
   String(route.paradas || "").split(";").map((item) => item.trim()).filter(Boolean).forEach((stop) => {
     const coord = Object.values(MUNICIPIOS_COORDS).find((city) => normalizeCityName(city.nome) === normalizeCityName(stop));
     if (coord) {
       points.push({ label: `${coord.nome}/${coord.estado}`, lat: coord.lat, lng: coord.lng, type: "stop" });
       const marker = L.marker([coord.lat, coord.lng], { icon: stopMarkerIcon() });
-      marker.bindPopup(`<b>Parada intermediária</b><br>${coord.nome}/${coord.estado}<br>${route.nome}`);
+      marker.bindPopup(`<b>Parada intermediária</b><br>${coord.nome}/${coord.estado}<br><em>${route.nome}</em>`);
       addLayer(marker);
       extendBounds([coord.lat, coord.lng]);
     } else {
-      warnings.push(`Parada sem coordenada cadastrada: ${stop}.`);
+      if (warnings) warnings.push(`Parada sem coordenada cadastrada: ${stop}.`);
     }
   });
 
@@ -290,7 +309,7 @@ function buildRoutePoints(route, warnings) {
   if (destination) {
     points.push({ label: `${destination.nome}/${destination.estado}`, lat: destination.lat, lng: destination.lng, type: "destination" });
   } else {
-    warnings.push(`Este município ainda não possui coordenada cadastrada: ${route.destinoMunicipio}/${route.destinoEstado}.`);
+    if (warnings) warnings.push(`Município sem coordenada cadastrada: ${route.destinoMunicipio}/${route.destinoEstado}.`);
   }
   return points;
 }
@@ -303,7 +322,10 @@ async function fetchRoadRoute(points) {
   const coordinates = points.map((point) => `${point.lng},${point.lat}`).join(";");
   const url = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true`;
   try {
-    const response = await fetch(url);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
     if (!response.ok) throw new Error("OSRM indisponível");
     const data = await response.json();
     const route = data.routes?.[0];
@@ -311,19 +333,24 @@ async function fetchRoadRoute(points) {
     const result = { geometry: route.geometry, distance: route.distance, duration: route.duration };
     setCachedRouteGeometry(cacheKey, result);
     return result;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
 
+// Rotas planejadas: cor do motorista com linha tracejada (diferencia de "em andamento").
+// Rotas em andamento: cor do motorista sólida e mais grossa.
+// Rotas concluídas: cinza esverdeado com opacidade menor.
+// Rotas canceladas: vermelho com linha tracejada.
 function routeStyle(route, selected = false) {
+  const color = getDriverRouteColor(route.motoristaId);
   const statusStyle = {
-    planejada: { color: "#f2c94c", opacity: .86, dashArray: null },
-    "em andamento": { color: getDriverRouteColor(route.motoristaId), opacity: .92, dashArray: null },
-    concluída: { color: "#557166", opacity: .5, dashArray: null },
+    planejada: { color, opacity: .72, dashArray: "9 6" },
+    "em andamento": { color, opacity: .94, dashArray: null },
+    "concluída": { color: "#557166", opacity: .44, dashArray: null },
     cancelada: { color: "#d93025", opacity: .75, dashArray: "10 8" }
   };
-  const base = statusStyle[route.status] || { color: getDriverRouteColor(route.motoristaId), opacity: .82, dashArray: null };
+  const base = statusStyle[route.status] || { color, opacity: .82, dashArray: null };
   return { ...base, weight: selected ? 9 : route.status === "em andamento" ? 7 : 5 };
 }
 
@@ -356,22 +383,23 @@ function bindRouteInteractions(layer, routeInfo) {
 
 function routePopupHtml(info) {
   return `
-    <b>${info.codigo} - ${info.nome}</b><br>
+    <b>${info.codigo} · ${info.nome}</b>
     ${popupLine("Motorista", info.motorista)}
     ${popupLine("Veículo", info.veiculo)}
     ${popupLine("Status", info.status)}
-    ${popupLine("Quantidade de pedidos", info.pedidos.length)}
+    ${popupLine("Pedidos", info.pedidos.length)}
     ${popupLine("Distância", formatDistance(info.distanciaKm))}
     ${popupLine("Tempo", info.tempo)}
     ${popupLine("Frete total", money.format(Number(info.freteTotal || 0)))}
     ${popupLine("Cidades atendidas", info.cidades.join(", "))}
     ${popupLine("Previsão de saída", formatDate(info.saida))}
     ${popupLine("Previsão de chegada", formatDate(info.chegada))}
+    ${info.fallback ? "<em style='font-size:11px;color:#6d5200'>Rota por estrada indisponível. Exibindo linha reta.</em>" : ""}
   `;
 }
 
 function popupLine(label, value) {
-  return `<strong>${label}:</strong> ${value || "Não informado"}<br>`;
+  return `<strong>${label}:</strong> ${value ?? "Não informado"}<br>`;
 }
 
 function buildRouteInfo(route, points, distanceKm, durationText, fallback) {
@@ -415,15 +443,26 @@ function estimateRouteFallbackDistance(points) {
 
 function focusRoute(routeId) {
   selectedRouteId = routeId;
+
+  // Atualiza estilo das linhas no mapa
   Object.entries(routeLayerIndex).forEach(([id, layer]) => {
     const info = mapRouteData.find((route) => route.id === id);
     if (info) layer.setStyle?.(routeStyle(info.raw, id === routeId));
   });
+
   const layer = routeLayerIndex[routeId];
   if (!layer) return;
   const bounds = layer.getBounds ? layer.getBounds() : null;
   if (bounds?.isValid()) logisticsMap.fitBounds(bounds, { padding: [42, 42], maxZoom: 15 });
   layer.openPopup?.();
+
+  // Destaca o card da rota no painel lateral
+  document.querySelectorAll(".map-route-card").forEach((el) => el.classList.remove("focused"));
+  const card = document.querySelector(`.map-route-card[data-route-id="${routeId}"]`);
+  if (card) {
+    card.classList.add("focused");
+    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
 }
 
 function fitAllMapRoutes() {
@@ -441,14 +480,23 @@ function renderMapLegend(routes, layers) {
   legend.style.display = "block";
   const byDriver = {};
   routes.forEach((route) => {
-    byDriver[route.motoristaId] = byDriver[route.motoristaId] || { ...route, count: 0, loads: 0 };
+    if (!byDriver[route.motoristaId]) {
+      byDriver[route.motoristaId] = { ...route, count: 0, loads: 0 };
+    }
     byDriver[route.motoristaId].count += 1;
     byDriver[route.motoristaId].loads += route.pedidos.length;
   });
+  if (!Object.keys(byDriver).length) {
+    legend.innerHTML = "<strong>Legenda</strong><small style='color:var(--muted);display:block;margin-top:6px'>Nenhuma rota visível</small>";
+    return;
+  }
   legend.innerHTML = `<strong>Legenda</strong>${Object.values(byDriver).map((item) => `
     <div class="legend-row">
       <span class="legend-color" style="background:${item.color}"></span>
-      <div><b>${item.motorista}</b><small>${item.status} · ${item.veiculo} · ${item.loads} pedido(s)</small></div>
+      <div>
+        <b>${item.motorista}</b>
+        <small>${item.status} · ${item.veiculo} · ${item.loads} pedido(s)</small>
+      </div>
     </div>
   `).join("")}`;
 }
