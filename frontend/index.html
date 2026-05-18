@@ -1,0 +1,187 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Madcenter Entregas</title>
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-logo-card">
+          <img src="assets/imagens/adcenter-logo.png" alt="Madcenter Construção" class="sidebar-logo-img" onerror="this.style.display='none'; this.closest('.sidebar-brand').classList.add('logo-error');">
+        </div>
+        <div class="sidebar-brand-text">
+          <strong>Madcenter</strong>
+          <span>Sistema de Entregas</span>
+        </div>
+      </div>
+      <nav class="nav-menu" id="navMenu">
+        <button class="nav-link active" data-page="dashboard">
+          <span class="nav-icon">▣</span>
+          <span class="nav-text">Dashboard</span>
+        </button>
+        <button class="nav-link" data-page="pedidos">
+          <span class="nav-icon">📦</span>
+          <span class="nav-text">Pedidos</span>
+        </button>
+        <button class="nav-link" data-page="motoristas">
+          <span class="nav-icon">👷</span>
+          <span class="nav-text">Motoristas</span>
+        </button>
+        <button class="nav-link" data-page="rotas">
+          <span class="nav-icon">🛣️</span>
+          <span class="nav-text">Rotas</span>
+        </button>
+        <button class="nav-link" data-page="mapa">
+          <span class="nav-icon">🗺️</span>
+          <span class="nav-text">Mapa de Entregas</span>
+        </button>
+        <button class="nav-link" data-page="configuracoes">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-text">Configurações</span>
+        </button>
+      </nav>
+    </aside>
+    <div class="main-area">
+      <header class="topbar">
+        <button class="icon-button mobile-only" id="menuToggle" aria-label="Abrir menu">☰</button>
+        <div>
+          <h1 id="pageTitle">Dashboard</h1>
+          <span class="topbar-subtitle">Madcenter Entregas · Gestão operacional simplificada</span>
+        </div>
+        <div class="topbar-actions">
+          <input id="quickSearch" class="quick-search" type="search" placeholder="Buscar pedido, motorista, rota ou cidade...">
+          <button class="theme-toggle" id="themeToggle" type="button">Tema</button>
+          <div class="admin-pill">
+            <span class="admin-dot"></span>
+            Admin Madcenter
+          </div>
+        </div>
+      </header>
+      <main class="content">
+        <section class="page active" id="page-dashboard">
+          <div class="hero-strip">
+            <div>
+              <strong>Painel de operações</strong>
+              <span>Visão rápida dos pedidos, rotas e entregas da Madcenter.</span>
+            </div>
+          </div>
+          <div class="metrics-grid" id="dashboardMetrics"></div>
+          <div class="dashboard-grid">
+            <div class="panel">
+              <div class="panel-header"><h2>Últimos pedidos</h2></div>
+              <div id="latestCargas" class="stack-list"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><h2>Rotas em destaque</h2></div>
+              <div id="nextRotas" class="stack-list"></div>
+            </div>
+            <div class="panel alerts-panel">
+              <div class="panel-header"><h2>Alertas operacionais</h2></div>
+              <div id="alertsList" class="stack-list"></div>
+            </div>
+          </div>
+        </section>
+        <section class="page" id="page-pedidos">
+          <div class="section-intro">
+            <h2>Pedidos</h2>
+            <p>Cadastre e acompanhe pedidos de materiais por município.</p>
+          </div>
+          <div class="page-toolbar">
+            <div class="filters-grid" id="cargasFilters"></div>
+            <button class="primary-button" data-action="new" data-entity="cargas">Novo pedido</button>
+          </div>
+          <div class="table-card"><div class="table-wrap"><table id="pedidosTable"></table></div></div>
+        </section>
+        <section class="page" id="page-motoristas">
+          <div class="section-intro">
+            <h2>Motoristas</h2>
+            <p>Registre motoristas e capacidades para alocar cargas corretamente.</p>
+          </div>
+          <div class="page-toolbar">
+            <input class="filter-input" id="motoristasSearch" type="search" placeholder="Buscar motorista">
+            <button class="primary-button" data-action="new" data-entity="motoristas">Novo motorista</button>
+          </div>
+          <div class="table-card"><div class="table-wrap"><table id="motoristasTable"></table></div></div>
+        </section>
+        <section class="page" id="page-rotas">
+          <div class="section-intro">
+            <h2>Rotas</h2>
+            <p>Crie rotas por município e use a capacidade do motorista para alocar entregas.</p>
+          </div>
+          <div class="page-toolbar">
+            <input class="filter-input" id="rotasSearch" type="search" placeholder="Buscar rota">
+            <button class="secondary-button" id="generateRoutesBtn" type="button">Gerar rotas por município</button>
+            <button class="primary-button" data-action="new" data-entity="rotas">Nova rota</button>
+          </div>
+          <div class="table-card"><div class="table-wrap"><table id="rotasTable"></table></div></div>
+        </section>
+        <section class="page" id="page-mapa">
+          <div class="map-command-layout">
+            <aside class="panel map-command-side">
+              <div class="panel-header"><h2>Mapa de entregas</h2></div>
+              <div class="base-card">
+                <strong>Madcenter Construção</strong>
+                <span>Sede e ponto de saída das entregas · Timon/MA</span>
+              </div>
+              <div class="map-summary-grid" id="mapSummary"></div>
+              <div class="map-filter-block">
+                <h3>Filtros</h3>
+                <div class="map-filter-grid" id="mapFilters">
+                  <select id="mapStatusFilter"></select>
+                  <select id="mapDriverFilter"></select>
+                  <select id="mapCityFilter"></select>
+                </div>
+              </div>
+              <button class="secondary-button map-clear-btn" id="mapReloadRoutes" type="button">Recarregar mapa</button>
+              <button class="secondary-button map-clear-btn" id="mapFitRoutes" type="button">Ver todas as rotas</button>
+              <div id="mapRouteCards" class="map-routes-list"></div>
+            </aside>
+            <div class="map-stage">
+              <div id="mapLegend" class="map-legend"></div>
+              <div id="logisticsMap" class="map-canvas"></div>
+            </div>
+          </div>
+        </section>
+        <section class="page" id="page-configuracoes">
+          <div class="settings-layout">
+            <form class="panel form-grid" id="settingsForm"></form>
+            <div class="panel danger-zone">
+              <div class="panel-header"><h2>Dados do protótipo</h2></div>
+              <p class="muted">Restaure os dados iniciais ou limpe as informações salvas no navegador.</p>
+              <div class="button-row">
+                <button class="secondary-button" id="restoreSeedBtn" type="button">Restaurar dados exemplo</button>
+                <button class="danger-button" id="clearDataBtn" type="button">Limpar dados</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+  <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2 id="modalTitle">Cadastro</h2>
+        <button class="icon-button" id="modalClose" type="button" aria-label="Fechar">×</button>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+ 
+
+  <script src="js/data.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
