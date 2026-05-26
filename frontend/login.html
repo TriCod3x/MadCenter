@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Madcenter Entregas — Login</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: var(--bg);
+    }
+    .login-card {
+      background: var(--surface);
+      border-radius: 14px;
+      padding: 2.5rem 2rem;
+      width: 100%;
+      max-width: 360px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    .login-logo {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      text-align: center;
+    }
+    .login-logo img {
+      height: 72px;
+      object-fit: contain;
+    }
+    .login-logo strong {
+      font-size: 1.2rem;
+      color: var(--primary);
+      display: block;
+      margin-top: 0.25rem;
+    }
+    .login-logo span {
+      font-size: .85rem;
+      color: var(--muted);
+    }
+    .login-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .login-field label {
+      font-size: .875rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .login-field input {
+      padding: .65rem .9rem;
+      border: 1.5px solid var(--line);
+      border-radius: var(--radius);
+      font-size: 1rem;
+      background: var(--bg);
+      color: var(--text);
+      transition: border-color .15s;
+    }
+    .login-field input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .login-error {
+      color: var(--danger);
+      font-size: .85rem;
+      text-align: center;
+      display: none;
+    }
+    .login-btn {
+      width: 100%;
+      padding: .75rem;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity .15s;
+      margin-top: 0.25rem;
+    }
+    .login-btn:hover { opacity: .88; }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="assets/imagens/adcenter-logo.png" alt="Madcenter" onerror="this.style.display='none'">
+      <strong>Madcenter Entregas</strong>
+      <span>Sistema de gestão operacional</span>
+    </div>
+
+    <form id="loginForm">
+      <div class="login-field">
+        <label for="passwordInput">Senha de acesso</label>
+        <input id="passwordInput" type="password" placeholder="Digite a senha" autocomplete="current-password" required>
+      </div>
+      <div id="loginError" class="login-error">Senha incorreta. Tente novamente.</div>
+      <button class="login-btn" type="submit">Entrar</button>
+    </form>
+  </div>
+
+  <script>
+    const SESSION_KEY = "madcenter_auth";
+    const PASSWORD = "madcenter2025";
+
+    if (localStorage.getItem(SESSION_KEY) === "1") {
+      window.location.replace("index.html");
+    }
+
+    document.getElementById("loginForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      const input = document.getElementById("passwordInput").value;
+      if (input === PASSWORD) {
+        localStorage.setItem(SESSION_KEY, "1");
+        window.location.replace("index.html");
+      } else {
+        document.getElementById("loginError").style.display = "block";
+        document.getElementById("passwordInput").value = "";
+        document.getElementById("passwordInput").focus();
+      }
+    });
+  </script>
+</body>
+</html>

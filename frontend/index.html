@@ -61,6 +61,7 @@
             <span class="admin-dot"></span>
             Admin Madcenter
           </div>
+          <button class="theme-toggle" id="logoutBtn" type="button">Sair</button>
         </div>
       </header>
       <main class="content">
@@ -117,7 +118,6 @@
           <div class="page-toolbar">
             <input class="filter-input" id="rotasSearch" type="search" placeholder="Buscar rota">
             <button class="secondary-button" id="generateRoutesBtn" type="button">Gerar rotas por município</button>
-            <button class="primary-button" data-action="new" data-entity="rotas">Nova rota</button>
           </div>
           <div class="table-card"><div class="table-wrap"><table id="rotasTable"></table></div></div>
         </section>
@@ -174,11 +174,7 @@
     </div>
   </div>
   <div class="toast" id="toast"></div>
-
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
- 
-
   <script src="js/data.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/map.js"></script>
