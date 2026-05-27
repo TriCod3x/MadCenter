@@ -1,7 +1,7 @@
 ﻿const App = {
   page: "dashboard",
   filters: { status: "", prioridade: "", destino: "", text: "" },
-  mapFilters: { status: "todos", driver: "todos", city: "todos" }
+  mapFilters: { status: "", driver: "todos", city: "todos" }
 };
 
 const pageNames = {
@@ -1197,12 +1197,14 @@ function submitSettingsForm(event) {
   toast("Configurações salvas.");
 }
 
+let _mapPanelListenersSetup = false;
+
 function renderMapPanel() {
-  const statusOptions = ["todos", "planejada", "em andamento", "concluída", "cancelada"];
+  const statusOptions = [["", "Todos os status"], ["planejada", "planejada"], ["em andamento", "em andamento"], ["concluída", "concluída"], ["cancelada", "cancelada"]];
   const drivers = getMotoristas();
   const cities = [...new Set(getRotas().map((route) => coordKey(route.destinoMunicipio, route.destinoEstado)))].sort();
 
-  document.getElementById("mapStatusFilter").innerHTML = statusOptions.map((status) => `<option value="${status}">${status === "todos" ? "Todos os status" : status}</option>`).join("");
+  document.getElementById("mapStatusFilter").innerHTML = statusOptions.map(([val, label]) => `<option value="${val}">${label}</option>`).join("");
   document.getElementById("mapDriverFilter").innerHTML = `<option value="todos">Todos os motoristas</option>${drivers.map((driver) => `<option value="${driver.id}">${driver.nome}</option>`).join("")}`;
   document.getElementById("mapCityFilter").innerHTML = `<option value="todos">Todas as cidades</option>${cities.map((key) => {
     const city = MUNICIPIOS_COORDS[key];
@@ -1213,18 +1215,21 @@ function renderMapPanel() {
   document.getElementById("mapDriverFilter").value = App.mapFilters.driver;
   document.getElementById("mapCityFilter").value = App.mapFilters.city;
 
-  ["mapStatusFilter", "mapDriverFilter", "mapCityFilter"].forEach((id) => {
-    document.getElementById(id).addEventListener("change", () => {
-      App.mapFilters = {
-        status: document.getElementById("mapStatusFilter").value,
-        driver: document.getElementById("mapDriverFilter").value,
-        city: document.getElementById("mapCityFilter").value
-      };
-      renderLogisticsMap(App.mapFilters).catch(() => {
-        toast("Não foi possível atualizar o mapa. Verifique a conexão ou a API de rotas.");
+  if (!_mapPanelListenersSetup) {
+    _mapPanelListenersSetup = true;
+    ["mapStatusFilter", "mapDriverFilter", "mapCityFilter"].forEach((id) => {
+      document.getElementById(id).addEventListener("change", () => {
+        App.mapFilters = {
+          status: document.getElementById("mapStatusFilter").value,
+          driver: document.getElementById("mapDriverFilter").value,
+          city: document.getElementById("mapCityFilter").value
+        };
+        renderLogisticsMap(App.mapFilters).catch(() => {
+          toast("Não foi possível atualizar o mapa. Verifique a conexão ou a API de rotas.");
+        });
       });
     });
-  });
+  }
 
   renderLogisticsMap(App.mapFilters).catch(() => {
     toast("Não foi possível carregar o mapa. Verifique a conexão ou a API de rotas.");
