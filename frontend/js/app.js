@@ -82,6 +82,7 @@ let _mapPicker = null;
 let _mapPickerMarker = null;
 let _mapPickerCoords = null;
 let _mapPickerForm = null;
+let _mapPickerInitTimer = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   if (localStorage.getItem(SESSION_KEY) !== "1") {
@@ -762,6 +763,19 @@ function closeModal() {
 
 // ── Seletor de localização no mapa ─────────────────────────────────────────
 
+function _destroyMapPicker() {
+  if (_mapPickerInitTimer) { clearTimeout(_mapPickerInitTimer); _mapPickerInitTimer = null; }
+  if (_mapPicker) {
+    if (_mapPickerMarker) {
+      try { _mapPickerMarker.remove(); } catch (e) { /* ignore */ }
+      _mapPickerMarker = null;
+    }
+    _mapPicker.off();
+    try { _mapPicker.remove(); } catch (e) { /* ignore Leaflet cleanup errors */ }
+    _mapPicker = null;
+  }
+}
+
 function openMapPicker() {
   _mapPickerForm = document.getElementById("entityForm");
   if (!_mapPickerForm) return;
@@ -769,10 +783,11 @@ function openMapPicker() {
   document.getElementById("mapPickerBackdrop").classList.add("active");
   document.getElementById("mapPickerInfo").textContent = "Clique no mapa para marcar o destino";
 
-  if (_mapPicker) { _mapPicker.remove(); _mapPicker = null; _mapPickerMarker = null; }
+  _destroyMapPicker();
   _mapPickerCoords = null;
 
-  setTimeout(() => {
+  _mapPickerInitTimer = setTimeout(() => {
+    _mapPickerInitTimer = null;
     const latInput = _mapPickerForm.querySelector('[name="lat"]');
     const lngInput = _mapPickerForm.querySelector('[name="lng"]');
     const hasCoords = latInput?.value && lngInput?.value && Number(latInput.value) && Number(lngInput.value);
@@ -813,7 +828,7 @@ function openMapPicker() {
 
 function closeMapPicker() {
   document.getElementById("mapPickerBackdrop").classList.remove("active");
-  if (_mapPicker) { _mapPicker.remove(); _mapPicker = null; _mapPickerMarker = null; }
+  _destroyMapPicker();
 }
 
 async function confirmMapLocation() {

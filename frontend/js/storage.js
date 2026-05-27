@@ -187,8 +187,10 @@ async function saveCarga(data) {
   return convertido;
 }
 
-async function updateCarga(id, data) {
-  const atualizado = await apiPut(`${API_BASE}/api/pedidos/${id}`, pedidoToDB(data));
+async function updateCarga(id, partialData) {
+  const existing = DB.cargas.find((item) => item.id === id);
+  const merged = { ...existing, ...partialData };
+  const atualizado = await apiPut(`${API_BASE}/api/pedidos/${id}`, pedidoToDB(merged));
   const convertido = pedidoFromDB(atualizado);
   DB.cargas = DB.cargas.map((item) => item.id === id ? convertido : item);
   return convertido;
@@ -210,8 +212,10 @@ async function saveMotorista(data) {
   return convertido;
 }
 
-async function updateMotorista(id, data) {
-  const atualizado = await apiPut(`${API_BASE}/api/motoristas/${id}`, motoristaToDB(data));
+async function updateMotorista(id, partialData) {
+  const existing = DB.motoristas.find((item) => item.id === id);
+  const merged = { ...existing, ...partialData };
+  const atualizado = await apiPut(`${API_BASE}/api/motoristas/${id}`, motoristaToDB(merged));
   const convertido = motoristaFromDB(atualizado);
   DB.motoristas = DB.motoristas.map((item) => item.id === id ? convertido : item);
   return convertido;
@@ -233,8 +237,10 @@ async function saveRota(data) {
   return convertido;
 }
 
-async function updateRota(id, data) {
-  const atualizado = await apiPut(`${API_BASE}/api/rotas/${id}`, rotaToDB(data));
+async function updateRota(id, partialData) {
+  const existing = DB.rotas.find((item) => item.id === id);
+  const merged = { ...existing, ...partialData };
+  const atualizado = await apiPut(`${API_BASE}/api/rotas/${id}`, rotaToDB(merged));
   const convertido = rotaFromDB(atualizado);
   DB.rotas = DB.rotas.map((item) => item.id === id ? convertido : item);
   return convertido;
