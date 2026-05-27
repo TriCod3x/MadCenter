@@ -44,7 +44,7 @@ const fields = {
     ["numero", "Número", "text", false],
     ["complemento", "Complemento", "text", false],
     ["cliente", "Cliente", "text", true],
-    ["telefone", "Telefone/WhatsApp", "text", true],
+    ["telefone", "Telefone/WhatsApp", "phone", true],
     ["coleta", "Data prevista de saída", "date", true],
     ["entrega", "Data prevista de entrega", "date", true],
     ["prioridade", "Prioridade", "select:baixa,normal,alta,urgente", true],
@@ -54,7 +54,7 @@ const fields = {
   ],
   motoristas: [
     ["nome", "Nome", "text", true],
-    ["telefone", "WhatsApp", "text", true],
+    ["telefone", "WhatsApp", "phone", true],
     ["categoria", "Categoria", "select:B,C,D,E", true],
     ["capacidade", "Capacidade do motorista (kg)", "number", true],
     ["cidade", "Cidade atual", "text", true],
@@ -76,6 +76,12 @@ const fields = {
 };
 
 const SESSION_KEY = "madcenter_auth";
+
+// Estado do seletor de localização no mapa
+let _mapPicker = null;
+let _mapPickerMarker = null;
+let _mapPickerCoords = null;
+let _mapPickerForm = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   if (localStorage.getItem(SESSION_KEY) !== "1") {
@@ -103,6 +109,12 @@ function bindLayoutEvents() {
   document.getElementById("modalClose").addEventListener("click", closeModal);
   document.getElementById("modalBackdrop").addEventListener("click", (event) => {
     if (event.target.id === "modalBackdrop") closeModal();
+  });
+  document.getElementById("mapPickerClose").addEventListener("click", closeMapPicker);
+  document.getElementById("mapPickerCancel").addEventListener("click", closeMapPicker);
+  document.getElementById("mapPickerConfirm").addEventListener("click", confirmMapLocation);
+  document.getElementById("mapPickerBackdrop").addEventListener("click", (event) => {
+    if (event.target.id === "mapPickerBackdrop") closeMapPicker();
   });
   document.querySelectorAll("[data-action='new']").forEach((button) => {
     button.addEventListener("click", () => openForm(button.dataset.entity));
@@ -347,6 +359,8 @@ function openForm(entity, id = null) {
     </form>
   `;
   document.getElementById("entityForm").addEventListener("submit", submitEntityForm);
+  const munInput = document.querySelector('#entityForm [name="destinoMunicipio"]');
+  if (munInput) setupMunicipioAutocomplete(munInput);
   openModal();
 }
 
@@ -386,13 +400,13 @@ function fieldHtml(field, item) {
   }
 
   if (type === "city") {
-    const selectOptions = cityOptions().map((city) => `<option value="${city.nome}" ${city.nome === value ? "selected" : ""}>${city.nome} - ${city.estado}</option>`).join("");
     return `
       <label class="form-field">
         <span>${label}</span>
-        <select name="${name}" ${requiredAttr}>
-          ${selectOptions}
-        </select>
+        <div class="mun-autocomplete-wrap">
+          <input type="text" name="${name}" value="${value || ""}" placeholder="Digite 3+ letras para buscar…" autocomplete="off" ${requiredAttr}>
+          <ul class="mun-suggestions" hidden></ul>
+        </div>
       </label>
     `;
   }
@@ -422,17 +436,36 @@ function fieldHtml(field, item) {
     `;
   }
 
+  if (type === "phone") {
+    return `
+      <label class="form-field">
+        <span>${label}</span>
+        <input type="tel" name="${name}" value="${value || ""}" placeholder="(99) 9 9999-9999" maxlength="16" autocomplete="tel" oninput="applyPhoneMask(this)" ${requiredAttr}>
+      </label>
+    `;
+  }
+
   if (type === "cep") {
+    const freteFormatado = item?.valorFrete ? money.format(Number(item.valorFrete)) : "";
     return `
       <label class="form-field">
         <span>${label}</span>
         <div class="cep-wrap">
-          <input type="text" name="${name}" value="${value || ""}" placeholder="00000-000" maxlength="9" autocomplete="postal-code" oninput="applyCepMask(this)" onblur="lookupCep(this)">
+          <div class="cep-input-row">
+            <input type="text" name="${name}" value="${value || ""}" placeholder="00000-000" maxlength="9" autocomplete="postal-code" oninput="applyCepMask(this)" onblur="lookupCep(this)">
+            <button type="button" class="btn-map-picker" onclick="openMapPicker()">📍 Selecionar no mapa</button>
+          </div>
           <span class="cep-msg" id="cepMsg"></span>
         </div>
       </label>
+      <label class="form-field">
+        <span>Frete estimado (R$ 0,50/km)</span>
+        <input type="text" id="freteDisplay" readonly placeholder="Calculado ao selecionar local" value="${freteFormatado}">
+      </label>
       <input type="hidden" name="lat" value="${item?.lat || ""}">
       <input type="hidden" name="lng" value="${item?.lng || ""}">
+      <input type="hidden" name="valorFrete" value="${item?.valorFrete || ""}">
+      <input type="hidden" name="distanciaKm" value="${item?.distanciaKm || ""}">
     `;
   }
 
@@ -517,8 +550,16 @@ async function submitEntityForm(event) {
 
 function computeCargoFreight(data) {
   const origin = getStoreOrigin();
-  const destination = getCityCoordinates(data.destinoMunicipio, data.destinoEstado);
-  if (!destination) return { error: "Município de destino não cadastrado." };
+
+  // Prefere coordenadas exatas (do picker/CEP) quando disponíveis
+  let destination;
+  if (data.lat && data.lng && Number(data.lat) !== 0 && Number(data.lng) !== 0) {
+    destination = { lat: Number(data.lat), lng: Number(data.lng) };
+  } else {
+    destination = getCityCoordinates(data.destinoMunicipio, data.destinoEstado);
+    if (!destination) return { error: "Município de destino não cadastrado." };
+  }
+
   const vehicle = VEHICLE_TYPES.find((item) => item.id === data.veiculoTipo);
   if (!vehicle) return { error: "Tipo de veículo inválido." };
   const weight = Number(data.peso || 0);
@@ -533,6 +574,22 @@ function computeCargoFreight(data) {
 function applyCepMask(input) {
   let v = input.value.replace(/\D/g, "");
   if (v.length > 5) v = v.slice(0, 5) + "-" + v.slice(5, 8);
+  input.value = v;
+}
+
+function applyPhoneMask(input) {
+  const d = input.value.replace(/\D/g, "").slice(0, 11);
+  if (!d) { input.value = ""; return; }
+  let v;
+  if (d.length <= 2) {
+    v = `(${d}`;
+  } else if (d.length <= 6) {
+    v = `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  } else if (d.length <= 10) {
+    v = `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  } else {
+    v = `(${d.slice(0, 2)}) ${d.slice(2, 3)} ${d.slice(3, 7)}-${d.slice(7)}`;
+  }
   input.value = v;
 }
 
@@ -557,12 +614,8 @@ async function lookupCep(input) {
     const form = input.closest("form");
     setCepField(form, "enderecoEntrega", data.logradouro || "");
     setCepField(form, "destinoEstado", data.uf || "");
-    const munSelect = form.querySelector('[name="destinoMunicipio"]');
-    if (munSelect) {
-      const norm = normalizeCityName(data.localidade);
-      const opt = Array.from(munSelect.options).find((o) => normalizeCityName(o.value) === norm);
-      if (opt) munSelect.value = opt.value;
-    }
+    const munInput = form.querySelector('[name="destinoMunicipio"]');
+    if (munInput && data.localidade) munInput.value = data.localidade;
     msg.textContent = `✓ ${data.logradouro ? data.logradouro + ", " : ""}${data.localidade}/${data.uf}`;
     msg.className = "cep-msg cep-ok";
     geocodeEndereco(data, form);
@@ -570,6 +623,60 @@ async function lookupCep(input) {
     msg.textContent = "Erro ao buscar CEP.";
     msg.className = "cep-msg cep-error";
   }
+}
+
+function setupMunicipioAutocomplete(input) {
+  const wrap = input.closest(".mun-autocomplete-wrap");
+  const list = wrap?.querySelector(".mun-suggestions");
+  if (!list) return;
+
+  let timer = null;
+
+  function closeList() { list.innerHTML = ""; list.hidden = true; }
+
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const term = input.value.trim();
+    if (term.length < 3) { closeList(); return; }
+
+    timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://servicodados.ibge.gov.br/api/v1/localidades/municipios?nome=${encodeURIComponent(term)}&orderBy=nome`
+        );
+        const data = await res.json();
+        if (!Array.isArray(data) || !data.length) {
+          list.innerHTML = '<li class="mun-no-results">Nenhum município encontrado</li>';
+          list.hidden = false;
+          return;
+        }
+        list.innerHTML = data.slice(0, 10).map((m) => {
+          const uf = m.microrregiao?.mesorregiao?.UF?.sigla || "";
+          return `<li class="mun-item" data-nome="${m.nome}" data-uf="${uf}">
+            ${m.nome}${uf ? `<span class="mun-uf"> – ${uf}</span>` : ""}
+          </li>`;
+        }).join("");
+        list.hidden = false;
+
+        list.querySelectorAll(".mun-item").forEach((li) => {
+          li.addEventListener("click", () => {
+            input.value = li.dataset.nome;
+            const form = input.closest("form");
+            if (form && li.dataset.uf) setCepField(form, "destinoEstado", li.dataset.uf);
+            closeList();
+          });
+        });
+      } catch (e) {
+        console.warn("IBGE API:", e);
+      }
+    }, 300);
+  });
+
+  input.addEventListener("keydown", (e) => { if (e.key === "Escape") closeList(); });
+
+  document.addEventListener("click", (e) => {
+    if (!wrap.contains(e.target)) closeList();
+  }, { capture: true });
 }
 
 function setCepField(form, name, value) {
@@ -584,8 +691,24 @@ async function geocodeEndereco(viaCepData, form) {
     const res = await fetch(url);
     const results = await res.json();
     if (results.length) {
-      setCepField(form, "lat", results[0].lat);
-      setCepField(form, "lng", results[0].lon);
+      const lat = Number(results[0].lat);
+      const lng = Number(results[0].lon);
+      setCepField(form, "lat", lat);
+      setCepField(form, "lng", lng);
+      updateFreteEstimado(form, lat, lng);
+      // Sincroniza marcador no picker se estiver aberto
+      if (_mapPicker) {
+        if (_mapPickerMarker) {
+          _mapPickerMarker.setLatLng([lat, lng]);
+        } else {
+          const pinIcon = L.divIcon({ html: "📍", className: "custom-pin", iconSize: [30, 30], iconAnchor: [15, 30] });
+          _mapPickerMarker = L.marker([lat, lng], { icon: pinIcon }).addTo(_mapPicker);
+        }
+        _mapPicker.setView([lat, lng], 14);
+        _mapPickerCoords = { lat, lng };
+        document.getElementById("mapPickerInfo").textContent =
+          `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} — Ponto atualizado pelo CEP`;
+      }
     }
   } catch (e) {
     console.warn("Geocodificação falhou:", e);
@@ -636,6 +759,145 @@ function openModal() {
 function closeModal() {
   document.getElementById("modalBackdrop").classList.remove("active");
 }
+
+// ── Seletor de localização no mapa ─────────────────────────────────────────
+
+function openMapPicker() {
+  _mapPickerForm = document.getElementById("entityForm");
+  if (!_mapPickerForm) return;
+
+  document.getElementById("mapPickerBackdrop").classList.add("active");
+  document.getElementById("mapPickerInfo").textContent = "Clique no mapa para marcar o destino";
+
+  if (_mapPicker) { _mapPicker.remove(); _mapPicker = null; _mapPickerMarker = null; }
+  _mapPickerCoords = null;
+
+  setTimeout(() => {
+    const latInput = _mapPickerForm.querySelector('[name="lat"]');
+    const lngInput = _mapPickerForm.querySelector('[name="lng"]');
+    const hasCoords = latInput?.value && lngInput?.value && Number(latInput.value) && Number(lngInput.value);
+    const initLat = hasCoords ? Number(latInput.value) : -4.760287;
+    const initLng = hasCoords ? Number(lngInput.value) : -42.573777;
+
+    const pinIcon = L.divIcon({
+      html: "📍",
+      className: "custom-pin",
+      iconSize: [30, 30],
+      iconAnchor: [15, 30]
+    });
+
+    _mapPicker = L.map("mapPickerContainer").setView([initLat, initLng], hasCoords ? 14 : 11);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>'
+    }).addTo(_mapPicker);
+
+    if (hasCoords) {
+      _mapPickerCoords = { lat: initLat, lng: initLng };
+      _mapPickerMarker = L.marker([initLat, initLng], { icon: pinIcon }).addTo(_mapPicker);
+      document.getElementById("mapPickerInfo").textContent = "📍 Ponto atual marcado · Clique para mover";
+    }
+
+    _mapPicker.on("click", (e) => {
+      const { lat, lng } = e.latlng;
+      _mapPickerCoords = { lat, lng };
+      if (_mapPickerMarker) {
+        _mapPickerMarker.setLatLng(e.latlng);
+      } else {
+        _mapPickerMarker = L.marker(e.latlng, { icon: pinIcon }).addTo(_mapPicker);
+      }
+      document.getElementById("mapPickerInfo").textContent =
+        `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} — Clique em "Confirmar localização"`;
+    });
+  }, 80);
+}
+
+function closeMapPicker() {
+  document.getElementById("mapPickerBackdrop").classList.remove("active");
+  if (_mapPicker) { _mapPicker.remove(); _mapPicker = null; _mapPickerMarker = null; }
+}
+
+async function confirmMapLocation() {
+  if (!_mapPickerCoords) {
+    toast("Clique no mapa para marcar uma localização antes de confirmar.");
+    return;
+  }
+  const form = _mapPickerForm || document.getElementById("entityForm");
+  if (!form) { closeMapPicker(); return; }
+
+  const { lat, lng } = _mapPickerCoords;
+
+  setCepField(form, "lat", lat);
+  setCepField(form, "lng", lng);
+  updateFreteEstimado(form, lat, lng);
+
+  closeMapPicker();
+
+  const msg = document.getElementById("cepMsg");
+  if (msg) { msg.textContent = "Buscando endereço…"; msg.className = "cep-msg"; }
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=pt-BR`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data?.address) {
+      const addr = data.address;
+      const road = addr.road || addr.pedestrian || addr.footway || addr.street || "";
+      const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
+      const stateCode = addr.ISO3166_2_lvl4
+        ? addr.ISO3166_2_lvl4.replace("BR-", "")
+        : _getStateCode(addr.state || "");
+      const postcode = (addr.postcode || "").replace(/\D/g, "");
+
+      if (road) setCepField(form, "enderecoEntrega", road);
+      if (stateCode) setCepField(form, "destinoEstado", stateCode);
+
+      if (city) {
+        const munInput = form.querySelector('[name="destinoMunicipio"]');
+        if (munInput) munInput.value = city;
+      }
+
+      if (postcode.length >= 8) {
+        const cepInput = form.querySelector('[name="cep"]');
+        if (cepInput) cepInput.value = postcode.slice(0, 5) + "-" + postcode.slice(5, 8);
+      }
+
+      const display = [road, city, stateCode].filter(Boolean).join(", ");
+      if (msg) { msg.textContent = `✓ ${display || "Local marcado"}`; msg.className = "cep-msg cep-ok"; }
+    } else {
+      if (msg) { msg.textContent = "✓ Local marcado."; msg.className = "cep-msg cep-ok"; }
+    }
+  } catch (e) {
+    console.warn("Geocodificação reversa:", e);
+    if (msg) { msg.textContent = "✓ Local marcado (endereço não encontrado)."; msg.className = "cep-msg cep-ok"; }
+  }
+}
+
+function updateFreteEstimado(form, lat, lng) {
+  const SEDE_LAT = -4.760287;
+  const SEDE_LNG = -42.573777;
+  const distKm = calculateDistanceKm(SEDE_LAT, SEDE_LNG, lat, lng);
+  const frete = distKm * 0.50;
+  const display = document.getElementById("freteDisplay");
+  if (display) display.value = money.format(frete);
+  setCepField(form, "valorFrete", frete.toFixed(2));
+  setCepField(form, "distanciaKm", distKm.toFixed(1));
+}
+
+function _getStateCode(stateName) {
+  const map = {
+    "Acre": "AC", "Alagoas": "AL", "Amapá": "AP", "Amazonas": "AM",
+    "Bahia": "BA", "Ceará": "CE", "Distrito Federal": "DF", "Espírito Santo": "ES",
+    "Goiás": "GO", "Maranhão": "MA", "Mato Grosso": "MT", "Mato Grosso do Sul": "MS",
+    "Minas Gerais": "MG", "Pará": "PA", "Paraíba": "PB", "Paraná": "PR",
+    "Pernambuco": "PE", "Piauí": "PI", "Rio de Janeiro": "RJ", "Rio Grande do Norte": "RN",
+    "Rio Grande do Sul": "RS", "Rondônia": "RO", "Roraima": "RR", "Santa Catarina": "SC",
+    "São Paulo": "SP", "Sergipe": "SE", "Tocantins": "TO"
+  };
+  return map[stateName] || stateName.slice(0, 2).toUpperCase();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 
 function confirmAction(message, action) {
   if (window.confirm(message)) action();
@@ -751,19 +1013,40 @@ async function generateRoutesByMunicipality() {
 }
 
 async function autoGenerateRouteForMunicipality(municipio, estado) {
+  const rotaAtiva = getRotas().find((r) =>
+    r.destinoMunicipio === municipio &&
+    r.destinoEstado === estado &&
+    ["planejada", "em andamento"].includes(r.status)
+  );
+
+  if (rotaAtiva) {
+    const novos = getCargas().filter((c) =>
+      c.status === "aguardando rota" &&
+      c.destinoMunicipio === municipio &&
+      c.destinoEstado === estado &&
+      !(rotaAtiva.cargasIds || []).includes(c.id)
+    );
+    if (!novos.length) return;
+
+    const novasCargasIds = [...(rotaAtiva.cargasIds || []), ...novos.map((p) => p.id)];
+    const todosPedidos = getCargas().filter((c) => novasCargasIds.includes(c.id));
+    const novoFrete = Number(todosPedidos.reduce((sum, c) => sum + Number(c.valorFrete || 0), 0).toFixed(2));
+    const novaDistancia = Number(todosPedidos.reduce((sum, c) => sum + Number(c.distanciaKm || 0), 0).toFixed(1));
+
+    await updateRota(rotaAtiva.id, { ...rotaAtiva, cargasIds: novasCargasIds, freteTotal: novoFrete, distancia: novaDistancia });
+    for (const pedido of novos) {
+      await updateCarga(pedido.id, { status: "em rota" });
+    }
+    toast(`${novos.length} pedido(s) associado(s) à rota ${rotaAtiva.codigo} (${municipio}).`);
+    return;
+  }
+
   const pending = getCargas().filter((c) =>
     ["aguardando rota", "próximo dia"].includes(c.status) &&
     c.destinoMunicipio === municipio &&
     c.destinoEstado === estado
   );
   if (pending.length < 2) return;
-
-  const alreadyHasRoute = getRotas().some((r) =>
-    r.destinoMunicipio === municipio &&
-    r.destinoEstado === estado &&
-    ["planejada", "em andamento"].includes(r.status)
-  );
-  if (alreadyHasRoute) return;
 
   const availableDrivers = getMotoristas().filter((d) => d.status === "disponível").sort((a, b) => b.capacidade - a.capacidade);
   const sorted = [...pending].sort((a, b) => (priorityOrder[b.prioridade || "normal"] || 0) - (priorityOrder[a.prioridade || "normal"] || 0));

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Madcenter Entregas</title>
+  <link rel="icon" href="data:,">
   <link rel="preconnect" href="https://unpkg.com">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="css/style.css">
@@ -174,6 +175,26 @@
     </div>
   </div>
   <div class="toast" id="toast"></div>
+
+  <!-- Modal: seletor de localização no mapa -->
+  <div class="modal-backdrop" id="mapPickerBackdrop" aria-hidden="true">
+    <div class="modal modal-map" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2>Selecionar localização no mapa</h2>
+        <button class="icon-button" id="mapPickerClose" type="button" aria-label="Fechar">×</button>
+      </div>
+      <div class="map-picker-body">
+        <p class="map-picker-hint">Clique em qualquer ponto do mapa para marcar o destino de entrega. O endereço e o CEP serão preenchidos automaticamente.</p>
+        <div id="mapPickerContainer"></div>
+        <div class="map-picker-actions">
+          <span id="mapPickerInfo" class="map-picker-info">Nenhum ponto selecionado</span>
+          <button class="secondary-button" type="button" id="mapPickerCancel">Cancelar</button>
+          <button class="primary-button" type="button" id="mapPickerConfirm">✓ Confirmar localização</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="js/data.js"></script>
   <script src="js/storage.js"></script>
