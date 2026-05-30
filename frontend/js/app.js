@@ -37,7 +37,7 @@ const fields = {
     ["tipo", "Categoria do material", "select:Tintas,Elétrica,Hidráulica,Ferramentas,Pisos e revestimentos,Cimento e argamassa,Outros", true],
     ["peso", "Peso (kg)", "number", true],
     ["volume", "Volume", "text", false],
-    ["cep", "CEP", "cep", false],
+    ["cep", "CEP", "cep", true],
     ["destinoMunicipio", "Município de destino", "city", true],
     ["destinoEstado", "Estado de destino", "text", true],
     ["enderecoEntrega", "Endereço de entrega", "text", true],
@@ -56,10 +56,8 @@ const fields = {
     ["nome", "Nome", "text", true],
     ["telefone", "WhatsApp", "phone", true],
     ["categoria", "Categoria", "select:B,C,D,E", true],
-    ["capacidade", "Capacidade do motorista (kg)", "number", true],
     ["cidade", "Cidade atual", "text", true],
     ["estado", "Estado atual", "text", true],
-    ["status", "Status", "select:disponível,em entrega,inativo", true],
     ["observacoes", "Observações", "textarea", false]
   ],
   rotas: [
@@ -67,7 +65,6 @@ const fields = {
     ["tipoRota", "Tipo de rota", "select:Rodoviária,Urbana,Mista", true],
     ["destinoMunicipio", "Município de destino", "city", true],
     ["destinoEstado", "Estado de destino", "text", true],
-    ["motoristaId", "Motorista", "driver", true],
     ["saida", "Previsão de saída", "datetime-local", true],
     ["chegada", "Previsão de chegada", "datetime-local", true],
     ["status", "Status", "select:planejada,em andamento,concluída,cancelada", true],
@@ -184,26 +181,44 @@ function renderDashboard() {
   const activeRoutes = rotas.filter((r) => r.status === "em andamento").length;
 
   const metrics = [
-    ["Pedidos cadastrados", cargas.length],
-    ["Aguardando rota", pending],
-    ["Em rota", progress],
-    ["Próximo dia", nextDay],
-    ["Entregues", completed],
-    ["Motoristas disponíveis", availableDrivers],
-    ["Rotas planejadas", plannedRoutes],
-    ["Rotas em andamento", activeRoutes]
+    ["Pedidos cadastrados",    cargas.length,        "📦", "mc-neutral"],
+    ["Aguardando rota",        pending,              "⏳", "mc-yellow"],
+    ["Em rota",                progress,             "🚚", "mc-blue"],
+    ["Próximo dia",            nextDay,              "📅", "mc-orange"],
+    ["Entregues",              completed,            "✅", "mc-green"],
+    ["Motoristas disponíveis", availableDrivers,     "👷", "mc-teal"],
+    ["Rotas planejadas",       plannedRoutes,        "🗺️", "mc-yellow"],
+    ["Rotas em andamento",     activeRoutes,         "🛣️", "mc-blue"]
   ];
 
-  document.getElementById("dashboardMetrics").innerHTML = metrics.map(([label, value], index) => `
-    <div class="metric-card"><div class="metric-icon">${index + 1}</div><span>${label}</span><strong>${value}</strong></div>
+  document.getElementById("dashboardMetrics").innerHTML = metrics.map(([label, value, icon, cls]) => `
+    <div class="metric-card ${cls}">
+      <div class="metric-icon">${icon}</div>
+      <span>${label}</span>
+      <strong>${value}</strong>
+    </div>
   `).join("");
 
+  const statusBorder = { "aguardando rota": "#f2c94c", "em rota": "#2374c6", "entregue": "#0fa958", "próximo dia": "#a855f7", "cancelado": "#d93025" };
   document.getElementById("latestCargas").innerHTML = cargas.slice(-5).reverse().map((c) => `
-    <div class="list-item"><div><strong>${c.codigo} - ${c.descricao}</strong><span>${c.cliente} · ${c.destinoMunicipio}/${c.destinoEstado} · ${vehicleName(c.veiculoTipo)}</span></div>${badge(c.status)}</div>
+    <div class="list-item" style="border-left-color:${statusBorder[c.status] || "var(--line)"}">
+      <div class="list-item-body">
+        <strong>${c.codigo} — ${c.descricao}</strong>
+        <span>${c.cliente} · ${c.destinoMunicipio}/${c.destinoEstado} · ${vehicleName(c.veiculoTipo)}</span>
+      </div>
+      ${badge(c.status)}
+    </div>
   `).join("") || emptyText("Nenhum pedido cadastrado.");
 
+  const rotaBorder = { "planejada": "#f2c94c", "em andamento": "#2374c6", "concluída": "#0fa958", "cancelada": "#d93025" };
   document.getElementById("nextRotas").innerHTML = rotas.filter((r) => r.status !== "concluída").slice(0, 5).map((r) => `
-    <div class="list-item"><div><strong>${r.codigo} - ${r.nome}</strong><span>${r.destinoMunicipio}/${r.destinoEstado} · ${driverName(r.motoristaId)}</span></div>${badge(r.status)}</div>
+    <div class="list-item" style="border-left-color:${rotaBorder[r.status] || "var(--line)"}">
+      <div class="list-item-body">
+        <strong>${r.codigo} — ${r.nome}</strong>
+        <span>${r.destinoMunicipio}/${r.destinoEstado} · ${driverName(r.motoristaId)}</span>
+      </div>
+      ${badge(r.status)}
+    </div>
   `).join("") || emptyText("Nenhuma rota prevista.");
 
   const alerts = [];
@@ -290,31 +305,80 @@ function renderPedidosTable() {
 function renderMotoristasTable() {
   const search = valueOf("motoristasSearch").toLowerCase();
   const rows = getMotoristas().filter((m) => `${m.nome} ${m.telefone} ${m.cidade} ${m.estado}`.toLowerCase().includes(search));
-  table("motoristasTable", ["Nome", "WhatsApp", "Categoria", "Capacidade", "Cidade", "Status", "Ações"], rows.map((m) => [
+  table("motoristasTable", ["Nome", "WhatsApp", "Categoria", "Cidade", "Status", "Ações"], rows.map((m) => [
     m.nome,
     m.telefone,
     m.categoria,
-    `${m.capacidade} kg`,
     `${m.cidade}/${m.estado}`,
-    badge(m.status),
+    `<select class="table-status-select" onchange="changeMotoristaStatus('${m.id}', this.value)">${["disponível", "em entrega", "inativo"].map((s) => `<option value="${s}" ${m.status === s ? "selected" : ""}>${s}</option>`).join("")}</select>`,
     actions("motoristas", m.id)
   ]));
+}
+
+async function changeMotoristaStatus(id, status) {
+  try {
+    await updateMotorista(id, { status });
+    renderTables();
+  } catch (e) {
+    toast("Erro ao atualizar status do motorista.");
+  }
+}
+
+function buildRotaMotoristaSelect(rotaId, currentId) {
+  const available = getMotoristas().filter((d) => d.status === "disponível");
+  const current = currentId ? getMotoristas().find((d) => d.id === currentId) : null;
+  const drivers = current && current.status !== "disponível" ? [current, ...available] : available;
+  const opts = [
+    `<option value="">— Sem motorista —</option>`,
+    ...drivers.map((d) => {
+      const nota = d.status !== "disponível" ? ` (${d.status})` : "";
+      return `<option value="${d.id}" ${d.id === currentId ? "selected" : ""}>${d.nome}${nota}</option>`;
+    })
+  ].join("");
+  return `<select class="table-status-select" onchange="changeRotaMotorista('${rotaId}', this.value)">${opts}</select>`;
+}
+
+async function changeRotaMotorista(rotaId, motoristaId) {
+  try {
+    const rota = getRotas().find((r) => r.id === rotaId);
+    if (!rota) return;
+    const oldId = rota.motoristaId;
+    await updateRota(rotaId, { motoristaId: motoristaId || null });
+    if (oldId) await syncDriverStatus(oldId);
+    if (motoristaId) await syncDriverStatus(motoristaId);
+    renderTables();
+  } catch (e) {
+    toast("Erro ao atualizar motorista da rota.");
+  }
 }
 
 function renderRotasTable() {
   const search = valueOf("rotasSearch").toLowerCase();
   const rows = getRotas().filter((r) => `${r.codigo} ${r.nome} ${r.destinoMunicipio} ${r.destinoEstado}`.toLowerCase().includes(search));
-  table("rotasTable", ["Código", "Nome", "Destino", "Motorista", "Pedidos", "Distância", "Frete", "Status", "Ações"], rows.map((r) => [
-    r.codigo,
-    r.nome,
-    `${r.destinoMunicipio}/${r.destinoEstado}`,
-    driverName(r.motoristaId),
-    `${(r.cargasIds || []).length}`,
-    `${Number(r.distancia || 0).toFixed(1)} km`,
-    money.format(Number(r.freteTotal || 0)),
-    badge(r.status),
-    actions("rotas", r.id)
-  ]));
+  table("rotasTable", ["Código", "Nome", "Destino", "Motorista", "Pedidos", "Distância", "Frete", "Status", "Ações"], rows.map((r) => {
+    const total = (r.cargasIds || []).length;
+    return [
+      r.codigo,
+      r.nome,
+      `${r.destinoMunicipio}/${r.destinoEstado}`,
+      buildRotaMotoristaSelect(r.id, r.motoristaId),
+      `<button class="table-action table-action-pedidos" onclick="openRotaPedidos('${r.id}')" title="Ver pedidos desta rota">${total} pedido${total !== 1 ? "s" : ""}</button>`,
+      `${Number(r.distancia || 0).toFixed(1)} km`,
+      money.format(Number(r.freteTotal || 0)),
+      badge(r.status),
+      actionsRota(r.id)
+    ];
+  }));
+}
+
+function actionsRota(id) {
+  return `
+    <div class="actions-cell">
+      <button class="table-action" onclick="openRotaPedidos('${id}')">Ver pedidos</button>
+      <button class="table-action" onclick="openForm('rotas','${id}')">Editar</button>
+      <button class="table-action" onclick="confirmDelete('rotas','${id}')">Excluir</button>
+    </div>
+  `;
 }
 
 function table(id, headers, rows) {
@@ -370,7 +434,7 @@ function defaultItem(entity) {
     return { descricao: "", tipo: "Tintas", peso: 0, volume: "", cep: "", destinoMunicipio: "Timon", destinoEstado: "MA", enderecoEntrega: "", numero: "", complemento: "", cliente: "", telefone: "", coleta: "", entrega: "", prioridade: "normal", veiculoTipo: "caminhonete", status: "aguardando rota", observacoes: "", lat: null, lng: null };
   }
   if (entity === "motoristas") {
-    return { nome: "", telefone: "", categoria: "D", capacidade: 1800, cidade: "Timon", estado: "MA", status: "disponível", observacoes: "" };
+    return { nome: "", telefone: "", categoria: "D", capacidade: 0, cidade: "Timon", estado: "MA", status: "disponível", observacoes: "" };
   }
   if (entity === "rotas") {
     return { nome: "", tipoRota: "Rodoviária", destinoMunicipio: "Timon", destinoEstado: "MA", motoristaId: "", saida: "", chegada: "", status: "planejada", observacoes: "" };
@@ -413,14 +477,23 @@ function fieldHtml(field, item) {
   }
 
   if (type === "driver") {
-    const selectOptions = getMotoristas().map((driver) => `<option value="${driver.id}" ${driver.id === value ? "selected" : ""}>${driver.nome} (${driver.cidade}/${driver.estado})</option>`).join("");
+    const available = getMotoristas().filter((d) => d.status === "disponível");
+    // Em edição, mantém o motorista atual mesmo que não esteja disponível (evita perder o vínculo)
+    const current = value ? getMotoristas().find((d) => d.id === value) : null;
+    const drivers = current && current.status !== "disponível" ? [current, ...available] : available;
+    const selectOptions = drivers.map((d) => {
+      const nota = d.status !== "disponível" ? ` — ${d.status}` : "";
+      return `<option value="${d.id}" ${d.id === value ? "selected" : ""}>${d.nome} (${d.cidade}/${d.estado})${nota}</option>`;
+    }).join("");
+    const hint = available.length === 0 ? `<small class="driver-hint">Nenhum motorista disponível no momento.</small>` : "";
     return `
       <label class="form-field">
         <span>${label}</span>
         <select name="${name}" ${requiredAttr}>
-          <option value="">Selecione um motorista</option>
+          <option value="">— Sem motorista —</option>
           ${selectOptions}
         </select>
+        ${hint}
       </label>
     `;
   }
@@ -453,7 +526,7 @@ function fieldHtml(field, item) {
         <span>${label}</span>
         <div class="cep-wrap">
           <div class="cep-input-row">
-            <input type="text" name="${name}" value="${value || ""}" placeholder="00000-000" maxlength="9" autocomplete="postal-code" oninput="applyCepMask(this)" onblur="lookupCep(this)">
+            <input type="text" name="${name}" value="${value || ""}" placeholder="00000-000" maxlength="9" autocomplete="postal-code" oninput="applyCepMask(this)" onblur="lookupCep(this)" ${requiredAttr}>
             <button type="button" class="btn-map-picker" onclick="openMapPicker()">📍 Selecionar no mapa</button>
           </div>
           <span class="cep-msg" id="cepMsg"></span>
@@ -497,6 +570,11 @@ async function submitEntityForm(event) {
     console.log("submitEntityForm →", entity, data);
 
     if (entity === "cargas") {
+      const cepDigits = (data.cep || "").replace(/\D/g, "");
+      if (cepDigits.length !== 8) {
+        toast("CEP obrigatório: preencha um CEP válido (8 dígitos) antes de salvar.");
+        return;
+      }
       data.peso = Number(data.peso || 0);
       data.distanciaKm = Number(data.distanciaKm || 0);
       data.valorFrete = Number(data.valorFrete || 0);
@@ -510,18 +588,25 @@ async function submitEntityForm(event) {
     }
 
     if (entity === "motoristas") {
-      data.capacidade = Number(data.capacidade || 0);
+      data.capacidade = 0;
+      if (App.modal.mode === "new") data.status = "disponível";
     }
 
     if (entity === "rotas") {
-      data.motoristaId = data.motoristaId || "";
+      // motoristaId é gerenciado pelo select inline na tabela; não sobrescrever em edição
+      if (App.modal.mode === "new") {
+        data.motoristaId = null;
+      } else {
+        delete data.motoristaId;
+      }
       data.cargasIds = data.cargasIds ? data.cargasIds.split(",").map((id) => id.trim()).filter(Boolean) : [];
       data.distancia = Number(data.distancia || 0);
       data.freteTotal = Number(data.freteTotal || 0);
     }
 
+    let savedPedido = null;
     if (App.modal.mode === "new") {
-      if (entity === "cargas") await saveCarga(data);
+      if (entity === "cargas") savedPedido = await saveCarga(data);
       if (entity === "motoristas") await saveMotorista(data);
       if (entity === "rotas") await saveRota(data);
     } else {
@@ -535,9 +620,12 @@ async function submitEntityForm(event) {
     }
 
     if (entity === "cargas") {
-      const route = getRotas().find((rota) => rota.cargasIds?.includes(App.modal.id));
-      if (route) await syncRouteStatus(route.id);
-      await autoGenerateRouteForMunicipality(data.destinoMunicipio, data.destinoEstado);
+      if (App.modal.mode === "new" && savedPedido) {
+        await autoAssignPedidoToRoute(savedPedido);
+      } else {
+        const route = getRotas().find((rota) => rota.cargasIds?.includes(App.modal.id));
+        if (route) await syncRouteStatus(route.id);
+      }
     }
 
     closeModal();
@@ -1105,11 +1193,167 @@ async function autoGenerateRouteForMunicipality(municipio, estado) {
   toast(`Rota criada automaticamente para ${municipio}/${estado}.`);
 }
 
+async function autoAssignPedidoToRoute(pedido) {
+  const { id, lat, lng, destinoMunicipio, destinoEstado, cliente, valorFrete, distanciaKm } = pedido;
+  const hasCoords = lat && lng && Number(lat) !== 0 && Number(lng) !== 0;
+  const rotasAtivas = getRotas().filter((r) => r.status === "planejada");
+  let rotaEncontrada = null;
+
+  // Busca rota próxima por Haversine (<3 km) quando o pedido tem coordenadas
+  if (hasCoords) {
+    for (const rota of rotasAtivas) {
+      const pedidosRota = getCargas().filter((c) => (rota.cargasIds || []).includes(c.id) && c.lat && c.lng);
+      const isClose = pedidosRota.some((c) =>
+        calculateDistanceKm(Number(lat), Number(lng), Number(c.lat), Number(c.lng)) < 3
+      );
+      if (isClose) { rotaEncontrada = rota; break; }
+    }
+  }
+
+  // Fallback: mesmo município/estado
+  if (!rotaEncontrada) {
+    rotaEncontrada = rotasAtivas.find((r) =>
+      r.destinoMunicipio === destinoMunicipio && r.destinoEstado === destinoEstado
+    );
+  }
+
+  if (rotaEncontrada) {
+    const novasCargasIds = [...(rotaEncontrada.cargasIds || []), id];
+    const novoFrete = Number((Number(rotaEncontrada.freteTotal || 0) + Number(valorFrete || 0)).toFixed(2));
+    await updateRota(rotaEncontrada.id, { cargasIds: novasCargasIds, freteTotal: novoFrete });
+    await updateCarga(id, { status: "em rota" });
+    if (App.page === "mapa") renderMapPanel();
+    return;
+  }
+
+  // Nenhuma rota próxima — cria nova rota planejada
+  await saveRota({
+    nome: `${destinoMunicipio} · ${cliente}`,
+    tipoRota: "Rodoviária",
+    destinoMunicipio,
+    destinoEstado,
+    motoristaId: null,
+    saida: "",
+    chegada: "",
+    status: "planejada",
+    cargasIds: [id],
+    freteTotal: Number(valorFrete || 0),
+    distancia: Number(distanciaKm || 0),
+    tempo: null,
+    observacoes: "Rota criada automaticamente."
+  });
+  await updateCarga(id, { status: "em rota" });
+  if (App.page === "mapa") renderMapPanel();
+}
+
+// ── Modal: pedidos de uma rota ────────────────────────────────────────────────
+
+function openRotaPedidos(rotaId) {
+  const rota = getRotas().find((r) => r.id === rotaId);
+  if (!rota) return;
+  document.getElementById("modalTitle").textContent = `${rota.codigo || "Rota"} — Pedidos vinculados`;
+  document.getElementById("modalBody").innerHTML = buildRotaPedidosHtml(rotaId);
+  openModal();
+}
+
+function buildRotaPedidosHtml(rotaId) {
+  const rota = getRotas().find((r) => r.id === rotaId);
+  if (!rota) return "";
+  const pedidos = getCargas().filter((c) => (rota.cargasIds || []).includes(c.id));
+  const motorista = driverName(rota.motoristaId);
+
+  const header = `
+    <div class="rota-pedidos-header">
+      <div class="rota-pedidos-meta">
+        <strong>${rota.nome}</strong>
+        <span>${rota.destinoMunicipio}/${rota.destinoEstado} · ${motorista} · ${money.format(Number(rota.freteTotal || 0))}</span>
+      </div>
+      ${badge(rota.status)}
+    </div>
+  `;
+
+  if (!pedidos.length) {
+    return header + `<div class="empty-state" style="margin:24px 0">Nenhum pedido vinculado a esta rota.</div>`;
+  }
+
+  const cards = pedidos.map((c) => {
+    const endereco = [c.enderecoEntrega, c.numero, c.complemento].filter(Boolean).join(", ");
+    const local = [endereco, `${c.destinoMunicipio}/${c.destinoEstado}`].filter(Boolean).join(" · ");
+    const entregue = c.status === "entregue";
+    const pendente = c.status === "próximo dia";
+    return `
+      <div class="pedido-detail-card${entregue ? " pedido-entregue" : ""}">
+        <div class="pedido-detail-info">
+          <div class="pedido-detail-title">
+            <strong>${c.codigo} — ${c.descricao}</strong>
+            ${badge(c.status)}
+          </div>
+          <div class="pedido-detail-row">
+            <span>👤 <strong>${c.cliente}</strong></span>
+            ${c.telefone ? `<span>📞 ${c.telefone}</span>` : ""}
+          </div>
+          <div class="pedido-detail-row">
+            <span>📍 ${local || "Endereço não informado"}</span>
+          </div>
+          <div class="pedido-detail-row">
+            <span>📦 ${c.tipo} · ${c.peso} kg${c.volume ? " · " + c.volume : ""}</span>
+            <span>💰 ${money.format(Number(c.valorFrete || 0))}</span>
+            <span>⚡ Prioridade: ${c.prioridade || "normal"}</span>
+          </div>
+          ${c.observacoes ? `<div class="pedido-detail-obs">📝 ${c.observacoes}</div>` : ""}
+        </div>
+        <div class="pedido-detail-actions">
+          ${!entregue ? `<button class="primary-button" onclick="markPedidoEntregue('${c.id}','${rotaId}')">✓ Entregue</button>` : ""}
+          ${!entregue && !pendente ? `<button class="secondary-button" onclick="marcarPedidoPendente('${c.id}','${rotaId}')">↩ Pendente para outro dia</button>` : ""}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  return header + `<div class="rota-pedidos-list">${cards}</div>`;
+}
+
+async function markPedidoEntregue(pedidoId, rotaId) {
+  try {
+    await updateCarga(pedidoId, { status: "entregue" });
+    await syncRouteStatus(rotaId);
+    renderAll();
+    document.getElementById("modalBody").innerHTML = buildRotaPedidosHtml(rotaId);
+    toast("Pedido marcado como entregue.");
+  } catch (e) {
+    toast("Erro ao marcar entrega.");
+  }
+}
+
+async function marcarPedidoPendente(pedidoId, rotaId) {
+  try {
+    const rota = getRotas().find((r) => r.id === rotaId);
+    const pedido = getCargas().find((c) => c.id === pedidoId);
+    if (!rota || !pedido) return;
+    const novasCargasIds = (rota.cargasIds || []).filter((id) => id !== pedidoId);
+    const novoFrete = Number(Math.max(0, Number(rota.freteTotal || 0) - Number(pedido.valorFrete || 0)).toFixed(2));
+    await updateRota(rotaId, { cargasIds: novasCargasIds, freteTotal: novoFrete });
+    await updateCarga(pedidoId, { status: "próximo dia" });
+    await syncRouteStatus(rotaId);
+    renderAll();
+    document.getElementById("modalBody").innerHTML = buildRotaPedidosHtml(rotaId);
+    toast("Pedido adiado e removido da rota.");
+  } catch (e) {
+    toast("Erro ao adiar pedido.");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function syncRouteStatus(routeId) {
   const route = getRotas().find((item) => item.id === routeId);
   if (!route) return;
   const pedidos = getCargas().filter((carga) => (route.cargasIds || []).includes(carga.id));
-  if (!pedidos.length) return;
+  if (!pedidos.length) {
+    await updateRota(routeId, { status: "planejada" });
+    await syncDriverStatus(route.motoristaId);
+    return;
+  }
   if (pedidos.every((pedido) => pedido.status === "entregue")) {
     await updateRota(routeId, { status: "concluída" });
     await syncDriverStatus(route.motoristaId);
