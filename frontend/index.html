@@ -14,10 +14,9 @@
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
         <div class="sidebar-logo-card">
-          <img src="assets/imagens/adcenter-logo.png" alt="Madcenter Construção" class="sidebar-logo-img" onerror="this.style.display='none'; this.closest('.sidebar-brand').classList.add('logo-error');">
+          <img src="assets/logo_madcenter_white.svg" alt="Madcenter" width="150">
         </div>
         <div class="sidebar-brand-text">
-          <strong>Madcenter</strong>
           <span>Sistema de Entregas</span>
         </div>
       </div>
@@ -48,6 +47,7 @@
         </button>
       </nav>
     </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
     <div class="main-area">
       <header class="topbar">
         <button class="icon-button mobile-only" id="menuToggle" aria-label="Abrir menu">☰</button>
@@ -74,6 +74,25 @@
             </div>
           </div>
           <div class="metrics-grid" id="dashboardMetrics"></div>
+
+          <!-- Gráfico de entregas -->
+          <div class="panel chart-panel">
+            <div class="chart-panel-header">
+              <h2>Entregas Realizadas</h2>
+              <div class="chart-controls">
+                <div class="chart-period-btns">
+                  <button class="chart-period-btn" data-period="hoje">Hoje</button>
+                  <button class="chart-period-btn active" data-period="semana">Esta semana</button>
+                  <button class="chart-period-btn" data-period="mes">Este mês</button>
+                </div>
+                <button class="chart-export-btn" id="exportRelatorio">📥 Baixar Relatório</button>
+              </div>
+            </div>
+            <div class="chart-container">
+              <canvas id="entregasChart"></canvas>
+            </div>
+          </div>
+
           <div class="dashboard-grid">
             <div class="panel">
               <div class="panel-header"><h2>Últimos pedidos</h2></div>
@@ -196,6 +215,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="js/data.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/map.js"></script>

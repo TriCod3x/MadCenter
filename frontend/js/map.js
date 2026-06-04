@@ -68,6 +68,77 @@ function getCityCoordinates(city, state) {
   return MUNICIPIOS_COORDS[coordKey(city, state)] || null;
 }
 
+function getCoordForPedido(pedido) {
+  if (pedido.lat && pedido.lng && Number(pedido.lat) !== 0 && Number(pedido.lng) !== 0) {
+    return { lat: Number(pedido.lat), lng: Number(pedido.lng) };
+  }
+  return getCityCoordinates(pedido.destinoMunicipio, pedido.destinoEstado);
+}
+
+async function drawSequentialRoute(route) {
+  const LOJA = { lat: STORE_LOCATION.lat, lng: STORE_LOCATION.lng };
+
+  const todosPedidos = (route.cargasIds || [])
+    .map((id) => getCargas().find((c) => c.id === id))
+    .filter(Boolean);
+
+  const entregues = todosPedidos.filter((c) => c.status === "entregue");
+  const pendentes  = todosPedidos.filter((c) => c.status !== "entregue" && c.status !== "cancelado");
+
+  if (!pendentes.length) return null;
+
+  // Ponto de partida: último pedido entregue (na ordem de cargas_ids) ou loja
+  let pontoPartida = LOJA;
+  if (entregues.length > 0) {
+    const ultimoEntregue = entregues[entregues.length - 1];
+    const coord = getCoordForPedido(ultimoEntregue);
+    if (coord) pontoPartida = coord;
+  }
+
+  // Waypoints: partida → pendente1 → pendente2 → ...
+  const waypoints = [pontoPartida];
+  for (const pedido of pendentes) {
+    const coord = getCoordForPedido(pedido);
+    if (coord) waypoints.push(coord);
+  }
+
+  if (waypoints.length < 2) return null;
+
+  const style = routeStyle(route);
+  let line;
+
+  if (waypoints.length === 2) {
+    // Apenas um destino pendente — tenta OSRM para rota real
+    const geometry = await getRouteGeometry(waypoints[0], waypoints[1]);
+    if (geometry) {
+      line = L.geoJSON(geometry, { style });
+    } else {
+      line = L.polyline([[waypoints[0].lat, waypoints[0].lng], [waypoints[1].lat, waypoints[1].lng]], style);
+    }
+  } else {
+    // Múltiplos destinos — polyline direta por todos os pontos
+    line = L.polyline(waypoints.map((w) => [w.lat, w.lng]), { ...style, dashArray: null });
+  }
+
+  line.addTo(logisticsMap);
+  waypoints.forEach((w) => extendBounds([w.lat, w.lng]));
+
+  // Marcador cinza no ponto de partida quando for uma entrega (não a loja)
+  if (entregues.length > 0) {
+    const deptIcon = L.divIcon({
+      className: "delivery-div-icon",
+      html: '<div class="delivery-pin departure-point"></div>',
+      iconSize: [14, 14],
+      iconAnchor: [7, 7]
+    });
+    const deptMarker = L.marker([pontoPartida.lat, pontoPartida.lng], { icon: deptIcon });
+    deptMarker.bindPopup("📍 Última entrega — ponto de partida atual");
+    deptMarker.addTo(logisticsMap);
+  }
+
+  return line;
+}
+
 function initMap() {
   if (!window.L) return null;
   if (!logisticsMap) {
@@ -111,16 +182,52 @@ async function renderLogisticsMap(filters = {}) {
   const routes = getRotas().filter((route) => routeVisibleByFilters(route, filters));
   await Promise.all(routes.map(async (route) => {
     let destination = null;
-    if (route.cargasIds?.length) {
-      const pedidosComCoords = getCargas().filter((c) => route.cargasIds.includes(c.id) && c.lat && c.lng);
-      if (pedidosComCoords.length) {
-        destination = { lat: Number(pedidosComCoords[0].lat), lng: Number(pedidosComCoords[0].lng) };
+    let line = null;
+    let marker = null;
+
+    if (route.status === "em andamento" && route.cargasIds?.length) {
+      // Traçado sequencial a partir da última entrega (ou loja se nenhuma ainda)
+      line = await drawSequentialRoute(route);
+
+      // Determina o "destino" para o popup de seleção: primeiro pedido pendente
+      const pedidos = (route.cargasIds || [])
+        .map((id) => getCargas().find((c) => c.id === id))
+        .filter(Boolean);
+      const primeiroPendente = pedidos.find((c) => c.status !== "entregue");
+      destination = primeiroPendente ? getCoordForPedido(primeiroPendente) : null;
+      if (!destination) destination = getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
+
+      // Marcador invisível apenas para usar em selectRoute / popup
+      if (destination) {
+        marker = L.marker([destination.lat, destination.lng], {
+          icon: destinationMarkerIcon(route.status),
+          opacity: 0
+        });
+        const driver = driverName(route.motoristaId);
+        marker.bindPopup(`
+          <strong>${route.codigo} · ${route.nome}</strong><br>
+          ${route.destinoMunicipio}/${route.destinoEstado}<br>
+          <strong>Motorista:</strong> ${driver}<br>
+          ${route.cargasIds?.length || 0} pedido(s) · ${route.status}<br>
+          ${route.freteTotal ? `Frete: ${money.format(Number(route.freteTotal || 0))}` : ""}
+        `);
+        marker.addTo(logisticsMap);
       }
+    } else {
+      // Rota planejada / concluída / cancelada — comportamento original
+      if (route.cargasIds?.length) {
+        const pedidosComCoords = getCargas().filter((c) => route.cargasIds.includes(c.id) && c.lat && c.lng);
+        if (pedidosComCoords.length) {
+          destination = { lat: Number(pedidosComCoords[0].lat), lng: Number(pedidosComCoords[0].lng) };
+        }
+      }
+      if (!destination) destination = getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
+      if (!destination) return;
+      line = await drawRouteLine(store, destination, route);
+      marker = drawDestinationMarker(destination, route);
     }
-    if (!destination) destination = getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
-    if (!destination) return;
-    const line = await drawRouteLine(store, destination, route);
-    const marker = drawDestinationMarker(destination, route);
+
+    if (!destination || !line) return;
     ROUTE_LAYERS[route.id] = { line, marker, destination, route };
     routeCards.push(route);
   }));
@@ -132,26 +239,58 @@ async function renderLogisticsMap(filters = {}) {
 }
 
 function renderDeliveryMarkers() {
+  // Identifica o primeiro pedido não entregue de cada rota "em andamento"
+  const nextPedidoIds = new Set();
+  getRotas().forEach((rota) => {
+    if (rota.status !== "em andamento") return;
+    const primeiro = (rota.cargasIds || [])
+      .map((id) => getCargas().find((c) => c.id === id))
+      .find((c) => c && c.status !== "entregue");
+    if (primeiro) nextPedidoIds.add(primeiro.id);
+  });
+
   getCargas()
     .filter((c) => c.lat && c.lng)
     .forEach((carga) => {
       const lat = Number(carga.lat);
       const lng = Number(carga.lng);
       if (!lat || !lng) return;
+
+      let pinClass;
+      if (carga.status === "entregue") {
+        pinClass = "completed";
+      } else if (nextPedidoIds.has(carga.id)) {
+        pinClass = "next-delivery";
+      } else if (carga.status === "em rota") {
+        pinClass = "pending";
+      } else {
+        pinClass = "pending";
+      }
+
+      const size = pinClass === "next-delivery" ? [22, 22] : [18, 18];
+      const anchor = pinClass === "next-delivery" ? [11, 11] : [9, 9];
       const icon = L.divIcon({
         className: "delivery-div-icon",
-        html: '<div class="delivery-dot"></div>',
-        iconSize: [10, 10],
-        iconAnchor: [5, 5]
+        html: `<div class="delivery-pin ${pinClass}"></div>`,
+        iconSize: size,
+        iconAnchor: anchor
       });
+
       const enderecoCompleto = [carga.enderecoEntrega, carga.numero, carga.complemento].filter(Boolean).join(", ");
+      const statusLabel = {
+        "entregue": "✅ Entregue",
+        "em rota": "🚚 Em rota",
+        "aguardando rota": "⏳ Aguardando",
+        "próximo dia": "📅 Próximo dia",
+        "cancelado": "❌ Cancelado"
+      }[carga.status] || carga.status;
+
       const marker = L.marker([lat, lng], { icon });
       marker.bindPopup(`
-        <strong>${carga.codigo}</strong><br>
-        ${carga.descricao}<br>
+        <b>${carga.codigo} — ${carga.descricao}</b><br>
         ${enderecoCompleto ? enderecoCompleto + "<br>" : ""}
-        ${carga.cliente}<br>
-        <em>${carga.status}</em>
+        👤 ${carga.cliente}<br>
+        ${statusLabel}
       `);
       marker.addTo(logisticsMap);
       DELIVERY_MARKERS[carga.id] = marker;
@@ -284,6 +423,7 @@ function selectRoute(routeId) {
 
   // Destaca a linha selecionada e esmaece as demais
   Object.entries(ROUTE_LAYERS).forEach(([id, layer]) => {
+    if (!layer.line) return;
     if (id === routeId) {
       layer.line.setStyle({ color: "#F59E0B", weight: 5, opacity: 1, dashArray: null });
     } else {
@@ -299,8 +439,11 @@ function selectRoute(routeId) {
   );
   logisticsMap.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
 
-  // Abre o popup no marcador de destino
-  entry.marker.openPopup();
+  // Abre o popup no marcador de destino (se existir e estiver visível)
+  if (entry.marker) {
+    entry.marker.setOpacity(1);
+    entry.marker.openPopup();
+  }
 
   // Destaca marcadores dos pedidos da rota; esmaece os demais
   const rotaCargoIds = new Set(entry.route.cargasIds || []);
@@ -322,6 +465,7 @@ function deselectRoute() {
 
   // Restaura o estilo original de cada linha
   Object.entries(ROUTE_LAYERS).forEach(([, entry]) => {
+    if (!entry.line) return;
     const style = routeStyle(entry.route);
     entry.line.setStyle(style);
   });

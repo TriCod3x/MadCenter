@@ -59,7 +59,7 @@ button { cursor: pointer; }
   padding: 0 0 24px;
   position: fixed;
   inset: 0 auto 0 0;
-  z-index: 20;
+  z-index: 1000;
   box-shadow: 6px 0 28px rgba(0, 30, 12, .28);
   display: flex;
   flex-direction: column;
@@ -82,24 +82,18 @@ button { cursor: pointer; }
 }
 
 .sidebar-logo-card {
-  background: #ffffff;
-  border-radius: 14px;
-  padding: 10px 16px;
-  width: 100%;
-  min-height: 58px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, .22), 0 1px 4px rgba(0, 0, 0, .12);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 24px 16px 8px 16px;
+  text-align: center;
 }
 
-.sidebar-logo-img {
-  max-width: 190px;
-  max-height: 48px;
-  width: 100%;
+.sidebar-logo-card img {
+  width: 200px;
   height: auto;
-  object-fit: contain;
-  display: block;
+  filter: none;
+  mix-blend-mode: normal;
 }
 
 .sidebar-brand-text {
@@ -110,19 +104,18 @@ button { cursor: pointer; }
 }
 
 .sidebar-brand-text strong {
-  font-size: 13px;
-  font-weight: 700;
-  color: #ffffff;
-  letter-spacing: .04em;
+  display: none;
 }
 
 .sidebar-brand-text span {
-  font-size: 10.5px;
-  color: rgba(255, 255, 255, .48);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.55);
   text-transform: uppercase;
-  letter-spacing: .14em;
+  letter-spacing: 3px;
   font-weight: 600;
   text-align: center;
+  margin-top: 8px;
+  padding-bottom: 16px;
 }
 
 .sidebar-brand.logo-error::before {
@@ -652,7 +645,7 @@ tr:hover td {
   justify-content: center;
   padding: 20px;
   background: rgba(8, 28, 18, .62);
-  z-index: 60;
+  z-index: 1100;
 }
 
 .modal-backdrop.active { display: flex; }
@@ -1006,6 +999,33 @@ tr:hover td {
   height: 18px;
 }
 
+/* Ponto de partida atual (última entrega): cinza pequeno */
+.delivery-pin.departure-point {
+  width: 14px;
+  height: 14px;
+  background: #9ca3af;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .25);
+  opacity: 0.9;
+}
+
+/* Próximo pedido a ser entregue: azul pulsante */
+.delivery-pin.next-delivery {
+  background: #2374c6;
+  border-color: #fff;
+  box-shadow: 0 0 0 0 rgba(35, 116, 198, 0.5);
+  animation: pulse-delivery 1.6s ease-out infinite;
+  width: 22px;
+  height: 22px;
+  z-index: 10;
+}
+
+@keyframes pulse-delivery {
+  0%   { box-shadow: 0 0 0 0 rgba(35, 116, 198, 0.55); }
+  60%  { box-shadow: 0 0 0 10px rgba(35, 116, 198, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(35, 116, 198, 0); }
+}
+
 /* ======================================
    LAYOUT DO MAPA
 ====================================== */
@@ -1351,7 +1371,7 @@ tr:hover td {
   position: fixed;
   right: 22px;
   bottom: 22px;
-  z-index: 80;
+  z-index: 1300;
   max-width: 360px;
   display: none;
   padding: 13px 16px;
@@ -1393,42 +1413,72 @@ tr:hover td {
 }
 
 /* ======================================
-   RESPONSIVIDADE — MOBILE
+   RESPONSIVIDADE — MOBILE (≤760px)
 ====================================== */
 
 @media (max-width: 760px) {
+  /* ── Sidebar ── */
   .sidebar {
     transform: translateX(-100%);
     transition: transform .22s ease;
-    width: 270px;
+    width: 275px;
   }
-
   .sidebar.open { transform: translateX(0); }
   .main-area { margin-left: 0; }
   .mobile-only { display: inline-flex; }
 
-  .sidebar-logo-img {
-    max-width: 140px;
+  /* ── Overlay quando sidebar aberta ── */
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 999;
+  }
+  .sidebar-overlay.active { display: block; }
+
+  /* ── Topbar: 2 linhas ── */
+  .topbar {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 14px;
+    min-height: auto;
   }
 
-  .topbar {
-    align-items: flex-start;
-    padding: 14px;
+  .topbar > div:first-of-type {
+    flex: 1;
+    min-width: 0;
   }
+
+  .topbar h1 {
+    font-size: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .topbar-subtitle { display: none; }
 
   .topbar-actions {
-    flex: 1;
+    width: 100%;
+    order: 3;
     justify-content: flex-end;
     flex-wrap: wrap;
+    gap: 8px;
   }
 
   .quick-search {
     width: 100%;
-    order: 3;
+    min-width: 0;
+    order: 10;
   }
 
-  .content { padding: 16px 14px 32px; }
+  .admin-pill { display: none; }
 
+  /* ── Conteúdo ── */
+  .content { padding: 14px 12px 36px; }
+
+  /* ── Grids ── */
   .metrics-grid,
   .dashboard-grid,
   .suggestions-grid,
@@ -1442,28 +1492,99 @@ tr:hover td {
   .alerts-panel,
   .form-field.full { grid-column: auto; }
 
-  .page-toolbar { flex-direction: column; }
+  .metrics-grid { gap: 10px; }
+
+  /* ── Metric card menor ── */
+  .metric-card strong { font-size: 26px; }
+
+  /* ── Hero strip ── */
+  .hero-strip { flex-direction: column; gap: 8px; }
+
+  /* ── Page toolbar ── */
+  .page-toolbar {
+    flex-direction: column;
+    gap: 10px;
+  }
 
   .filters-grid {
     width: 100%;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 
+  /* ── Botões principais ── */
   .primary-button,
   .secondary-button,
   .danger-button,
   .warning-button {
     width: 100%;
+    justify-content: center;
   }
 
+  .modal-actions,
+  .button-row {
+    flex-direction: column-reverse;
+  }
+
+  .modal-actions > *,
+  .button-row > * {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* ── Modal full-screen no mobile ── */
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: 96vh;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .modal-header {
+    padding: 14px 16px;
+  }
+
+  #modalBody { padding: 14px; }
+
+  /* ── Tabela ── */
+  .table-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-wrap::after {
+    content: "";
+    display: block;
+    height: 1px;
+  }
+
+  /* ── Frete calculadora ── */
+  .frete-calc-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .frete-input-row {
+    flex-wrap: wrap;
+  }
+
+  .frete-input-row input[type="number"] {
+    flex: 1 1 120px;
+  }
+
+  .btn-frete-calc {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* ── Mapa ── */
   .map-command-side {
     max-height: none;
     order: 2;
   }
 
-  .map-stage {
-    order: 1;
-  }
+  .map-stage { order: 1; }
 
   .map-floating-controls {
     position: static;
@@ -1471,9 +1592,7 @@ tr:hover td {
     flex-direction: row;
   }
 
-  .map-floating-controls .secondary-button {
-    flex: 1;
-  }
+  .map-floating-controls .secondary-button { flex: 1; }
 
   .map-legend {
     position: static;
@@ -1482,17 +1601,48 @@ tr:hover td {
   }
 
   .map-canvas {
-    min-height: 420px;
+    min-height: 380px;
     border-radius: 8px;
   }
 
-  .map-card-actions {
-    flex-direction: column;
+  .map-card-actions { flex-direction: column; }
+  .map-card-actions .secondary-button { width: 100%; }
+
+  /* ── Pedido detail card ── */
+  .pedido-detail-actions { flex-direction: column; }
+  .pedido-detail-actions .primary-button,
+  .pedido-detail-actions .secondary-button { width: 100%; }
+
+  /* ── Settings ── */
+  .settings-layout { grid-template-columns: 1fr; }
+
+  /* ── CEP ── */
+  .cep-input-row { flex-wrap: wrap; }
+  .cep-input-row input { flex: 1 1 120px; }
+  .btn-map-picker { flex: 1 1 auto; justify-content: center; }
+
+  /* ── Toast ── */
+  .toast {
+    right: 12px;
+    left: 12px;
+    bottom: 16px;
+    max-width: none;
+  }
+}
+
+/* ======================================
+   RESPONSIVIDADE — MUITO PEQUENO (≤420px)
+====================================== */
+
+@media (max-width: 420px) {
+  .filters-grid {
+    grid-template-columns: 1fr;
   }
 
-  .map-card-actions .secondary-button {
-    width: 100%;
-  }
+  .topbar h1 { font-size: 16px; }
+
+  .frete-calc-footer { flex-direction: column; align-items: stretch; }
+  .btn-aplicar-frete { width: 100%; text-align: center; }
 }
 
 /* ======================================
@@ -1500,7 +1650,7 @@ tr:hover td {
 ====================================== */
 
 #mapPickerBackdrop {
-  z-index: 70;
+  z-index: 1200;
 }
 
 .modal-map {
@@ -1591,12 +1741,267 @@ tr:hover td {
 [data-theme="dark"] .btn-map-picker { background: #16a34a; }
 [data-theme="dark"] .btn-map-picker:hover { background: #15803d; }
 
-/* Campo frete estimado (readonly) */
-#freteDisplay {
+/* ── Frete manual + calculadora de combustível ─── */
+
+.frete-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.frete-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.frete-input-row input[type="number"] {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.btn-frete-calc {
+  white-space: nowrap;
+  padding: 0 14px;
+  background: var(--surface);
+  color: var(--primary-2);
+  border: 1.5px solid var(--primary-2);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background .15s, color .15s;
+  min-height: 40px;
+}
+
+.btn-frete-calc:hover {
+  background: var(--primary-2);
+  color: #fff;
+}
+
+.frete-calc-panel {
   background: var(--surface-soft);
-  cursor: default;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  animation: calcSlideDown .18s ease;
+}
+
+@keyframes calcSlideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.frete-calc-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--primary-2) 10%, var(--surface-soft));
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary-2);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.frete-calc-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.frete-calc-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.frete-calc-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.frete-calc-label input {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.frete-calc-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.frete-calc-result {
+  flex: 1;
+  font-size: 13px;
   font-weight: 600;
   color: var(--primary-2);
+  min-width: 0;
+}
+
+.frete-calc-result:empty::before {
+  content: "Preencha os campos para calcular";
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.btn-aplicar-frete {
+  padding: 7px 18px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+  white-space: nowrap;
+}
+
+.btn-aplicar-frete:hover { background: #15803d; }
+
+[data-theme="dark"] .btn-frete-calc { background: var(--surface); }
+
+/* ======================================
+   GRÁFICO DE ENTREGAS — DASHBOARD
+====================================== */
+
+.chart-panel {
+  margin-bottom: 18px;
+}
+
+.chart-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.chart-panel-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chart-period-btns {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.chart-period-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+  white-space: nowrap;
+}
+
+.chart-period-btn:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.chart-period-btn.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+[data-theme="dark"] .chart-period-btn.active {
+  background: var(--primary-2);
+}
+
+.chart-export-btn {
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: border-color .15s, background .15s;
+  white-space: nowrap;
+}
+
+.chart-export-btn:hover {
+  border-color: var(--primary-2);
+  background: var(--surface-soft);
+  color: var(--primary-2);
+}
+
+.chart-container {
+  position: relative;
+  height: 280px;
+}
+
+@media (max-width: 760px) {
+  .chart-panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .chart-controls {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .chart-period-btns {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .chart-period-btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .chart-export-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .chart-container {
+    height: 220px;
+  }
 }
 
 /* ======================================

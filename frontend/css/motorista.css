@@ -1,0 +1,471 @@
+/* ======================================================
+   MADCENTER — ÁREA DO MOTORISTA
+   Mobile-first · Tema verde escuro
+====================================================== */
+
+:root {
+  --moto-bg:       #0f3d1f;
+  --moto-surface:  #1a4d2a;
+  --moto-surface2: #1e5830;
+  --moto-border:   #2a6b3a;
+  --moto-text:     #edf6f1;
+  --moto-muted:    #8fbfa0;
+  --moto-green:    #4caf50;
+  --moto-orange:   #ff9800;
+  --moto-blue:     #2196f3;
+  --moto-red:      #ef5350;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-size: 16px;
+  background: var(--moto-bg);
+  color: var(--moto-text);
+  min-height: 100vh;
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+}
+
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+img { max-width: 100%; }
+
+.hidden { display: none !important; }
+
+/* ── TELA DE LOGIN ─────────────────────────────────── */
+
+#loginScreen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px 20px;
+}
+
+.moto-login-card {
+  background: var(--moto-surface);
+  border-radius: 18px;
+  padding: 36px 24px 28px;
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .45);
+}
+
+.moto-login-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.moto-login-logo img {
+  height: 60px;
+  object-fit: contain;
+}
+
+.moto-login-logo strong {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--moto-text);
+  letter-spacing: -.01em;
+}
+
+.moto-login-logo span {
+  font-size: 13px;
+  color: var(--moto-muted);
+}
+
+.moto-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.moto-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--moto-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: 6px;
+}
+
+.moto-select {
+  width: 100%;
+  min-height: 50px;
+  border: 1.5px solid var(--moto-border);
+  border-radius: 10px;
+  padding: 10px 38px 10px 14px;
+  background: var(--moto-bg);
+  color: var(--moto-text);
+  font-size: 16px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238fbfa0' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+
+.moto-select:focus { border-color: var(--moto-green); }
+
+.moto-error {
+  display: none;
+  color: #ff6b6b;
+  font-size: 13px;
+  text-align: center;
+  padding: 8px;
+  background: rgba(239, 83, 80, .12);
+  border-radius: 8px;
+}
+
+/* ── BOTÕES ────────────────────────────────────────── */
+
+.moto-btn {
+  width: 100%;
+  min-height: 50px;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity .15s, transform .1s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.moto-btn:active { transform: scale(.97); }
+
+.moto-btn-primary  { background: var(--moto-green); color: #fff; }
+.moto-btn-primary:hover { opacity: .88; }
+
+.moto-btn-entregue { background: var(--moto-green); color: #fff; }
+.moto-btn-entregue:hover { opacity: .9; }
+
+.moto-btn-adiar {
+  background: var(--moto-surface2);
+  color: var(--moto-muted);
+  border: 1.5px solid var(--moto-border);
+}
+
+.moto-btn-maps {
+  background: var(--moto-blue);
+  color: #fff;
+  font-size: 15px;
+  border-radius: 12px;
+  box-shadow: 0 4px 18px rgba(33, 150, 243, .35);
+}
+
+/* ── HEADER ────────────────────────────────────────── */
+
+.moto-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--moto-surface);
+  border-bottom: 1px solid var(--moto-border);
+  box-shadow: 0 2px 14px rgba(0, 0, 0, .28);
+}
+
+.moto-header-logo {
+  height: 30px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.moto-header-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.moto-logout-btn {
+  background: transparent;
+  border: 1.5px solid var(--moto-border);
+  color: var(--moto-muted);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+  transition: border-color .15s, color .15s;
+}
+
+.moto-logout-btn:hover {
+  border-color: var(--moto-red);
+  color: var(--moto-red);
+}
+
+/* ── CONTEÚDO ──────────────────────────────────────── */
+
+.moto-content {
+  padding: 16px 16px 110px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── CARD DE PROGRESSO ─────────────────────────────── */
+
+.moto-progress-card {
+  background: var(--moto-surface);
+  border-radius: 14px;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.moto-progress-stats {
+  display: flex;
+  gap: 8px;
+}
+
+.moto-stat {
+  flex: 1;
+  background: var(--moto-bg);
+  border-radius: 10px;
+  padding: 12px 8px;
+  text-align: center;
+}
+
+.moto-stat strong {
+  display: block;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.moto-stat span {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--moto-muted);
+}
+
+.moto-stat-green strong { color: var(--moto-green); }
+.moto-stat-orange strong { color: var(--moto-orange); }
+
+.moto-progress-bar-wrap {
+  height: 8px;
+  background: var(--moto-bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.moto-progress-bar {
+  height: 100%;
+  background: var(--moto-green);
+  border-radius: 4px;
+  width: 0%;
+  transition: width .6s ease;
+}
+
+.moto-progress-label {
+  font-size: 13px;
+  color: var(--moto-muted);
+  text-align: center;
+}
+
+/* ── SEM ROTA ──────────────────────────────────────── */
+
+.moto-sem-rota {
+  background: var(--moto-surface);
+  border-radius: 14px;
+  padding: 40px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.moto-sem-rota .moto-sem-icon { font-size: 52px; }
+.moto-sem-rota p { font-size: 16px; font-weight: 700; }
+.moto-sem-rota small { color: var(--moto-muted); font-size: 14px; }
+
+/* ── SECTION TITLE ─────────────────────────────────── */
+
+.moto-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--moto-muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 8px;
+}
+
+/* ── CARDS DE PEDIDO ───────────────────────────────── */
+
+.moto-pedidos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.moto-pedido-card {
+  background: var(--moto-surface);
+  border-radius: 14px;
+  padding: 18px 16px;
+  border-left: 4px solid var(--moto-orange);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .22);
+  transition: opacity .45s ease;
+}
+
+.moto-pedido-card.is-proximo {
+  border-left-color: var(--moto-blue);
+  box-shadow:
+    0 0 0 1px rgba(33, 150, 243, .3),
+    0 4px 20px rgba(33, 150, 243, .18);
+}
+
+.moto-pedido-card.is-entregue {
+  border-left-color: var(--moto-green);
+  opacity: .45;
+}
+
+.moto-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.moto-card-codigo {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.moto-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.moto-badge-green  { background: rgba(76, 175, 80, .18);  color: #81c784; }
+.moto-badge-orange { background: rgba(255, 152, 0, .18);  color: #ffb74d; }
+
+.moto-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 16px;
+}
+
+.moto-card-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.moto-card-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--moto-muted);
+  min-width: 68px;
+  flex-shrink: 0;
+}
+
+.moto-card-value {
+  font-size: 14px;
+  color: var(--moto-text);
+  flex: 1;
+  line-height: 1.4;
+}
+
+.moto-card-chips {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--moto-muted);
+}
+
+.moto-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── MAPA ──────────────────────────────────────────── */
+
+.moto-mapa-section { }
+
+.moto-map {
+  height: 300px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--moto-border);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .2);
+}
+
+/* ── BOTÃO FLUTUANTE ───────────────────────────────── */
+
+.moto-floating {
+  position: fixed;
+  bottom: 20px;
+  left: 16px;
+  right: 16px;
+  z-index: 200;
+  filter: drop-shadow(0 4px 16px rgba(33, 150, 243, .35));
+}
+
+/* ── TOAST ─────────────────────────────────────────── */
+
+.moto-toast {
+  position: fixed;
+  bottom: 86px;
+  left: 16px;
+  right: 16px;
+  padding: 13px 16px;
+  background: #163d22;
+  color: var(--moto-text);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  z-index: 300;
+  border-left: 4px solid var(--moto-green);
+  transition: opacity .22s ease, transform .22s ease;
+}
+
+.moto-toast.moto-toast-erro { border-left-color: var(--moto-red); }
+
+.moto-toast.moto-toast-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── ANIMAÇÕES ─────────────────────────────────────── */
+
+@keyframes moto-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(33, 150, 243, .65); }
+  70%  { box-shadow: 0 0 0 10px rgba(33, 150, 243, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(33, 150, 243, 0); }
+}

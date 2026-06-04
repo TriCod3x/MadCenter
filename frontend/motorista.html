@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f3d1f">
+  <title>Madcenter — Área do Motorista</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="css/motorista.css">
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════════════
+       TELA DE LOGIN
+  ══════════════════════════════════════════════════ -->
+  <div id="loginScreen">
+    <div class="moto-login-card">
+
+      <div class="moto-login-logo">
+        <img src="assets/logo_madcenter_white.svg" alt="Madcenter"
+             onerror="this.style.display='none'">
+        <strong>Área do Motorista</strong>
+        <span>Madcenter Entregas</span>
+      </div>
+
+      <div class="moto-login-form">
+        <div>
+          <label class="moto-label" for="motoristaSelect">Selecione seu nome</label>
+          <select id="motoristaSelect" class="moto-select">
+            <option value="">Carregando motoristas…</option>
+          </select>
+        </div>
+
+        <div id="loginError" class="moto-error">
+          Selecione um motorista para continuar.
+        </div>
+
+        <button id="loginBtn" class="moto-btn moto-btn-primary">
+          Entrar →
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       TELA PRINCIPAL
+  ══════════════════════════════════════════════════ -->
+  <div id="mainScreen" class="hidden">
+
+    <!-- HEADER -->
+    <header class="moto-header">
+      <img src="assets/logo_madcenter_white.svg" alt="Madcenter"
+           class="moto-header-logo" onerror="this.style.display='none'">
+      <span id="headerName" class="moto-header-name"></span>
+      <button id="logoutBtn" class="moto-logout-btn">Sair</button>
+    </header>
+
+    <div class="moto-content">
+
+      <!-- CARD DE PROGRESSO -->
+      <div class="moto-progress-card">
+        <div class="moto-progress-stats">
+          <div class="moto-stat">
+            <strong id="statTotal">0</strong>
+            <span>Total</span>
+          </div>
+          <div class="moto-stat moto-stat-green">
+            <strong id="statFeito">0</strong>
+            <span>Entregues</span>
+          </div>
+          <div class="moto-stat moto-stat-orange">
+            <strong id="statPendente">0</strong>
+            <span>Pendentes</span>
+          </div>
+        </div>
+        <div class="moto-progress-bar-wrap">
+          <div class="moto-progress-bar" id="progressBar"></div>
+        </div>
+        <div id="progressLabel" class="moto-progress-label">— de — entregas concluídas</div>
+      </div>
+
+      <!-- AVISO SEM ROTA -->
+      <div id="semRotaMsg" class="moto-sem-rota hidden">
+        <span class="moto-sem-icon">🚚</span>
+        <p>Nenhuma rota em andamento</p>
+        <small>Aguarde a ativação pelo administrador.</small>
+      </div>
+
+      <!-- LISTA DE PEDIDOS -->
+      <div>
+        <h3 class="moto-section-title" id="listTitle" style="display:none">
+          📦 Seus pedidos do dia
+        </h3>
+        <div id="pedidosList" class="moto-pedidos-list"></div>
+      </div>
+
+      <!-- MAPA -->
+      <div id="mapaSection" class="moto-mapa-section hidden">
+        <h3 class="moto-section-title">📍 Mapa de entregas</h3>
+        <div id="motoristaMap" class="moto-map"></div>
+      </div>
+
+    </div>
+
+    <!-- BOTÃO FLUTUANTE -->
+    <div id="floatingBtn" class="moto-floating hidden">
+      <button class="moto-btn moto-btn-maps" onclick="abrirNoMaps()">
+        📍 Abrir próxima entrega no Maps
+      </button>
+    </div>
+
+  </div>
+
+  <!-- TOAST -->
+  <div id="motoToast" class="moto-toast"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="js/motorista.js"></script>
+</body>
+</html>

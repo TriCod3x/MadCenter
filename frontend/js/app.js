@@ -101,9 +101,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 function bindLayoutEvents() {
   document.querySelectorAll(".nav-link").forEach((button) => {
-    button.addEventListener("click", () => showPage(button.dataset.page));
+    button.addEventListener("click", () => {
+      showPage(button.dataset.page);
+      document.getElementById("sidebar").classList.remove("open");
+      document.getElementById("sidebarOverlay")?.classList.remove("active");
+    });
   });
-  document.getElementById("menuToggle").addEventListener("click", () => document.getElementById("sidebar").classList.toggle("open"));
+  document.getElementById("menuToggle").addEventListener("click", () => {
+    const sidebar = document.getElementById("sidebar");
+    const overlay = document.getElementById("sidebarOverlay");
+    sidebar.classList.toggle("open");
+    if (overlay) overlay.classList.toggle("active", sidebar.classList.contains("open"));
+  });
+  document.getElementById("sidebarOverlay")?.addEventListener("click", () => {
+    document.getElementById("sidebar").classList.remove("open");
+    document.getElementById("sidebarOverlay").classList.remove("active");
+  });
   document.getElementById("modalClose").addEventListener("click", closeModal);
   document.getElementById("modalBackdrop").addEventListener("click", (event) => {
     if (event.target.id === "modalBackdrop") closeModal();
@@ -121,6 +134,7 @@ function bindLayoutEvents() {
     const next = document.body.dataset.theme === "dark" ? "light" : "dark";
     localStorage.setItem("madcenter_tema", next);
     applyTheme(next);
+    renderEntregasChart(_chartPeriodo);
   });
   document.getElementById("logoutBtn").addEventListener("click", () => {
     localStorage.removeItem(SESSION_KEY);
@@ -133,6 +147,7 @@ function bindLayoutEvents() {
   document.getElementById("motoristasSearch").addEventListener("input", renderTables);
   document.getElementById("rotasSearch").addEventListener("input", renderTables);
   document.getElementById("generateRoutesBtn").addEventListener("click", generateRoutesByMunicipality);
+  bindChartEvents();
   document.getElementById("mapReloadRoutes").addEventListener("click", renderMapPanel);
   document.getElementById("mapFitRoutes").addEventListener("click", fitAllMapRoutes);
   document.getElementById("restoreSeedBtn").addEventListener("click", () => {
@@ -235,6 +250,215 @@ function renderDashboard() {
   if (!alerts.length) alerts.push("Nenhum alerta no momento.");
 
   document.getElementById("alertsList").innerHTML = alerts.map((alert) => `<div class="list-item"><strong>${alert}</strong></div>`).join("");
+
+  renderEntregasChart("semana");
+}
+
+// ── Gráfico de Entregas ────────────────────────────────────────────────────
+
+let _entregasChart = null;
+let _chartPeriodo = "semana";
+
+function getEntregasFiltradas(periodo) {
+  const agora = new Date();
+  return getCargas().filter((c) => {
+    if (c.status !== "entregue") return false;
+    const dt = c.entrega ? new Date(c.entrega) : null;
+    if (!dt) return false;
+    if (periodo === "hoje") {
+      return dt.toDateString() === agora.toDateString();
+    }
+    if (periodo === "semana") {
+      const inicioSemana = new Date(agora);
+      inicioSemana.setDate(agora.getDate() - agora.getDay());
+      inicioSemana.setHours(0, 0, 0, 0);
+      const fimSemana = new Date(inicioSemana);
+      fimSemana.setDate(inicioSemana.getDate() + 6);
+      fimSemana.setHours(23, 59, 59, 999);
+      return dt >= inicioSemana && dt <= fimSemana;
+    }
+    if (periodo === "mes") {
+      return dt.getMonth() === agora.getMonth() && dt.getFullYear() === agora.getFullYear();
+    }
+    return false;
+  });
+}
+
+function agruparEntregas(pedidos, periodo) {
+  const agora = new Date();
+
+  if (periodo === "hoje") {
+    const labels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}h`);
+    const data = new Array(24).fill(0);
+    pedidos.forEach((c) => {
+      const h = new Date(c.entrega).getHours();
+      data[h]++;
+    });
+    return { labels, data };
+  }
+
+  if (periodo === "semana") {
+    const diasNomes = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+    const inicioSemana = new Date(agora);
+    inicioSemana.setDate(agora.getDate() - agora.getDay());
+    inicioSemana.setHours(0, 0, 0, 0);
+    const labels = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(inicioSemana);
+      d.setDate(inicioSemana.getDate() + i);
+      return diasNomes[d.getDay()];
+    });
+    const data = new Array(7).fill(0);
+    pedidos.forEach((c) => {
+      const dt = new Date(c.entrega);
+      const diff = Math.floor((dt - inicioSemana) / 86400000);
+      if (diff >= 0 && diff < 7) data[diff]++;
+    });
+    return { labels, data };
+  }
+
+  if (periodo === "mes") {
+    const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
+    const labels = Array.from({ length: diasNoMes }, (_, i) => String(i + 1));
+    const data = new Array(diasNoMes).fill(0);
+    pedidos.forEach((c) => {
+      const d = new Date(c.entrega).getDate();
+      if (d >= 1 && d <= diasNoMes) data[d - 1]++;
+    });
+    return { labels, data };
+  }
+
+  return { labels: [], data: [] };
+}
+
+function renderEntregasChart(periodo) {
+  _chartPeriodo = periodo;
+
+  document.querySelectorAll(".chart-period-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.period === periodo);
+  });
+
+  const pedidos = getEntregasFiltradas(periodo);
+  const { labels, data } = agruparEntregas(pedidos, periodo);
+
+  const isDark = document.body.dataset.theme === "dark";
+  const gridColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
+  const textColor = isDark ? "#a7b7ad" : "#6b7280";
+
+  if (_entregasChart) {
+    _entregasChart.destroy();
+    _entregasChart = null;
+  }
+
+  const ctx = document.getElementById("entregasChart");
+  if (!ctx) return;
+
+  _entregasChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "Entregas",
+        data,
+        backgroundColor: "rgba(28, 107, 48, 0.85)",
+        borderColor: "#1c6b30",
+        borderWidth: 1.5,
+        borderRadius: 5,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ` ${ctx.parsed.y} entrega${ctx.parsed.y !== 1 ? "s" : ""}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: gridColor },
+          ticks: { color: textColor, font: { size: 12 } }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            color: textColor,
+            font: { size: 12 },
+            stepSize: 1,
+            precision: 0
+          },
+          grid: { color: gridColor },
+          title: {
+            display: true,
+            text: "Entregas",
+            color: textColor,
+            font: { size: 12 }
+          }
+        }
+      }
+    }
+  });
+}
+
+function bindChartEvents() {
+  document.querySelectorAll(".chart-period-btn").forEach((btn) => {
+    btn.addEventListener("click", () => renderEntregasChart(btn.dataset.period));
+  });
+
+  document.getElementById("exportRelatorio")?.addEventListener("click", () => {
+    const pedidos = getEntregasFiltradas(_chartPeriodo);
+    const rotas = getRotas();
+    const motoristas = getMotoristas();
+
+    const hoje = new Date();
+    const dd = String(hoje.getDate()).padStart(2, "0");
+    const mm = String(hoje.getMonth() + 1).padStart(2, "0");
+    const aaaa = hoje.getFullYear();
+
+    const nomes = { hoje: "hoje", semana: "semana", mes: "mes" };
+    const sufixos = {
+      hoje: `${dd}-${mm}-${aaaa}`,
+      semana: `${dd}-${mm}-${aaaa}`,
+      mes: `${mm}-${aaaa}`
+    };
+    const filename = `relatorio-entregas-${nomes[_chartPeriodo]}-${sufixos[_chartPeriodo]}.csv`;
+
+    const header = ["Código", "Cliente", "Material", "Destino", "Motorista", "Data de Entrega", "Peso (kg)", "Frete (R$)", "Status"];
+    const rows = pedidos.map((p) => {
+      const rota = rotas.find((r) => (r.cargasIds || []).includes(p.id));
+      const motorista = rota ? (motoristas.find((m) => m.id === rota.motoristaId)?.nome || "") : "";
+      const destino = [p.destinoMunicipio, p.destinoEstado].filter(Boolean).join("/");
+      const dataEntrega = p.entrega ? new Date(p.entrega).toLocaleDateString("pt-BR") : "";
+      return [
+        p.codigo || "",
+        p.cliente || "",
+        p.descricao || "",
+        destino,
+        motorista,
+        dataEntrega,
+        p.peso || 0,
+        (Number(p.valorFrete || 0)).toFixed(2).replace(".", ","),
+        p.status || ""
+      ];
+    });
+
+    downloadCSV(filename, [header, ...rows]);
+  });
+}
+
+function downloadCSV(filename, rows) {
+  const BOM = "﻿";
+  const content = BOM + rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function buildRouteSuggestions() {
@@ -311,10 +535,24 @@ function renderMotoristasTable() {
     m.categoria,
     `${m.cidade}/${m.estado}`,
     `<select class="table-status-select" onchange="changeMotoristaStatus('${m.id}', this.value)">${["disponível", "em entrega", "inativo"].map((s) => `<option value="${s}" ${m.status === s ? "selected" : ""}>${s}</option>`).join("")}</select>`,
-    actions("motoristas", m.id)
+    `<div class="actions-cell">
+      <button class="table-action" onclick="openForm('motoristas','${m.id}')">Editar</button>
+      <button class="table-action" onclick="confirmDelete('motoristas','${m.id}')">Excluir</button>
+      <button class="table-action" onclick="copiarLinkMotorista()" title="Copiar link da área do motorista">📱 Link</button>
+    </div>`
   ]));
 }
 
+function copiarLinkMotorista() {
+  const url = window.location.origin + "/motorista.html";
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(url)
+      .then(() => toast("Link copiado! Envie para o motorista."))
+      .catch(() => toast("Link: " + url));
+  } else {
+    toast("Link: " + url);
+  }
+}
 async function changeMotoristaStatus(id, status) {
   try {
     await updateMotorista(id, { status });
@@ -342,12 +580,38 @@ async function changeRotaMotorista(rotaId, motoristaId) {
   try {
     const rota = getRotas().find((r) => r.id === rotaId);
     if (!rota) return;
-    const oldId = rota.motoristaId;
-    await updateRota(rotaId, { motoristaId: motoristaId || null });
-    if (oldId) await syncDriverStatus(oldId);
-    if (motoristaId) await syncDriverStatus(motoristaId);
-    renderTables();
+    const oldDriverId = rota.motoristaId;
+
+    if (motoristaId) {
+      // Etapa 2: vincula motorista → rota "em andamento"
+      await updateRota(rotaId, { motoristaId, status: "em andamento" });
+      await updateMotorista(motoristaId, { status: "em entrega" });
+
+      // Garante que todos os pedidos da rota estejam "em rota"
+      for (const pedidoId of (rota.cargasIds || [])) {
+        const pedido = getCargas().find((c) => c.id === pedidoId);
+        if (pedido && pedido.status !== "entregue") {
+          await updateCarga(pedidoId, { status: "em rota" });
+        }
+      }
+
+      // Libera o motorista anterior se for diferente
+      if (oldDriverId && oldDriverId !== motoristaId) {
+        await syncDriverStatus(oldDriverId);
+      }
+
+      toast("Motorista vinculado. Rota em andamento.");
+    } else {
+      // Remove motorista → rota volta para "planejada"
+      await updateRota(rotaId, { motoristaId: null, status: "planejada" });
+      if (oldDriverId) await syncDriverStatus(oldDriverId);
+      toast("Motorista removido da rota.");
+    }
+
+    renderAll();
+    if (App.page === "mapa") renderLogisticsMap(App.mapFilters);
   } catch (e) {
+    console.error(e);
     toast("Erro ao atualizar motorista da rota.");
   }
 }
@@ -520,7 +784,7 @@ function fieldHtml(field, item) {
   }
 
   if (type === "cep") {
-    const freteFormatado = item?.valorFrete ? money.format(Number(item.valorFrete)) : "";
+    const freteAtual = item?.valorFrete ? Number(item.valorFrete).toFixed(2) : "";
     return `
       <label class="form-field">
         <span>${label}</span>
@@ -533,12 +797,30 @@ function fieldHtml(field, item) {
         </div>
       </label>
       <label class="form-field">
-        <span>Frete estimado (R$ 0,50/km)</span>
-        <input type="text" id="freteDisplay" readonly placeholder="Calculado ao selecionar local" value="${freteFormatado}">
+        <span>Frete (R$)</span>
+        <div class="frete-wrap">
+          <div class="frete-input-row">
+            <input type="number" id="freteManual" name="valorFrete" value="${freteAtual}" placeholder="0.00" min="0" step="0.01">
+            <button type="button" class="btn-frete-calc" onclick="toggleFreteCalc()">⛽ Calcular combustível</button>
+          </div>
+          <div id="freteCalcPanel" class="frete-calc-panel" style="display:none">
+            <div class="frete-calc-header">⛽ Calculadora de combustível</div>
+            <div class="frete-calc-body">
+              <div class="frete-calc-fields">
+                <label class="frete-calc-label">Distância (km)<input type="number" id="calcDistancia" placeholder="150" min="0" step="0.1" oninput="calcularFreteLive()"></label>
+                <label class="frete-calc-label">Consumo (km/L)<input type="number" id="calcConsumo" placeholder="12" min="0.1" step="0.1" oninput="calcularFreteLive()"></label>
+                <label class="frete-calc-label">Gasolina (R$/L)<input type="number" id="calcGasolina" placeholder="6.50" min="0" step="0.01" oninput="calcularFreteLive()"></label>
+              </div>
+              <div class="frete-calc-footer">
+                <span id="freteCalcResult" class="frete-calc-result"></span>
+                <button type="button" class="btn-aplicar-frete" onclick="aplicarFreteCombustivel()">Aplicar</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </label>
       <input type="hidden" name="lat" value="${item?.lat || ""}">
       <input type="hidden" name="lng" value="${item?.lng || ""}">
-      <input type="hidden" name="valorFrete" value="${item?.valorFrete || ""}">
       <input type="hidden" name="distanciaKm" value="${item?.distanciaKm || ""}">
     `;
   }
@@ -580,11 +862,6 @@ async function submitEntityForm(event) {
       data.valorFrete = Number(data.valorFrete || 0);
       data.lat = data.lat ? Number(data.lat) : null;
       data.lng = data.lng ? Number(data.lng) : null;
-      const pick = computeCargoFreight(data);
-      if (!pick.error) {
-        data.distanciaKm = pick.distanceKm;
-        data.valorFrete = pick.freight;
-      }
     }
 
     if (entity === "motoristas") {
@@ -980,11 +1257,46 @@ function updateFreteEstimado(form, lat, lng) {
   const SEDE_LAT = -4.760287;
   const SEDE_LNG = -42.573777;
   const distKm = calculateDistanceKm(SEDE_LAT, SEDE_LNG, lat, lng);
-  const frete = distKm * 0.50;
-  const display = document.getElementById("freteDisplay");
-  if (display) display.value = money.format(frete);
-  setCepField(form, "valorFrete", frete.toFixed(2));
   setCepField(form, "distanciaKm", distKm.toFixed(1));
+  const calcDist = document.getElementById("calcDistancia");
+  if (calcDist) calcDist.value = distKm.toFixed(1);
+}
+
+function toggleFreteCalc() {
+  const panel = document.getElementById("freteCalcPanel");
+  if (!panel) return;
+  const isHidden = panel.style.display === "none";
+  panel.style.display = isHidden ? "block" : "none";
+  if (isHidden) calcularFreteLive();
+}
+
+function calcularFreteLive() {
+  const distancia = parseFloat(document.getElementById("calcDistancia")?.value || 0);
+  const consumo = parseFloat(document.getElementById("calcConsumo")?.value || 0);
+  const gasolina = parseFloat(document.getElementById("calcGasolina")?.value || 0);
+  const result = document.getElementById("freteCalcResult");
+  if (!result) return null;
+
+  if (!distancia || !consumo || !gasolina) {
+    result.textContent = "";
+    return null;
+  }
+
+  const litros = distancia / consumo;
+  const valor = litros * gasolina;
+  result.textContent = `${litros.toFixed(2)} L × R$ ${gasolina.toFixed(2)} = R$ ${valor.toFixed(2)}`;
+  return valor;
+}
+
+function aplicarFreteCombustivel() {
+  const valor = calcularFreteLive();
+  if (valor === null) {
+    const result = document.getElementById("freteCalcResult");
+    if (result) result.textContent = "Preencha todos os campos.";
+    return;
+  }
+  const freteInput = document.getElementById("freteManual");
+  if (freteInput) freteInput.value = valor.toFixed(2);
 }
 
 function _getStateCode(stateName) {
@@ -1318,9 +1630,11 @@ async function markPedidoEntregue(pedidoId, rotaId) {
     await updateCarga(pedidoId, { status: "entregue" });
     await syncRouteStatus(rotaId);
     renderAll();
+    if (App.page === "mapa") renderLogisticsMap(App.mapFilters);
     document.getElementById("modalBody").innerHTML = buildRotaPedidosHtml(rotaId);
     toast("Pedido marcado como entregue.");
   } catch (e) {
+    console.error(e);
     toast("Erro ao marcar entrega.");
   }
 }
@@ -1330,15 +1644,29 @@ async function marcarPedidoPendente(pedidoId, rotaId) {
     const rota = getRotas().find((r) => r.id === rotaId);
     const pedido = getCargas().find((c) => c.id === pedidoId);
     if (!rota || !pedido) return;
+
+    // Remove o pedido da rota e volta para "aguardando rota"
     const novasCargasIds = (rota.cargasIds || []).filter((id) => id !== pedidoId);
     const novoFrete = Number(Math.max(0, Number(rota.freteTotal || 0) - Number(pedido.valorFrete || 0)).toFixed(2));
-    await updateRota(rotaId, { cargasIds: novasCargasIds, freteTotal: novoFrete });
-    await updateCarga(pedidoId, { status: "próximo dia" });
-    await syncRouteStatus(rotaId);
+
+    await updateCarga(pedidoId, { status: "aguardando rota" });
+
+    if (novasCargasIds.length === 0) {
+      // Etapa 4: sem pedidos restantes → cancela rota e libera motorista
+      await updateRota(rotaId, { cargasIds: [], freteTotal: 0, status: "cancelada" });
+      await syncDriverStatus(rota.motoristaId);
+      toast("Pedido removido. Rota cancelada (sem pedidos restantes).");
+    } else {
+      // Ainda há pedidos: mantém rota ativa
+      await updateRota(rotaId, { cargasIds: novasCargasIds, freteTotal: novoFrete });
+      toast("Pedido adiado e removido da rota.");
+    }
+
     renderAll();
+    if (App.page === "mapa") renderLogisticsMap(App.mapFilters);
     document.getElementById("modalBody").innerHTML = buildRotaPedidosHtml(rotaId);
-    toast("Pedido adiado e removido da rota.");
   } catch (e) {
+    console.error(e);
     toast("Erro ao adiar pedido.");
   }
 }
@@ -1348,24 +1676,33 @@ async function marcarPedidoPendente(pedidoId, rotaId) {
 async function syncRouteStatus(routeId) {
   const route = getRotas().find((item) => item.id === routeId);
   if (!route) return;
+
   const pedidos = getCargas().filter((carga) => (route.cargasIds || []).includes(carga.id));
+
   if (!pedidos.length) {
-    await updateRota(routeId, { status: "planejada" });
+    // Sem pedidos restantes: cancela rota e libera motorista
+    await updateRota(routeId, { status: "cancelada" });
     await syncDriverStatus(route.motoristaId);
     return;
   }
+
   if (pedidos.every((pedido) => pedido.status === "entregue")) {
+    // Todos entregues: conclui rota e libera motorista
     await updateRota(routeId, { status: "concluída" });
     await syncDriverStatus(route.motoristaId);
     return;
   }
+
   if (pedidos.some((pedido) => pedido.status === "em rota")) {
+    // Ainda há pedidos em trânsito
     await updateRota(routeId, { status: "em andamento" });
-    await updateMotorista(route.motoristaId, { status: "em entrega" });
+    if (route.motoristaId) await updateMotorista(route.motoristaId, { status: "em entrega" });
     return;
   }
+
+  // Pedidos existem mas nenhum "em rota" (ex: todos aguardando) → planejada
   await updateRota(routeId, { status: "planejada" });
-  await updateMotorista(route.motoristaId, { status: "em entrega" });
+  if (route.motoristaId) await updateMotorista(route.motoristaId, { status: "em entrega" });
 }
 
 async function syncDriverStatus(driverId) {
