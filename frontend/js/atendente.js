@@ -185,23 +185,26 @@ function atualizarResumo(hoje) {
   const emRota     = hoje.filter(p => p.status === "em rota").length;
   document.getElementById("resumoCards").innerHTML = `
     <div class="atend-resumo-card">
+      <div class="atend-resumo-icon">${Icons.package(22)}</div>
       <strong>${total}</strong><span>Pedidos hoje</span>
     </div>
     <div class="atend-resumo-card yellow">
+      <div class="atend-resumo-icon">${Icons.clock(22)}</div>
       <strong>${aguardando}</strong><span>Aguardando rota</span>
     </div>
     <div class="atend-resumo-card blue">
+      <div class="atend-resumo-icon">${Icons.truck(22)}</div>
       <strong>${emRota}</strong><span>Em rota</span>
     </div>
   `;
 }
 
 const STATUS_MAP = {
-  "aguardando rota": { cls: "yellow", label: "⏳ Aguardando rota" },
-  "em rota":         { cls: "blue",   label: "🚚 Em rota" },
-  "entregue":        { cls: "green",  label: "✅ Entregue" },
-  "próximo dia":     { cls: "orange", label: "📅 Próximo dia" },
-  "cancelado":       { cls: "red",    label: "❌ Cancelado" }
+  "aguardando rota": { cls: "yellow", label: "Aguardando rota" },
+  "em rota":         { cls: "blue",   label: "Em rota" },
+  "entregue":        { cls: "green",  label: "Entregue" },
+  "próximo dia":     { cls: "orange", label: "Próximo dia" },
+  "cancelado":       { cls: "red",    label: "Cancelado" }
 };
 
 function renderLista(pedidos) {
@@ -305,20 +308,20 @@ async function salvarPedido() {
     lng:              formState.lng    || null
   };
 
-  btn.disabled    = true;
-  btn.textContent = "Salvando…";
+  btn.disabled   = true;
+  btn.innerHTML  = "Salvando…";
 
   try {
     await apiPost(`${API_BASE}/api/pedidos`, payload);
-    toast("Pedido cadastrado com sucesso! ✅");
+    toast("Pedido cadastrado com sucesso!");
     limparFormulario();
     fecharFormulario();
     await carregarPedidos();
   } catch (e) {
     toast(`Erro ao salvar: ${e.message}`);
   } finally {
-    btn.disabled    = false;
-    btn.textContent = "💾 Salvar Pedido";
+    btn.disabled  = false;
+    btn.innerHTML = `${Icons.checkCircle(16)} Salvar Pedido`;
   }
 }
 
@@ -529,7 +532,7 @@ function _getStateCodeAtend(stateName) {
 function aplicarTema(tema) {
   document.documentElement.setAttribute("data-theme", tema);
   const btn = document.getElementById("themeToggle");
-  if (btn) btn.textContent = tema === "dark" ? "☀️" : "🌙";
+  if (btn) btn.innerHTML = tema === "dark" ? Icons.sun(16) : Icons.moon(16);
 }
 
 function alternarTema() {

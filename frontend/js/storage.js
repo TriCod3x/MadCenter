@@ -5,8 +5,6 @@ let DB = {
   settings: {}
 };
 
-const API_BASE = window.location.port === "3000" ? "" : "http://localhost:3000";
-
 async function apiGet(url) {
   const response = await fetch(url);
   const json = await response.json();

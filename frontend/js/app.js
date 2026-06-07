@@ -10,8 +10,11 @@ const pageNames = {
   motoristas: "Motoristas",
   rotas: "Rotas",
   mapa: "Mapa de Entregas",
-  configuracoes: "Configurações"
+  configuracoes: "Configurações",
+  usuarios: "Usuários"
 };
+
+const API_BASE = window.location.port === "3000" ? "" : "http://localhost:3000";
 
 const statusColors = {
   "aguardando rota": "yellow",
@@ -99,6 +102,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
+function bindUsuariosEvents() {
+  document.getElementById("newUserBtn")?.addEventListener("click", () => openUserForm());
+  document.getElementById("usuariosSearch")?.addEventListener("input", renderUsuarios);
+}
+
 function bindLayoutEvents() {
   document.querySelectorAll(".nav-link").forEach((button) => {
     button.addEventListener("click", () => {
@@ -147,6 +155,7 @@ function bindLayoutEvents() {
   document.getElementById("motoristasSearch").addEventListener("input", renderTables);
   document.getElementById("rotasSearch").addEventListener("input", renderTables);
   document.getElementById("generateRoutesBtn").addEventListener("click", generateRoutesByMunicipality);
+  bindUsuariosEvents();
   bindChartEvents();
   document.getElementById("mapReloadRoutes").addEventListener("click", renderMapPanel);
   document.getElementById("mapFitRoutes").addEventListener("click", fitAllMapRoutes);
@@ -172,8 +181,23 @@ function showPage(page) {
   document.querySelectorAll(".page").forEach((section) => section.classList.toggle("active", section.id === `page-${page}`));
   document.querySelectorAll(".nav-link").forEach((button) => button.classList.toggle("active", button.dataset.page === page));
   document.getElementById("pageTitle").textContent = pageNames[page] || "";
+  updateFab(page);
   if (page === "mapa") renderMapPanel();
-  renderAll();
+  if (page === "usuarios") renderUsuarios();
+  else renderAll();
+}
+
+function updateFab(page) {
+  const fab = document.getElementById("fabNewBtn");
+  if (!fab) return;
+  const entityMap = { pedidos: "cargas", motoristas: "motoristas", rotas: "rotas" };
+  const entity = entityMap[page];
+  if (entity) {
+    fab.style.display = "";
+    fab.onclick = () => openForm(entity);
+  } else {
+    fab.style.display = "none";
+  }
 }
 
 function renderAll() {
@@ -196,14 +220,14 @@ function renderDashboard() {
   const activeRoutes = rotas.filter((r) => r.status === "em andamento").length;
 
   const metrics = [
-    ["Pedidos cadastrados",    cargas.length,        "📦", "mc-neutral"],
-    ["Aguardando rota",        pending,              "⏳", "mc-yellow"],
-    ["Em rota",                progress,             "🚚", "mc-blue"],
-    ["Próximo dia",            nextDay,              "📅", "mc-orange"],
-    ["Entregues",              completed,            "✅", "mc-green"],
-    ["Motoristas disponíveis", availableDrivers,     "👷", "mc-teal"],
-    ["Rotas planejadas",       plannedRoutes,        "🗺️", "mc-yellow"],
-    ["Rotas em andamento",     activeRoutes,         "🛣️", "mc-blue"]
+    ["Pedidos cadastrados",    cargas.length,        Icons.package(20),    "mc-neutral"],
+    ["Aguardando rota",        pending,              Icons.clock(20),      "mc-yellow"],
+    ["Em rota",                progress,             Icons.truck(20),      "mc-blue"],
+    ["Próximo dia",            nextDay,              Icons.calendar(20),   "mc-orange"],
+    ["Entregues",              completed,            Icons.checkCircle(20),"mc-green"],
+    ["Motoristas disponíveis", availableDrivers,     Icons.users(20),      "mc-teal"],
+    ["Rotas planejadas",       plannedRoutes,        Icons.map(20),        "mc-yellow"],
+    ["Rotas em andamento",     activeRoutes,         Icons.route(20),      "mc-blue"]
   ];
 
   document.getElementById("dashboardMetrics").innerHTML = metrics.map(([label, value, icon, cls]) => `
@@ -536,9 +560,9 @@ function renderMotoristasTable() {
     `${m.cidade}/${m.estado}`,
     `<select class="table-status-select" onchange="changeMotoristaStatus('${m.id}', this.value)">${["disponível", "em entrega", "inativo"].map((s) => `<option value="${s}" ${m.status === s ? "selected" : ""}>${s}</option>`).join("")}</select>`,
     `<div class="actions-cell">
-      <button class="table-action" onclick="openForm('motoristas','${m.id}')">Editar</button>
-      <button class="table-action" onclick="confirmDelete('motoristas','${m.id}')">Excluir</button>
-      <button class="table-action" onclick="copiarLinkMotorista()" title="Copiar link da área do motorista">📱 Link</button>
+      <button class="table-action" onclick="openForm('motoristas','${m.id}')">${Icons.edit(14)} Editar</button>
+      <button class="table-action" onclick="confirmDelete('motoristas','${m.id}')">${Icons.trash(14)}</button>
+      <button class="table-action" onclick="copiarLinkMotorista()" title="Copiar link da área do motorista">${Icons.link(14)} Link</button>
     </div>`
   ]));
 }
@@ -626,7 +650,7 @@ function renderRotasTable() {
       r.nome,
       `${r.destinoMunicipio}/${r.destinoEstado}`,
       buildRotaMotoristaSelect(r.id, r.motoristaId),
-      `<button class="table-action table-action-pedidos" onclick="openRotaPedidos('${r.id}')" title="Ver pedidos desta rota">${total} pedido${total !== 1 ? "s" : ""}</button>`,
+      `<button class="table-action table-action-pedidos" onclick="openRotaPedidos('${r.id}')" title="Ver pedidos desta rota">${Icons.package(12)} ${total} pedido${total !== 1 ? "s" : ""}</button>`,
       `${Number(r.distancia || 0).toFixed(1)} km`,
       money.format(Number(r.freteTotal || 0)),
       badge(r.status),
@@ -638,9 +662,9 @@ function renderRotasTable() {
 function actionsRota(id) {
   return `
     <div class="actions-cell">
-      <button class="table-action" onclick="openRotaPedidos('${id}')">Ver pedidos</button>
-      <button class="table-action" onclick="openForm('rotas','${id}')">Editar</button>
-      <button class="table-action" onclick="confirmDelete('rotas','${id}')">Excluir</button>
+      <button class="table-action" onclick="openRotaPedidos('${id}')">${Icons.eye(14)} Ver pedidos</button>
+      <button class="table-action" onclick="openForm('rotas','${id}')">${Icons.edit(14)} Editar</button>
+      <button class="table-action" onclick="confirmDelete('rotas','${id}')">${Icons.trash(14)}</button>
     </div>
   `;
 }
@@ -650,15 +674,15 @@ function table(id, headers, rows) {
   if (!element) return;
   element.innerHTML = `
     <thead><tr>${headers.map((label) => `<th>${label}</th>`).join("")}</tr></thead>
-    <tbody>${rows.length ? rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${headers.length}">Nenhum registro encontrado.</td></tr>`}</tbody>
+    <tbody>${rows.length ? rows.map((row) => `<tr>${row.map((cell, i) => `<td data-label="${headers[i] || ""}">${cell}</td>`).join("")}</tr>`).join("") : `<tr><td class="empty-table-cell" colspan="${headers.length}">Nenhum registro encontrado.</td></tr>`}</tbody>
   `;
 }
 
 function actions(entity, id) {
   return `
     <div class="actions-cell">
-      <button class="table-action" onclick="openForm('${entity}','${id}')">Editar</button>
-      <button class="table-action" onclick="confirmDelete('${entity}','${id}')">Excluir</button>
+      <button class="table-action" onclick="openForm('${entity}','${id}')">${Icons.edit(14)} Editar</button>
+      <button class="table-action" onclick="confirmDelete('${entity}','${id}')">${Icons.trash(14)}</button>
     </div>
   `;
 }
@@ -667,17 +691,24 @@ function actionsPedido(id) {
   const pedido = getCargas().find((item) => item.id === id) || {};
   return `
     <div class="actions-cell">
-      <button class="table-action" onclick="openForm('cargas','${id}')">Editar</button>
-      ${pedido.status === 'em rota' ? `<button class="table-action" onclick="markAsDelivered('${id}')">Entrega feita</button>` : ''}
-      <button class="table-action" onclick="confirmDelete('cargas','${id}')">Excluir</button>
+      <button class="table-action" onclick="openForm('cargas','${id}')">${Icons.edit(14)} Editar</button>
+      ${pedido.status === 'em rota' ? `<button class="table-action" onclick="markAsDelivered('${id}')">${Icons.checkCircle(14)} Entrega feita</button>` : ''}
+      <button class="table-action" onclick="confirmDelete('cargas','${id}')">${Icons.trash(14)}</button>
     </div>
   `;
+}
+
+function _entityIcon(entity, size = 18) {
+  if (entity === "cargas") return Icons.package(size);
+  if (entity === "motoristas") return Icons.user(size);
+  if (entity === "rotas") return Icons.route(size);
+  return "";
 }
 
 function openForm(entity, id = null) {
   App.modal = { entity, mode: id ? "edit" : "new", id };
   const item = id ? getCollection(entity).find((record) => record.id === id) : defaultItem(entity);
-  document.getElementById("modalTitle").textContent = `${id ? "Editar" : "Cadastrar"} ${singular(entity)}`;
+  document.getElementById("modalTitle").innerHTML = `${_entityIcon(entity, 18)} ${id ? "Editar" : "Cadastrar"} ${singular(entity)}`;
   document.getElementById("modalBody").innerHTML = `
     <form id="entityForm" class="form-grid">
       ${fields[entity].map((field) => fieldHtml(field, item)).join("")}
@@ -791,7 +822,7 @@ function fieldHtml(field, item) {
         <div class="cep-wrap">
           <div class="cep-input-row">
             <input type="text" name="${name}" value="${value || ""}" placeholder="00000-000" maxlength="9" autocomplete="postal-code" oninput="applyCepMask(this)" onblur="lookupCep(this)" ${requiredAttr}>
-            <button type="button" class="btn-map-picker" onclick="openMapPicker()">📍 Selecionar no mapa</button>
+            <button type="button" class="btn-map-picker" onclick="openMapPicker()">${Icons.mapPin(16)} Selecionar no mapa</button>
           </div>
           <span class="cep-msg" id="cepMsg"></span>
         </div>
@@ -801,10 +832,10 @@ function fieldHtml(field, item) {
         <div class="frete-wrap">
           <div class="frete-input-row">
             <input type="number" id="freteManual" name="valorFrete" value="${freteAtual}" placeholder="0.00" min="0" step="0.01">
-            <button type="button" class="btn-frete-calc" onclick="toggleFreteCalc()">⛽ Calcular combustível</button>
+            <button type="button" class="btn-frete-calc" onclick="toggleFreteCalc()">${Icons.zap(14)} Calcular combustível</button>
           </div>
           <div id="freteCalcPanel" class="frete-calc-panel" style="display:none">
-            <div class="frete-calc-header">⛽ Calculadora de combustível</div>
+            <div class="frete-calc-header">${Icons.zap(14)} Calculadora de combustível</div>
             <div class="frete-calc-body">
               <div class="frete-calc-fields">
                 <label class="frete-calc-label">Distância (km)<input type="number" id="calcDistancia" placeholder="150" min="0" step="0.1" oninput="calcularFreteLive()"></label>
@@ -1073,7 +1104,7 @@ async function geocodeEndereco(viaCepData, form) {
         _mapPicker.setView([lat, lng], 14);
         _mapPickerCoords = { lat, lng };
         document.getElementById("mapPickerInfo").textContent =
-          `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} — Ponto atualizado pelo CEP`;
+          `${lat.toFixed(5)}, ${lng.toFixed(5)} — Ponto atualizado pelo CEP`;
       }
     }
   } catch (e) {
@@ -1174,7 +1205,7 @@ function openMapPicker() {
     if (hasCoords) {
       _mapPickerCoords = { lat: initLat, lng: initLng };
       _mapPickerMarker = L.marker([initLat, initLng], { icon: pinIcon }).addTo(_mapPicker);
-      document.getElementById("mapPickerInfo").textContent = "📍 Ponto atual marcado · Clique para mover";
+      document.getElementById("mapPickerInfo").textContent = "Ponto atual marcado · Clique para mover";
     }
 
     _mapPicker.on("click", (e) => {
@@ -1186,7 +1217,7 @@ function openMapPicker() {
         _mapPickerMarker = L.marker(e.latlng, { icon: pinIcon }).addTo(_mapPicker);
       }
       document.getElementById("mapPickerInfo").textContent =
-        `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} — Clique em "Confirmar localização"`;
+        `${lat.toFixed(5)}, ${lng.toFixed(5)} — Clique em "Confirmar localização"`;
     });
   }, 80);
 }
@@ -1601,22 +1632,22 @@ function buildRotaPedidosHtml(rotaId) {
             ${badge(c.status)}
           </div>
           <div class="pedido-detail-row">
-            <span>👤 <strong>${c.cliente}</strong></span>
-            ${c.telefone ? `<span>📞 ${c.telefone}</span>` : ""}
+            <span>${Icons.user(14)} <strong>${c.cliente}</strong></span>
+            ${c.telefone ? `<span>${Icons.phone(14)} ${c.telefone}</span>` : ""}
           </div>
           <div class="pedido-detail-row">
-            <span>📍 ${local || "Endereço não informado"}</span>
+            <span>${Icons.mapPin(14)} ${local || "Endereço não informado"}</span>
           </div>
           <div class="pedido-detail-row">
-            <span>📦 ${c.tipo} · ${c.peso} kg${c.volume ? " · " + c.volume : ""}</span>
-            <span>💰 ${money.format(Number(c.valorFrete || 0))}</span>
-            <span>⚡ Prioridade: ${c.prioridade || "normal"}</span>
+            <span>${Icons.package(14)} ${c.tipo} · ${c.peso} kg${c.volume ? " · " + c.volume : ""}</span>
+            <span>${Icons.tag(14)} ${money.format(Number(c.valorFrete || 0))}</span>
+            <span>Prioridade: ${c.prioridade || "normal"}</span>
           </div>
-          ${c.observacoes ? `<div class="pedido-detail-obs">📝 ${c.observacoes}</div>` : ""}
+          ${c.observacoes ? `<div class="pedido-detail-obs">${Icons.file(14)} ${c.observacoes}</div>` : ""}
         </div>
         <div class="pedido-detail-actions">
-          ${!entregue ? `<button class="primary-button" onclick="markPedidoEntregue('${c.id}','${rotaId}')">✓ Entregue</button>` : ""}
-          ${!entregue && !pendente ? `<button class="secondary-button" onclick="marcarPedidoPendente('${c.id}','${rotaId}')">↩ Pendente para outro dia</button>` : ""}
+          ${!entregue ? `<button class="primary-button" onclick="markPedidoEntregue('${c.id}','${rotaId}')">${Icons.checkCircle(14)} Entregue</button>` : ""}
+          ${!entregue && !pendente ? `<button class="secondary-button" onclick="marcarPedidoPendente('${c.id}','${rotaId}')">${Icons.calendar(14)} Pendente para outro dia</button>` : ""}
         </div>
       </div>
     `;
@@ -1820,5 +1851,184 @@ function renderMapPanel() {
 
 function applyTheme(theme) {
   document.body.dataset.theme = theme;
-  document.getElementById("themeToggle").textContent = `Tema: ${theme === "dark" ? "Escuro" : "Claro"}`;
+  const btn = document.getElementById("themeToggle");
+  if (btn) {
+    btn.innerHTML = theme === "dark" ? Icons.sun(16) : Icons.moon(16);
+    btn.title = theme === "dark" ? "Mudar para tema claro" : "Mudar para tema escuro";
+  }
+}
+
+// ── Usuários ──────────────────────────────────────────────────────────────────
+
+let _usuarios = [];
+
+async function fetchUsuarios() {
+  const res = await fetch(`${API_BASE}/api/usuarios`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  _usuarios = await res.json();
+  return _usuarios;
+}
+
+async function renderUsuarios() {
+  const tbl = document.getElementById("usuariosTable");
+  if (!tbl) return;
+
+  try {
+    await fetchUsuarios();
+  } catch (e) {
+    tbl.innerHTML = `<tbody><tr><td colspan="4" class="empty-table-cell">Erro ao carregar usuários. Verifique a conexão.</td></tr></tbody>`;
+    return;
+  }
+
+  const search = (document.getElementById("usuariosSearch")?.value || "").toLowerCase();
+  const filtered = _usuarios.filter((u) =>
+    `${u.nome} ${u.perfil}`.toLowerCase().includes(search)
+  );
+
+  const perfilBadge = {
+    admin:     "purple",
+    atendente: "blue",
+    motorista: "green"
+  };
+
+  const headers = ["Nome", "Perfil", "Status", "Ações"];
+  const rows = filtered.map((u) => {
+    const pb = perfilBadge[u.perfil] || "gray";
+    const atvBadge = u.ativo !== false
+      ? `<span class="badge badge-green">ativo</span>`
+      : `<span class="badge badge-gray">inativo</span>`;
+    const toggleLabel = u.ativo !== false ? "Desativar" : "Reativar";
+    const toggleIcon = u.ativo !== false ? Icons.eye(14) : Icons.checkCircle(14);
+
+    return [
+      u.nome,
+      `<span class="badge badge-${pb}">${u.perfil}</span>`,
+      atvBadge,
+      `<div class="actions-cell">
+        <button class="table-action" onclick="openUserForm('${u.id}')">${Icons.edit(14)} Editar</button>
+        <button class="table-action" onclick="toggleUsuario('${u.id}')">${toggleIcon} ${toggleLabel}</button>
+      </div>`
+    ];
+  });
+
+  table("usuariosTable", headers, rows);
+}
+
+function openUserForm(id = null) {
+  const user = id ? _usuarios.find((u) => u.id === id) : null;
+  const isEdit = Boolean(user);
+
+  document.getElementById("modalTitle").innerHTML =
+    `${Icons.users(18)} ${isEdit ? "Editar" : "Novo"} Usuário`;
+
+  document.getElementById("modalBody").innerHTML = `
+    <form id="userForm" class="form-grid">
+      <label class="form-field">
+        <span>Nome *</span>
+        <input type="text" name="nome" value="${user?.nome || ""}" required autocomplete="name">
+      </label>
+      <label class="form-field">
+        <span>Perfil *</span>
+        <select name="perfil" required>
+          <option value="atendente" ${user?.perfil === "atendente" ? "selected" : ""}>Atendente</option>
+          <option value="motorista" ${user?.perfil === "motorista" ? "selected" : ""}>Motorista</option>
+        </select>
+      </label>
+      <label class="form-field">
+        <span>${isEdit ? "Nova senha (deixe vazio para manter)" : "Senha *"}</span>
+        <input type="password" name="senha" ${isEdit ? "" : "required"} autocomplete="new-password"
+               placeholder="${isEdit ? "Deixe vazio para não alterar" : "Mínimo 6 caracteres"}">
+      </label>
+      <label class="form-field">
+        <span>${isEdit ? "Confirmar nova senha" : "Confirmar senha *"}</span>
+        <input type="password" name="confirmarSenha" autocomplete="new-password"
+               placeholder="Repita a senha">
+      </label>
+      <input type="hidden" name="userId" value="${user?.id || ""}">
+      <div class="modal-actions form-field full">
+        <button class="secondary-button" type="button" onclick="closeModal()">Cancelar</button>
+        <button class="primary-button" type="submit">${Icons.checkCircle(16)} Salvar</button>
+      </div>
+    </form>
+  `;
+
+  document.getElementById("userForm").addEventListener("submit", submitUserForm);
+  openModal();
+}
+
+async function submitUserForm(event) {
+  event.preventDefault();
+  const form = event.target;
+  const data = Object.fromEntries(new FormData(form).entries());
+
+  if (!data.nome?.trim()) { toast("Preencha o nome."); return; }
+  if (!data.perfil)        { toast("Selecione o perfil."); return; }
+
+  const isEdit = Boolean(data.userId);
+
+  if (!isEdit && !data.senha) {
+    toast("A senha é obrigatória para novos usuários.");
+    return;
+  }
+
+  if (data.senha && data.senha !== data.confirmarSenha) {
+    toast("As senhas não coincidem.");
+    return;
+  }
+
+  if (data.senha && data.senha.length < 6) {
+    toast("A senha deve ter pelo menos 6 caracteres.");
+    return;
+  }
+
+  const payload = { nome: data.nome.trim(), perfil: data.perfil };
+  if (data.senha) payload.senha = data.senha;
+
+  const submitBtn = form.querySelector("[type='submit']");
+  submitBtn.disabled = true;
+
+  try {
+    let res;
+    if (isEdit) {
+      res = await fetch(`${API_BASE}/api/usuarios/${data.userId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    } else {
+      res = await fetch(`${API_BASE}/api/usuarios`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    }
+
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
+
+    closeModal();
+    toast(`Usuário ${isEdit ? "atualizado" : "criado"} com sucesso.`);
+    await renderUsuarios();
+  } catch (e) {
+    console.error(e);
+    toast(`Erro ao salvar usuário: ${e.message}`);
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+async function toggleUsuario(id) {
+  try {
+    const res = await fetch(`${API_BASE}/api/usuarios/${id}/toggle`, { method: "PATCH" });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const updated = await res.json();
+    toast(`Usuário ${updated.ativo ? "reativado" : "desativado"}.`);
+    await renderUsuarios();
+  } catch (e) {
+    console.error(e);
+    toast(`Erro ao alterar status: ${e.message}`);
+  }
 }

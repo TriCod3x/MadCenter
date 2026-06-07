@@ -1,10 +1,11 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Madcenter Entregas</title>
-  <link rel="icon" href="data:,">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="shortcut icon" href="assets/favicon.svg">
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <link rel="stylesheet" href="css/style.css">
@@ -22,47 +23,61 @@
       </div>
       <nav class="nav-menu" id="navMenu">
         <button class="nav-link active" data-page="dashboard">
-          <span class="nav-icon">▣</span>
+          <span class="nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
           <span class="nav-text">Dashboard</span>
         </button>
         <button class="nav-link" data-page="pedidos">
-          <span class="nav-icon">📦</span>
+          <span class="nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16v-2"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg></span>
           <span class="nav-text">Pedidos</span>
         </button>
         <button class="nav-link" data-page="motoristas">
-          <span class="nav-icon">👷</span>
+          <span class="nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
           <span class="nav-text">Motoristas</span>
         </button>
         <button class="nav-link" data-page="rotas">
-          <span class="nav-icon">🛣️</span>
+          <span class="nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg></span>
           <span class="nav-text">Rotas</span>
         </button>
         <button class="nav-link" data-page="mapa">
-          <span class="nav-icon">🗺️</span>
+          <span class="nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg></span>
           <span class="nav-text">Mapa de Entregas</span>
         </button>
         <button class="nav-link" data-page="configuracoes">
-          <span class="nav-icon">⚙️</span>
+          <span class="nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
           <span class="nav-text">Configurações</span>
+        </button>
+        <button class="nav-link" data-page="usuarios">
+          <span class="nav-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+          <span class="nav-text">Usuários</span>
         </button>
       </nav>
     </aside>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
     <div class="main-area">
       <header class="topbar">
-        <button class="icon-button mobile-only" id="menuToggle" aria-label="Abrir menu">☰</button>
+        <button class="icon-button mobile-only" id="menuToggle" aria-label="Abrir menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
         <div>
           <h1 id="pageTitle">Dashboard</h1>
           <span class="topbar-subtitle">Madcenter Entregas · Gestão operacional simplificada</span>
         </div>
         <div class="topbar-actions">
           <input id="quickSearch" class="quick-search" type="search" placeholder="Buscar pedido, motorista, rota ou cidade...">
-          <button class="theme-toggle" id="themeToggle" type="button">Tema</button>
-          <a href="atendente.html" target="_blank" class="theme-toggle quick-access-btn" title="Abrir tela do atendente">👩‍💼 Atendente</a>
-          <a href="motorista.html" target="_blank" class="theme-toggle quick-access-btn" title="Abrir tela do motorista">📱 Motorista</a>
+          <button class="theme-toggle" id="themeToggle" type="button" title="Alterar tema">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+          <a href="atendente.html" target="_blank" class="theme-toggle quick-access-btn" title="Abrir tela do atendente">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span class="btn-label">Atendente</span>
+          </a>
+          <a href="motorista.html" target="_blank" class="theme-toggle quick-access-btn" title="Abrir tela do motorista">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+            <span class="btn-label">Motorista</span>
+          </a>
           <div class="admin-pill">
             <span class="admin-dot"></span>
-            Admin Madcenter
+            <span class="admin-pill-text">Admin Madcenter</span>
           </div>
           <button class="theme-toggle" id="logoutBtn" type="button">Sair</button>
         </div>
@@ -87,7 +102,10 @@
                   <button class="chart-period-btn active" data-period="semana">Esta semana</button>
                   <button class="chart-period-btn" data-period="mes">Este mês</button>
                 </div>
-                <button class="chart-export-btn" id="exportRelatorio">📥 Baixar Relatório</button>
+                <button class="chart-export-btn" id="exportRelatorio">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Baixar Relatório
+                </button>
               </div>
             </div>
             <div class="chart-container">
@@ -139,7 +157,10 @@
           </div>
           <div class="page-toolbar">
             <input class="filter-input" id="rotasSearch" type="search" placeholder="Buscar rota">
-            <button class="secondary-button" id="generateRoutesBtn" type="button">Gerar rotas por município</button>
+            <button class="secondary-button" id="generateRoutesBtn" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>
+              Gerar rotas por município
+            </button>
           </div>
           <div class="table-card"><div class="table-wrap"><table id="rotasTable"></table></div></div>
         </section>
@@ -183,9 +204,29 @@
             </div>
           </div>
         </section>
+        <section class="page" id="page-usuarios">
+          <div class="section-intro">
+            <h2>Usuários</h2>
+            <p>Gerencie os acessos ao sistema — atendentes e motoristas.</p>
+          </div>
+          <div class="page-toolbar">
+            <input class="filter-input" id="usuariosSearch" type="search" placeholder="Buscar usuário">
+            <button class="primary-button" id="newUserBtn" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Novo usuário
+            </button>
+          </div>
+          <div class="table-card"><div class="table-wrap"><table id="usuariosTable"></table></div></div>
+        </section>
       </main>
     </div>
+
+    <!-- FAB — botão flutuante para criar novo registro no mobile -->
+    <button class="fab-btn" id="fabNewBtn" aria-label="Novo registro" style="display:none">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
   </div>
+
   <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true">
       <div class="modal-header">
@@ -210,7 +251,10 @@
         <div class="map-picker-actions">
           <span id="mapPickerInfo" class="map-picker-info">Nenhum ponto selecionado</span>
           <button class="secondary-button" type="button" id="mapPickerCancel">Cancelar</button>
-          <button class="primary-button" type="button" id="mapPickerConfirm">✓ Confirmar localização</button>
+          <button class="primary-button" type="button" id="mapPickerConfirm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Confirmar localização
+          </button>
         </div>
       </div>
     </div>
@@ -218,6 +262,7 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="js/icons.js"></script>
   <script src="js/data.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/map.js"></script>

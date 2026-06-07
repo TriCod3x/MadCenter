@@ -106,16 +106,16 @@ function toast(msg, tipo = "ok") {
 async function carregarMotoristas() {
   const select = document.getElementById("motoristaSelect");
   try {
-    const lista = await apiGet(`${API_BASE}/api/motoristas`);
-    if (!lista.length) {
+    const lista = await apiGet(`${API_BASE}/api/usuarios?perfil=motorista`);
+    const ativos = lista.filter(u => u.ativo !== false);
+    if (!ativos.length) {
       select.innerHTML = `<option value="">Nenhum motorista cadastrado</option>`;
       return;
     }
-    // Ordena alfabeticamente
-    lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    ativos.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
     select.innerHTML =
       `<option value="">— Selecione seu nome —</option>` +
-      lista.map(m =>
+      ativos.map(m =>
         `<option value="${m.id}" data-nome="${m.nome}">${m.nome}</option>`
       ).join("");
   } catch (e) {
@@ -247,18 +247,18 @@ function renderPedidos() {
     ].join(" ").trim();
 
     const statusBadge = isEntregue
-      ? `<span class="moto-badge moto-badge-green">✓ Entregue</span>`
-      : `<span class="moto-badge moto-badge-orange">🚚 Em rota</span>`;
+      ? `<span class="moto-badge moto-badge-green">Entregue</span>`
+      : `<span class="moto-badge moto-badge-blue">Em rota</span>`;
 
     const botoes = !isEntregue ? `
       <div class="moto-card-actions">
         <button class="moto-btn moto-btn-entregue"
           onclick="marcarEntregue('${p.id}','${rota?.id || ""}')">
-          ✅ Entregue
+          ${Icons.checkCircle(16)} Entregue
         </button>
         <button class="moto-btn moto-btn-adiar"
           onclick="deixarParaDepois('${p.id}','${rota?.id || ""}')">
-          📅 Deixar para depois
+          ${Icons.calendar(16)} Deixar para depois
         </button>
       </div>
     ` : "";
@@ -289,8 +289,8 @@ function renderPedidos() {
           </div>
           <div class="moto-card-row">
             <div class="moto-card-chips">
-              <span>⚖️ ${p.peso || 0} kg</span>
-              <span>💰 ${moneyFmt.format(Number(p.valor_frete || 0))}</span>
+              <span>${Icons.weight(14)} ${p.peso || 0} kg</span>
+              <span>${Icons.money(14)} ${moneyFmt.format(Number(p.valor_frete || 0))}</span>
             </div>
           </div>
         </div>
@@ -353,9 +353,9 @@ async function marcarEntregue(pedidoId, rotaId) {
           rota.status = "concluída";
           // Remove rota das ativas
           state.rotas = state.rotas.filter(r => r.id !== rotaId);
-          toast("🎉 Todas as entregas concluídas! Rota finalizada.");
+          toast("Todas as entregas concluídas! Rota finalizada.");
         } else {
-          toast("✅ Pedido entregue com sucesso.");
+          toast("Pedido entregue com sucesso.");
         }
       }
     }
@@ -403,7 +403,7 @@ async function deixarParaDepois(pedidoId, rotaId) {
     // 3. Remove do estado local
     state.pedidos = state.pedidos.filter(p => p.id !== pedidoId);
 
-    toast("📅 Pedido adiado para outro dia.");
+    toast("Pedido adiado para outro dia.");
     renderPedidos();
     atualizarProgresso();
     desenharRota();
@@ -665,8 +665,8 @@ function renderMural() {
       .filter(Boolean).join("/");
     const prio     = p.prioridade || "normal";
     const prioLabel = {
-      urgente: "🔴 Urgente", alta: "🟠 Alta",
-      normal:  "🟢 Normal",  baixa: "⚪ Baixa"
+      urgente: "Urgente", alta: "Alta",
+      normal:  "Normal",  baixa: "Baixa"
     }[prio] || prio;
 
     const dataEntrega = p.entrega
@@ -708,16 +708,16 @@ function renderMural() {
             <span class="moto-mural-value">${destino || "—"}</span>
           </div>
           <div class="moto-mural-chips">
-            <span>⚖️ ${p.peso || 0} kg</span>
-            <span>💰 ${moneyMural.format(Number(p.valor_frete || 0))}</span>
-            <span>📅 ${dataEntrega}</span>
+            <span>${Icons.weight(14)} ${p.peso || 0} kg</span>
+            <span>${Icons.money(14)} ${moneyMural.format(Number(p.valor_frete || 0))}</span>
+            <span>${Icons.calendar(14)} ${dataEntrega}</span>
           </div>
         </div>
 
         <button class="moto-btn moto-btn-pegar"
                 id="btn-pegar-${p.id}"
                 onclick="pegarPedido('${p.id}')">
-          ✋ Pegar este pedido
+          ${Icons.plus(16)} Pegar este pedido
         </button>
       </div>
     `;
@@ -754,7 +754,7 @@ async function pegarPedido(pedidoId) {
 
     await _associarPedidosARota([pedido]);
 
-    toast("Pedido adicionado à sua rota! 🚚");
+    toast("Pedido adicionado à sua rota!");
 
     // Remove do mural local
     muralState.pedidos     = muralState.pedidos.filter(p => p.id !== pedidoId);
@@ -767,7 +767,7 @@ async function pegarPedido(pedidoId) {
   } catch (e) {
     console.error(e);
     toast("Erro ao pegar pedido. Tente novamente.", "erro");
-    if (btn) { btn.disabled = false; btn.textContent = "✋ Pegar este pedido"; }
+    if (btn) { btn.disabled = false; btn.innerHTML = `${Icons.plus(16)} Pegar este pedido`; }
   }
 }
 
@@ -782,7 +782,7 @@ async function pegarPedidosSelecionados() {
   try {
     await _associarPedidosARota(pedidos);
 
-    toast(`${pedidos.length} pedidos adicionados à sua rota! 🚚`);
+    toast(`${pedidos.length} pedidos adicionados à sua rota!`);
 
     muralState.pedidos     = muralState.pedidos.filter(p => !ids.includes(p.id));
     muralState.selecionados.clear();
@@ -866,7 +866,7 @@ function abrirNoMaps() {
 function aplicarTema(tema) {
   document.documentElement.setAttribute("data-theme", tema);
   const btn = document.getElementById("themeToggle");
-  if (btn) btn.textContent = tema === "dark" ? "☀️" : "🌙";
+  if (btn) btn.innerHTML = tema === "dark" ? Icons.sun(16) : Icons.moon(16);
 }
 
 function alternarTema() {

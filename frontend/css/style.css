@@ -2059,3 +2059,193 @@ tr:hover td {
   font-size: 13px;
   cursor: default;
 }
+
+/* ======================================
+   SCROLLBAR CUSTOMIZADA
+====================================== */
+
+.sidebar::-webkit-scrollbar,
+.map-command-side::-webkit-scrollbar,
+.modal::-webkit-scrollbar,
+.mun-suggestions::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.map-command-side::-webkit-scrollbar-track,
+.modal::-webkit-scrollbar-track,
+.mun-suggestions::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+}
+
+.map-command-side::-webkit-scrollbar-thumb,
+.modal::-webkit-scrollbar-thumb,
+.mun-suggestions::-webkit-scrollbar-thumb {
+  background: var(--primary-2);
+  border-radius: 4px;
+}
+
+/* ======================================
+   BOTÕES COM LABEL OCULTÁVEL (MOBILE)
+====================================== */
+
+.admin-pill-text { display: inline; }
+
+/* ======================================
+   FAB — BOTÃO FLUTUANTE MOBILE
+====================================== */
+
+.fab-btn {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .fab-btn {
+    display: flex;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 900;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(0, 92, 46, .40);
+    cursor: pointer;
+    transition: background .15s, transform .15s, box-shadow .15s;
+    padding: 0;
+  }
+
+  .fab-btn:hover {
+    background: var(--primary-2);
+    transform: scale(1.08);
+    box-shadow: 0 6px 24px rgba(0, 92, 46, .50);
+  }
+
+  .fab-btn:active {
+    transform: scale(0.94);
+  }
+}
+
+/* ======================================
+   TABELAS RESPONSIVAS — MOBILE CARDS
+====================================== */
+
+@media (max-width: 768px) {
+  /* Remove scroll horizontal; converte em cards */
+  .table-card .table-wrap {
+    overflow-x: visible;
+  }
+
+  .table-card table {
+    min-width: 0;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .table-card thead {
+    display: none;
+  }
+
+  .table-card tbody tr {
+    display: block;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, .06);
+  }
+
+  [data-theme="dark"] .table-card tbody tr {
+    box-shadow: 0 1px 6px rgba(0, 0, 0, .20);
+  }
+
+  /* Linha vazia (colspan) — exibe normal */
+  .table-card tbody .empty-table-cell {
+    display: block;
+    text-align: center;
+    padding: 24px;
+    color: var(--muted);
+    font-size: 14px;
+    border: none;
+  }
+
+  .table-card tbody .empty-table-cell::before {
+    display: none;
+  }
+
+  .table-card tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border: none;
+    font-size: 13px;
+    min-height: 32px;
+    gap: 10px;
+  }
+
+  .table-card tbody td:not(:last-child) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* Label da coluna via data-label */
+  .table-card tbody td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 72px;
+  }
+
+  /* Célula de ações: sem label, botões à direita */
+  .table-card tbody td[data-label="Ações"] {
+    justify-content: flex-end;
+    border-bottom: none;
+    padding-top: 10px;
+    flex-wrap: wrap;
+  }
+
+  .table-card tbody td[data-label="Ações"]::before {
+    display: none;
+  }
+
+  /* Select de status inline na tabela */
+  .table-card .table-status-select {
+    max-width: 160px;
+  }
+
+  /* Badge alinhado à direita */
+  .table-card tbody td .badge {
+    margin-left: auto;
+  }
+}
+
+/* ======================================
+   TOPBAR — OCULTAR LABELS NO MOBILE
+====================================== */
+
+@media (max-width: 768px) {
+  .btn-label { display: none; }
+  .admin-pill-text { display: none; }
+  .quick-search { display: none; }
+}
+
+@media (max-width: 480px) {
+  .topbar-actions { gap: 6px; }
+}

@@ -1,66 +1,66 @@
 /* ======================================================
    MADCENTER — ÁREA DO MOTORISTA
-   Design system · tema claro/escuro · mobile-first + desktop
+   Tokens alinhados ao style.css do admin · tema claro/escuro
 ====================================================== */
 
-/* ── DESIGN TOKENS ─────────────────────────────────── */
+/* ── DESIGN TOKENS (idênticos ao style.css) ────────── */
 
 :root {
-  --brand:       #1c6b30;
-  --brand-light: #2e9e4a;
-  --brand-lime:  #8dc63f;
-  --accent:      #2196f3;
-  --success:     #22c55e;
-  --warning:     #f59e0b;
-  --danger:      #ef4444;
-  --cyan:        #00bcd4;
+  --bg:           #f5f7f6;
+  --surface:      #ffffff;
+  --surface-soft: #eef5f1;
+  --text:         #1f2933;
+  --muted:        #6b7280;
+  --line:         #dce6df;
+  --primary:      #005c2e;
+  --primary-2:    #008c45;
+  --primary-3:    #0fa958;
+  --accent:       #f2c94c;
+  --success:      #0fa958;
+  --danger:       #d93025;
+  --warning:      #f2c94c;
+  --blue:         #1777b8;
+  --shadow:       0 16px 36px rgba(0, 92, 46, .11);
+  --radius:       8px;
 
-  /* Tema claro (padrão) */
-  --bg:          #f4f7f5;
-  --bg-elevated: #ffffff;
-  --bg-card:     #ffffff;
-  --bg-input:    #ffffff;
-  --text:        #0f1f16;
-  --text-muted:  #5b6b61;
-  --border:      #e2e8e4;
-  --shadow:      0 4px 16px rgba(15, 31, 22, 0.08);
-  --shadow-lg:   0 12px 32px rgba(15, 31, 22, 0.12);
+  /* Aliases para seletores legados */
+  --brand:        var(--primary);
+  --brand-light:  var(--primary-2);
+  --bg-card:      var(--surface);
+  --bg-elevated:  var(--surface);
+  --bg-input:     var(--surface);
+  --text-muted:   var(--muted);
+  --border:       var(--line);
+  --shadow-lg:    0 20px 45px rgba(0, 92, 46, .18);
+  --ring:         0 0 0 3px rgba(15, 169, 88, .14);
+  --radius-sm:    var(--radius);
+  --radius-xs:    var(--radius);
 
-  --ring:        0 0 0 3px rgba(28, 107, 48, 0.15);
-  --radius:      16px;
-  --radius-sm:   12px;
-  --radius-xs:   10px;
-
-  --st-yellow-bg: rgba(245, 158, 11, 0.14);
-  --st-yellow-fg: #b45309;
-  --st-blue-bg:   rgba(33, 150, 243, 0.14);
-  --st-blue-fg:   #1565c0;
-  --st-green-bg:  rgba(34, 197, 94, 0.14);
-  --st-green-fg:  #15803d;
-  --st-red-bg:    rgba(239, 68, 68, 0.14);
-  --st-red-fg:    #b91c1c;
-  --st-orange-bg: rgba(255, 152, 0, 0.14);
-  --st-orange-fg: #c2630c;
+  /* Cores de badge de status (idênticas ao admin) */
+  --st-yellow-bg: #fff4c7;  --st-yellow-fg: #775900;
+  --st-blue-bg:   #dff3ea;  --st-blue-fg:   #006336;
+  --st-green-bg:  #dcfce7;  --st-green-fg:  #12643b;
+  --st-red-bg:    #fee2e2;  --st-red-fg:    #991b1b;
+  --st-orange-bg: #ffedd5;  --st-orange-fg: #9a4b00;
 }
 
 [data-theme="dark"] {
-  --bg:          #0a1f12;
-  --bg-elevated: #0f2e1b;
-  --bg-card:     #123420;
-  --bg-input:    #0c2716;
-  --text:        #eaf3ee;
-  --text-muted:  #9bb3a5;
-  --border:      #1d4a2e;
-  --shadow:      0 4px 16px rgba(0, 0, 0, 0.3);
-  --shadow-lg:   0 12px 32px rgba(0, 0, 0, 0.45);
+  --bg:           #111816;
+  --surface:      #17211d;
+  --surface-soft: #203229;
+  --text:         #edf6f1;
+  --muted:        #a7b7ad;
+  --line:         #2e4639;
+  --primary:      #0fa958;
+  --primary-2:    #19bd68;
+  --primary-3:    #42d486;
+  --shadow:       0 18px 45px rgba(0, 0, 0, .32);
 
-  --ring:        0 0 0 3px rgba(141, 198, 63, 0.22);
-
-  --st-yellow-fg: #fcd34d;
-  --st-blue-fg:   #64b5f6;
-  --st-green-fg:  #86efac;
-  --st-red-fg:    #fca5a5;
-  --st-orange-fg: #ffb74d;
+  --st-yellow-bg: #5b4b18;  --st-yellow-fg: #ffeaa0;
+  --st-blue-bg:   #193f31;  --st-blue-fg:   #b7f2d5;
+  --st-green-bg:  #174b34;  --st-green-fg:  #b6f2cf;
+  --st-red-bg:    #5b2525;  --st-red-fg:    #ffd0d0;
+  --st-orange-bg: #5b351b;  --st-orange-fg: #ffd0a0;
 }
 
 /* ── RESET ─────────────────────────────────────────── */
@@ -68,7 +68,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: Inter, 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 16px;
   background: var(--bg);
   color: var(--text);
@@ -76,25 +76,19 @@ html, body {
   line-height: 1.5;
   -webkit-text-size-adjust: 100%;
   -ms-text-size-adjust: 100%;
-  transition: background 0.25s ease, color 0.25s ease;
+  transition: background .25s ease, color .25s ease;
 }
 
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 img { max-width: 100%; }
-
 .hidden { display: none !important; }
 
-/* Scrollbar custom */
-* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-*::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 8px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-*::-webkit-scrollbar-thumb:hover { background: var(--brand-light); background-clip: content-box; }
+/* Scrollbar */
+*::-webkit-scrollbar { width: 4px; height: 4px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--primary-2); border-radius: 4px; }
+* { scrollbar-width: thin; scrollbar-color: var(--primary-2) transparent; }
 
 /* ── TELA DE LOGIN ─────────────────────────────────── */
 
@@ -105,21 +99,21 @@ img { max-width: 100%; }
   min-height: 100vh;
   padding: 24px 20px;
   background:
-    radial-gradient(1200px 600px at 50% -10%, rgba(46, 158, 74, 0.12), transparent 70%),
+    radial-gradient(1200px 600px at 50% -10%, rgba(0, 140, 69, .10), transparent 70%),
     var(--bg);
 }
 
 .moto-login-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
   padding: 38px 28px 30px;
   width: 100%;
   max-width: 380px;
   display: flex;
   flex-direction: column;
   gap: 26px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow);
 }
 
 .moto-login-logo {
@@ -133,14 +127,14 @@ img { max-width: 100%; }
 .moto-login-logo img {
   height: 44px;
   object-fit: contain;
-  padding: 14px 22px;
-  background: linear-gradient(135deg, var(--brand), var(--brand-light));
-  border-radius: 14px;
-  box-shadow: 0 8px 20px rgba(28, 107, 48, 0.28);
+  padding: 10px 18px;
+  background: linear-gradient(180deg, #004d27 0%, #003d1f 100%);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 20px rgba(0, 92, 46, .22);
 }
 
-.moto-login-logo strong { font-size: 21px; font-weight: 800; color: var(--text); letter-spacing: -0.01em; }
-.moto-login-logo span { font-size: 13px; color: var(--text-muted); }
+.moto-login-logo strong { font-size: 21px; font-weight: 800; color: var(--text); letter-spacing: -.01em; }
+.moto-login-logo span { font-size: 13px; color: var(--muted); }
 
 .moto-login-form { display: flex; flex-direction: column; gap: 16px; }
 
@@ -148,30 +142,30 @@ img { max-width: 100%; }
   display: block;
   font-size: 11px;
   font-weight: 700;
-  color: var(--text-muted);
+  color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: .05em;
   margin-bottom: 7px;
 }
 
 .moto-select {
   width: 100%;
   min-height: 48px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 10px 38px 10px 14px;
-  background: var(--bg-input);
+  background: var(--surface);
   color: var(--text);
   font-size: 15px;
   outline: none;
   -webkit-appearance: none;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235b6b61' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color .2s ease, box-shadow .2s ease;
 }
-.moto-select:focus { border-color: var(--brand-light); box-shadow: var(--ring); }
+.moto-select:focus { border-color: var(--primary-2); box-shadow: var(--ring); }
 
 .moto-error {
   display: none;
@@ -180,7 +174,7 @@ img { max-width: 100%; }
   text-align: center;
   padding: 10px;
   background: var(--st-red-bg);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius);
 }
 
 /* ── BOTÕES ────────────────────────────────────────── */
@@ -188,68 +182,90 @@ img { max-width: 100%; }
 .moto-btn {
   width: 100%;
   min-height: 48px;
-  border: none;
-  border-radius: var(--radius-sm);
+  border: 0;
+  border-radius: var(--radius);
   font-size: 15px;
   font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, background 0.2s ease;
+  transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
   -webkit-tap-highlight-color: transparent;
+  padding: 0 16px;
 }
-.moto-btn:active { transform: scale(0.98); }
+.moto-btn:active { transform: scale(.98); }
 
+/* Botão primário — mesmo padrão do admin (sem gradiente) */
 .moto-btn-primary {
-  background: linear-gradient(135deg, var(--brand), var(--brand-light));
+  background: var(--primary);
   color: #fff;
-  box-shadow: 0 4px 14px rgba(28, 107, 48, 0.26);
 }
-.moto-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 7px 20px rgba(28, 107, 48, 0.34); }
+.moto-btn-primary:hover {
+  background: #004722;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 92, 46, .26);
+}
 
+/* Botão "Entregue" — gradiente verde igual admin hero-strip */
 .moto-btn-entregue {
-  background: linear-gradient(135deg, var(--brand), var(--brand-light));
+  background: var(--primary);
   color: #fff;
-  box-shadow: 0 4px 14px rgba(28, 107, 48, 0.22);
 }
-.moto-btn-entregue:hover { transform: translateY(-1px); }
+.moto-btn-entregue:hover {
+  background: #004722;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 92, 46, .22);
+}
 
+/* Botão "Deixar para depois" — botão secundário do admin */
 .moto-btn-adiar {
-  background: transparent;
-  color: var(--text-muted);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--primary);
+  border: 1px solid var(--line);
+  min-height: 40px;
 }
-.moto-btn-adiar:hover { border-color: var(--warning); color: var(--text); }
+.moto-btn-adiar:hover { border-color: var(--primary-2); background: var(--surface-soft); }
 
+/* Botão "Abrir no Maps" — azul accent do admin */
 .moto-btn-maps {
-  background: linear-gradient(135deg, #1e88e5, var(--accent));
+  background: var(--blue);
   color: #fff;
   font-size: 15px;
-  border-radius: var(--radius-sm);
-  box-shadow: 0 6px 22px rgba(33, 150, 243, 0.42);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 22px rgba(23, 119, 184, .36);
 }
-.moto-btn-maps:hover { transform: translateY(-1px); }
+.moto-btn-maps:hover { background: #1466a0; transform: translateY(-1px); }
 
-/* ── HEADER ────────────────────────────────────────── */
+/* ── HEADER ─────────────────────────────────────────
+   Mesma altura (78px) e padrão da sidebar do admin.
+────────────────────────────────────────────────── */
 
 .moto-header {
   position: sticky;
   top: 0;
   z-index: 100;
+  min-height: 78px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, var(--brand), var(--brand-light));
-  box-shadow: 0 2px 18px rgba(15, 31, 22, 0.18);
+  gap: 16px;
+  padding: 14px 28px;
+  background: linear-gradient(180deg, #004d27 0%, #003d1f 100%);
+  box-shadow: 0 2px 18px rgba(0, 30, 12, .32);
 }
 
-.moto-header-logo { height: 30px; object-fit: contain; flex-shrink: 0; }
+.moto-header-logo { height: 32px; object-fit: contain; flex-shrink: 0; }
+
+.moto-header-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
 
 .moto-header-name {
-  flex: 1;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: #fff;
   white-space: nowrap;
@@ -257,43 +273,60 @@ img { max-width: 100%; }
   text-overflow: ellipsis;
 }
 
+.moto-header-subtitle {
+  font-size: 11px;
+  color: rgba(255, 255, 255, .55);
+  letter-spacing: .3px;
+}
+
+.moto-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* Botão de tema — mesmo estilo do admin */
 .moto-theme-btn {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, .12);
+  border: 1px solid rgba(255, 255, 255, .22);
   color: #fff;
-  border-radius: 10px;
+  border-radius: var(--radius);
   width: 40px;
-  height: 38px;
-  font-size: 17px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.2s ease, transform 0.15s ease;
+  transition: background .2s ease, transform .15s ease;
 }
-.moto-theme-btn:hover { background: rgba(255, 255, 255, 0.26); transform: translateY(-1px); }
+.moto-theme-btn:hover { background: rgba(255, 255, 255, .24); transform: translateY(-1px); }
 
+/* Botão Sair — mesmo estilo do admin */
 .moto-logout-btn {
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, .12);
+  border: 1px solid rgba(255, 255, 255, .22);
   color: #fff;
-  border-radius: 10px;
-  padding: 8px 16px;
+  border-radius: var(--radius);
+  padding: 0 16px;
+  height: 40px;
   font-size: 14px;
   font-weight: 600;
   flex-shrink: 0;
-  transition: background 0.2s ease, transform 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  transition: background .2s ease, transform .15s ease;
 }
-.moto-logout-btn:hover { background: rgba(239, 68, 68, 0.85); transform: translateY(-1px); }
+.moto-logout-btn:hover { background: rgba(217, 48, 37, .80); transform: translateY(-1px); }
 
 /* ── ABAS ──────────────────────────────────────────── */
 
 .moto-tabs {
   display: flex;
-  background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
   position: sticky;
-  top: 56px;
+  top: 78px;
   z-index: 99;
   box-shadow: var(--shadow);
 }
@@ -303,13 +336,19 @@ img { max-width: 100%; }
   min-height: 48px;
   border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--muted);
   font-size: 14px;
   font-weight: 700;
   position: relative;
-  transition: color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: color .2s ease;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Underline animado — active = brand color */
 .moto-tab::after {
   content: "";
   position: absolute;
@@ -317,18 +356,20 @@ img { max-width: 100%; }
   right: 50%;
   bottom: 0;
   height: 3px;
-  background: var(--brand-light);
+  background: var(--primary-2);
   border-radius: 3px 3px 0 0;
-  transition: left 0.25s ease, right 0.25s ease;
+  transition: left .25s ease, right .25s ease;
 }
-.moto-tab.active { color: var(--brand-light); }
+.moto-tab.active { color: var(--primary-2); }
 .moto-tab.active::after { left: 16%; right: 16%; }
+[data-theme="dark"] .moto-tab.active { color: var(--primary-3); }
+[data-theme="dark"] .moto-tab::after { background: var(--primary-3); }
 .moto-tab:hover:not(.active) { color: var(--text); }
 
 /* ── CONTEÚDO ──────────────────────────────────────── */
 
 .moto-content {
-  padding: 16px 16px 112px;
+  padding: 16px 28px 112px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -340,13 +381,13 @@ img { max-width: 100%; }
 .moto-tab-panel { display: flex; flex-direction: column; gap: 14px; }
 .moto-tab-panel.hidden { display: none !important; }
 
-/* ── CARD DE PROGRESSO ─────────────────────────────── */
+/* ── CARD DE PROGRESSO — padrão .panel do admin ────── */
 
 .moto-progress-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 20px 18px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -357,27 +398,41 @@ img { max-width: 100%; }
 
 .moto-stat {
   flex: 1;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   padding: 14px 8px;
   text-align: center;
 }
-.moto-stat strong { display: block; font-size: 28px; font-weight: 800; line-height: 1; margin-bottom: 5px; color: var(--text); }
+
+/* Número grande — padrão metric-card */
+.moto-stat strong {
+  display: block;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -.5px;
+  line-height: 1;
+  margin-bottom: 5px;
+  color: var(--text);
+}
+
+/* Label uppercase muted */
 .moto-stat span {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
+  letter-spacing: .04em;
+  color: var(--muted);
 }
-.moto-stat-green strong { color: var(--success); }
-.moto-stat-orange strong { color: var(--warning); }
 
+.moto-stat-green strong { color: var(--success); }
+.moto-stat-orange strong { color: #f97316; }
+
+/* Barra de progresso com cor brand */
 .moto-progress-bar-wrap {
   height: 12px;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
   border-radius: 999px;
   overflow: hidden;
   container-type: inline-size;
@@ -388,25 +443,29 @@ img { max-width: 100%; }
   width: 0%;
   border-radius: 999px;
   overflow: hidden;
-  /* fallback caso cqw não seja suportado */
-  background: linear-gradient(90deg, var(--danger), var(--warning), var(--success));
-  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  background: linear-gradient(90deg, var(--danger), var(--accent), var(--success));
+  transition: width .6s cubic-bezier(.22, 1, .36, 1);
 }
-/* camada de gradiente fixa na largura da trilha → cor evolui vermelho→amarelo→verde */
+
 .moto-progress-bar > i {
   display: block;
   height: 100%;
   width: 100cqw;
-  background: linear-gradient(90deg, var(--danger) 0%, var(--warning) 50%, var(--success) 100%);
+  background: linear-gradient(90deg, var(--danger) 0%, var(--accent) 50%, var(--success) 100%);
 }
 
-.moto-progress-label { font-size: 13px; color: var(--text-muted); text-align: center; font-weight: 600; }
+.moto-progress-label {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  font-weight: 600;
+}
 
 /* ── ESTADO VAZIO ──────────────────────────────────── */
 
 .moto-sem-rota {
-  background: var(--bg-card);
-  border: 1px dashed var(--border);
+  background: var(--surface);
+  border: 1px dashed var(--line);
   border-radius: var(--radius);
   padding: 48px 24px;
   text-align: center;
@@ -415,81 +474,154 @@ img { max-width: 100%; }
   align-items: center;
   gap: 12px;
 }
-.moto-sem-rota .moto-sem-icon { font-size: 56px; }
-.moto-sem-rota p { font-size: 16px; font-weight: 800; color: var(--text); }
-.moto-sem-rota small { color: var(--text-muted); font-size: 14px; line-height: 1.5; }
 
-/* ── SECTION TITLE ─────────────────────────────────── */
+.moto-sem-icon {
+  width: 56px;
+  height: 56px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.moto-sem-rota p { font-size: 16px; font-weight: 800; color: var(--text); }
+.moto-sem-rota small { color: var(--muted); font-size: 14px; line-height: 1.5; }
+
+/* ── TÍTULOS DE SEÇÃO ──────────────────────────────── */
 
 .moto-section-title {
   font-size: 12px;
   font-weight: 700;
-  color: var(--text-muted);
+  color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: .06em;
   margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-/* ── CARDS DE PEDIDO ───────────────────────────────── */
+/* ── CARDS DE PEDIDO — padrão admin adaptado ────────── */
 
 .moto-pedidos-list { display: flex; flex-direction: column; gap: 12px; }
 
 .moto-pedido-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 18px 16px;
-  border-left: 4px solid var(--warning);
+  border-left: 4px solid var(--accent);
   box-shadow: var(--shadow);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.45s ease;
+  transition: transform .2s ease, box-shadow .2s ease, opacity .45s ease;
 }
-.moto-pedido-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.moto-pedido-card:hover { transform: translateY(-2px); }
 
 .moto-pedido-card.is-proximo {
-  border-left-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.35), 0 8px 24px rgba(33, 150, 243, 0.2);
+  border-left-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(23, 119, 184, .28), 0 8px 24px rgba(23, 119, 184, .14);
 }
-.moto-pedido-card.is-entregue { border-left-color: var(--success); opacity: 0.55; }
+.moto-pedido-card.is-entregue { border-left-color: var(--success); opacity: .55; }
 
-.moto-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
-.moto-card-codigo { font-size: 17px; font-weight: 800; color: var(--text); }
+.moto-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
 
-.moto-badge { font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 999px; white-space: nowrap; }
-.moto-badge-green  { background: var(--st-green-bg);  color: var(--st-green-fg); }
-.moto-badge-orange { background: var(--st-orange-bg); color: var(--st-orange-fg); }
+/* Código em destaque — padrão admin */
+.moto-card-codigo { font-size: 16px; font-weight: 700; color: var(--primary); }
+[data-theme="dark"] .moto-card-codigo { color: var(--primary-3); }
 
+/* ── BADGES — exatamente igual ao admin ────────────── */
+
+.moto-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.moto-badge-green  { background: #dcfce7;  color: #12643b; }
+.moto-badge-orange { background: #ffedd5;  color: #9a4b00; }
+.moto-badge-yellow { background: #fff4c7;  color: #775900; }
+.moto-badge-blue   { background: #dbeafe;  color: #1e40af; }
+.moto-badge-red    { background: #fee2e2;  color: #991b1b; }
+.moto-badge-gray   { background: #e5e7eb;  color: #374151; }
+
+[data-theme="dark"] .moto-badge-green  { background: #174b34; color: #b6f2cf; }
+[data-theme="dark"] .moto-badge-orange { background: #5b351b; color: #ffd0a0; }
+[data-theme="dark"] .moto-badge-yellow { background: #5b4b18; color: #ffeaa0; }
+[data-theme="dark"] .moto-badge-blue   { background: #1e2e50; color: #93c5fd; }
+[data-theme="dark"] .moto-badge-red    { background: #5b2525; color: #ffd0d0; }
+[data-theme="dark"] .moto-badge-gray   { background: #374151; color: #e5e7eb; }
+
+/* Labels e valores dos cards */
 .moto-card-info { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .moto-card-row { display: flex; gap: 10px; align-items: baseline; }
+
 .moto-card-label {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
+  letter-spacing: .04em;
+  color: var(--muted);
   min-width: 70px;
   flex-shrink: 0;
 }
+
 .moto-card-value { font-size: 14px; color: var(--text); flex: 1; line-height: 1.45; }
-.moto-card-chips { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); font-weight: 600; }
+
+.moto-card-chips {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+  align-items: center;
+}
+.moto-card-chips span { display: flex; align-items: center; gap: 4px; }
 
 .moto-card-actions { display: flex; flex-direction: column; gap: 8px; }
+.moto-card-actions .moto-btn { min-height: 40px; font-size: 14px; }
 
-/* ── MAPA ──────────────────────────────────────────── */
+/* ── SEÇÃO DO MAPA — card igual ao .panel do admin ─── */
 
 .moto-mapa-section {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 18px;
   box-shadow: var(--shadow);
 }
+
+/* Título da seção do mapa — padrão panel-header do admin */
+.moto-mapa-section > .moto-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+  text-transform: none;
+  letter-spacing: .01em;
+  font-size: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+[data-theme="dark"] .moto-mapa-section > .moto-section-title { color: var(--primary-3); }
 
 .moto-map {
   height: 350px;
   min-height: 350px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
 }
 
 #motoristaMap {
@@ -512,9 +644,9 @@ img { max-width: 100%; }
 }
 
 .moto-floating-mural {
-  background: linear-gradient(135deg, #1e88e5, var(--accent));
-  border-radius: var(--radius-sm);
-  box-shadow: 0 8px 26px rgba(33, 150, 243, 0.45);
+  background: var(--blue);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 26px rgba(23, 119, 184, .38);
 }
 .moto-floating-mural .moto-btn { background: transparent; font-size: 15px; box-shadow: none; }
 
@@ -527,12 +659,11 @@ img { max-width: 100%; }
   right: 16px;
   max-width: 520px;
   margin: 0 auto;
-  padding: 14px 18px;
-  background: var(--bg-elevated);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--success);
-  border-radius: var(--radius-sm);
+  padding: 13px 18px;
+  background: var(--primary);
+  color: #fff;
+  border: 0;
+  border-radius: var(--radius);
   font-size: 14px;
   font-weight: 600;
   text-align: center;
@@ -540,22 +671,24 @@ img { max-width: 100%; }
   transform: translateY(16px);
   pointer-events: none;
   z-index: 300;
-  box-shadow: var(--shadow-lg);
-  transition: opacity 0.26s ease, transform 0.26s ease;
+  box-shadow: var(--shadow);
+  transition: opacity .26s ease, transform .26s ease;
 }
-.moto-toast.moto-toast-erro { border-left-color: var(--danger); }
+.moto-toast.moto-toast-erro {
+  background: var(--danger);
+}
 .moto-toast.moto-toast-show { opacity: 1; transform: translateY(0); }
 
 /* ── ANIMAÇÕES ─────────────────────────────────────── */
 
 @keyframes moto-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.65); }
-  70%  { box-shadow: 0 0 0 10px rgba(33, 150, 243, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(33, 150, 243, 0); }
+  0%   { box-shadow: 0 0 0 0 rgba(23, 119, 184, .65); }
+  70%  { box-shadow: 0 0 0 10px rgba(23, 119, 184, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(23, 119, 184, 0); }
 }
 
 @keyframes pulso {
-  0%   { box-shadow: 0 0 0 0 rgba(0, 188, 212, 0.6); }
+  0%   { box-shadow: 0 0 0 0 rgba(0, 188, 212, .6); }
   70%  { box-shadow: 0 0 0 12px rgba(0, 188, 212, 0); }
   100% { box-shadow: 0 0 0 0 rgba(0, 188, 212, 0); }
 }
@@ -568,7 +701,7 @@ img { max-width: 100%; }
 
 @keyframes moto-blink {
   0%, 100% { opacity: 1; }
-  50%      { opacity: 0.45; }
+  50%      { opacity: .45; }
 }
 
 /* ── MURAL: RESUMO ─────────────────────────────────── */
@@ -576,8 +709,8 @@ img { max-width: 100%; }
 .moto-mural-resumo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 .moto-mural-resumo-item {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 16px 12px;
   text-align: center;
@@ -585,14 +718,24 @@ img { max-width: 100%; }
   box-shadow: var(--shadow);
 }
 .moto-mural-resumo-item.urgente { border-left-color: var(--danger); }
-.moto-mural-resumo-item strong { display: block; font-size: 30px; font-weight: 800; margin-bottom: 4px; line-height: 1; color: var(--text); }
+
+.moto-mural-resumo-item strong {
+  display: block;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -.5px;
+  margin-bottom: 4px;
+  line-height: 1;
+  color: var(--text);
+}
 .moto-mural-resumo-item.urgente strong { color: var(--danger); }
+
 .moto-mural-resumo-item span {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
+  letter-spacing: .04em;
+  color: var(--muted);
 }
 
 /* ── MURAL: LOADING ────────────────────────────────── */
@@ -600,7 +743,7 @@ img { max-width: 100%; }
 .moto-mural-loading {
   text-align: center;
   padding: 36px 16px;
-  color: var(--text-muted);
+  color: var(--muted);
   font-size: 14px;
   display: flex;
   flex-direction: column;
@@ -611,35 +754,37 @@ img { max-width: 100%; }
   content: "";
   width: 28px;
   height: 28px;
-  border: 3px solid var(--border);
-  border-top-color: var(--brand-light);
+  border: 3px solid var(--line);
+  border-top-color: var(--primary-2);
   border-radius: 50%;
-  animation: moto-spin 0.8s linear infinite;
+  animation: moto-spin .8s linear infinite;
 }
 @keyframes moto-spin { to { transform: rotate(360deg); } }
 
 /* ── MURAL: CARDS ──────────────────────────────────── */
 
 .moto-mural-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 16px;
-  border-left: 4px solid var(--warning);
+  border-left: 4px solid var(--accent);
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform .2s ease, box-shadow .2s ease;
 }
-.moto-mural-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.moto-mural-card:hover { transform: translateY(-2px); }
 
 .moto-mural-card[data-prioridade="urgente"] { border-left-color: var(--danger); }
-.moto-mural-card[data-prioridade="alta"]    { border-left-color: var(--warning); }
+.moto-mural-card[data-prioridade="alta"]    { border-left-color: #f97316; }
 .moto-mural-card[data-prioridade="normal"]  { border-left-color: var(--success); }
-.moto-mural-card[data-prioridade="baixa"]   { border-left-color: var(--text-muted); }
+.moto-mural-card[data-prioridade="baixa"]   { border-left-color: var(--muted); }
 
-.moto-mural-card.is-selected { box-shadow: 0 0 0 2px var(--accent), 0 8px 24px rgba(33, 150, 243, 0.22); }
+.moto-mural-card.is-selected {
+  box-shadow: 0 0 0 2px var(--blue), 0 8px 24px rgba(23, 119, 184, .18);
+}
 
 .moto-mural-header { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
 .moto-mural-header-left { display: flex; align-items: center; gap: 10px; flex: 1; }
@@ -648,42 +793,62 @@ img { max-width: 100%; }
   width: 22px;
   height: 22px;
   cursor: pointer;
-  accent-color: var(--accent);
+  accent-color: var(--blue);
   flex-shrink: 0;
 }
 
-.moto-mural-codigo { font-size: 16px; font-weight: 800; color: var(--text); }
+/* Código em destaque — padrão admin */
+.moto-mural-codigo { font-size: 16px; font-weight: 700; color: var(--primary); }
+[data-theme="dark"] .moto-mural-codigo { color: var(--primary-3); }
 
-.moto-badge-urgente { background: var(--st-red-bg);    color: var(--st-red-fg); animation: moto-blink 1.4s ease-in-out infinite; }
-.moto-badge-alta    { background: var(--st-orange-bg); color: var(--st-orange-fg); }
-.moto-badge-normal  { background: var(--st-green-bg);  color: var(--st-green-fg); }
-.moto-badge-baixa   { background: var(--st-yellow-bg); color: var(--text-muted); }
+.moto-badge-urgente { background: #fee2e2; color: #991b1b; animation: moto-blink 1.4s ease-in-out infinite; }
+.moto-badge-alta    { background: #ffedd5; color: #9a4b00; }
+.moto-badge-normal  { background: #dcfce7; color: #12643b; }
+.moto-badge-baixa   { background: #e5e7eb; color: #374151; }
+
+[data-theme="dark"] .moto-badge-urgente { background: #5b2525; color: #ffd0d0; }
+[data-theme="dark"] .moto-badge-alta    { background: #5b351b; color: #ffd0a0; }
+[data-theme="dark"] .moto-badge-normal  { background: #174b34; color: #b6f2cf; }
+[data-theme="dark"] .moto-badge-baixa   { background: #374151; color: #e5e7eb; }
 
 .moto-mural-info { display: flex; flex-direction: column; gap: 6px; }
 .moto-mural-row { display: flex; gap: 8px; align-items: baseline; }
+
 .moto-mural-label {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
+  letter-spacing: .04em;
+  color: var(--muted);
   min-width: 66px;
   flex-shrink: 0;
 }
 .moto-mural-value { font-size: 13px; color: var(--text); flex: 1; line-height: 1.45; }
-.moto-mural-chips { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); margin-top: 2px; font-weight: 600; }
 
+.moto-mural-chips {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+  font-weight: 600;
+  align-items: center;
+}
+.moto-mural-chips span { display: flex; align-items: center; gap: 4px; }
+
+/* Botão "Pegar este pedido" — azul accent */
 .moto-btn-pegar {
-  background: linear-gradient(135deg, #1e88e5, var(--accent));
+  background: var(--blue);
   color: #fff;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   font-size: 14px;
   font-weight: 700;
-  min-height: 46px;
-  box-shadow: 0 4px 14px rgba(33, 150, 243, 0.32);
+  min-height: 40px;
+  box-shadow: 0 4px 14px rgba(23, 119, 184, .28);
 }
-.moto-btn-pegar:hover { transform: translateY(-1px); }
-.moto-btn-pegar:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.moto-btn-pegar:hover { background: #1466a0; transform: translateY(-1px); }
+.moto-btn-pegar:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 
 /* ── DESKTOP: 2 COLUNAS ────────────────────────────── */
 
@@ -698,13 +863,15 @@ img { max-width: 100%; }
   #tabEntregas > .moto-progress-card,
   #tabEntregas > div:not(.moto-mapa-section) { grid-column: 1; }
   #tabEntregas > #semRotaMsg { grid-column: 1 / -1; }
+
   .moto-mapa-section {
     grid-column: 2;
     grid-row: 1 / span 30;
     position: sticky;
-    top: 116px;
+    top: 138px; /* 78px header + 48px tabs + 12px gap */
     align-self: start;
   }
+
   .moto-map, #motoristaMap { height: 460px !important; min-height: 460px !important; }
 
   .moto-mural-resumo { grid-template-columns: repeat(4, 1fr); }
@@ -724,6 +891,12 @@ img { max-width: 100%; }
 }
 
 /* ── MOBILE PEQUENO ────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .moto-header { padding: 12px 18px; min-height: 64px; }
+  .moto-content { padding: 16px 16px 112px; }
+  .moto-tabs { top: 64px; }
+}
 
 @media (max-width: 360px) {
   .moto-progress-stats { gap: 6px; }

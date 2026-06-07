@@ -3,13 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#0f3d1f">
-  <title>Madcenter — Área do Atendente</title>
-  <link rel="icon" href="data:,">
+  <meta name="theme-color" content="#003d1f">
+  <title>Atendente — Madcenter Entregas</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="shortcut icon" href="assets/favicon.svg">
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <link rel="stylesheet" href="css/atendente.css">
   <script>
@@ -45,7 +43,8 @@
         </div>
 
         <button id="loginBtn" class="atend-btn atend-btn-primary atend-btn-full">
-          Entrar →
+          Entrar
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
         </button>
       </div>
 
@@ -57,13 +56,20 @@
   ══════════════════════════════════════════════════ -->
   <div id="mainScreen" class="hidden">
 
-    <!-- HEADER -->
+    <!-- HEADER — mesma altura (78px) e padrão do admin -->
     <header class="atend-header">
       <img src="assets/logo_madcenter_white.svg" alt="Madcenter"
            class="atend-header-logo" onerror="this.style.display='none'">
-      <span class="atend-header-title">Atendente — Madcenter</span>
-      <button id="themeToggle" class="atend-theme-btn" type="button" aria-label="Alternar tema">🌙</button>
-      <button id="logoutBtn" class="atend-logout-btn">Sair</button>
+      <div class="atend-header-info">
+        <h1 class="atend-header-title">Atendente — Madcenter</h1>
+        <span class="atend-header-subtitle">Sistema de Entregas</span>
+      </div>
+      <div class="atend-header-actions">
+        <button id="themeToggle" class="atend-theme-btn" type="button" aria-label="Alternar tema">
+          <!-- SVG injetado por atendente.js -->
+        </button>
+        <button id="logoutBtn" class="atend-logout-btn">Sair</button>
+      </div>
     </header>
 
     <div class="atend-content">
@@ -71,19 +77,29 @@
       <!-- CARDS DE RESUMO -->
       <div class="atend-resumo" id="resumoCards">
         <div class="atend-resumo-card">
+          <div class="atend-resumo-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16v-2"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg>
+          </div>
           <strong>—</strong><span>Pedidos hoje</span>
         </div>
         <div class="atend-resumo-card yellow">
+          <div class="atend-resumo-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
           <strong>—</strong><span>Aguardando rota</span>
         </div>
         <div class="atend-resumo-card blue">
+          <div class="atend-resumo-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          </div>
           <strong>—</strong><span>Em rota</span>
         </div>
       </div>
 
       <!-- BOTÃO ABRIR FORMULÁRIO -->
       <button id="toggleFormBtn" class="atend-btn atend-btn-primary atend-btn-full">
-        ➕ Novo Pedido
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Novo Pedido
       </button>
 
       <!-- FORMULÁRIO (inicialmente oculto) -->
@@ -91,7 +107,10 @@
 
         <!-- SEÇÃO: CLIENTE -->
         <div class="atend-section-card">
-          <h3 class="atend-section-title">👤 Cliente</h3>
+          <h3 class="atend-section-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Cliente
+          </h3>
           <div class="atend-form-grid">
             <div class="atend-field">
               <label for="fCliente">Nome do cliente *</label>
@@ -107,7 +126,10 @@
 
         <!-- SEÇÃO: PRODUTO -->
         <div class="atend-section-card">
-          <h3 class="atend-section-title">📦 Produto</h3>
+          <h3 class="atend-section-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16v-2"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg>
+            Produto
+          </h3>
           <div class="atend-form-grid">
             <div class="atend-field">
               <label for="fProduto">Produto / material *</label>
@@ -146,7 +168,10 @@
 
         <!-- SEÇÃO: ENTREGA -->
         <div class="atend-section-card">
-          <h3 class="atend-section-title">📍 Entrega</h3>
+          <h3 class="atend-section-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            Entrega
+          </h3>
           <div class="atend-form-grid">
             <div class="atend-field">
               <label for="fCep">CEP *</label>
@@ -176,7 +201,8 @@
             </div>
             <div class="atend-field atend-field-full">
               <button type="button" id="btnMapPickerAtend" class="atend-btn-map-picker">
-                📍 Selecionar no mapa
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                Selecionar no mapa
               </button>
               <div id="atendLocationPreview" class="atend-location-preview hidden"></div>
             </div>
@@ -210,14 +236,20 @@
         <!-- BOTÕES DE AÇÃO -->
         <div class="atend-form-actions">
           <button id="cancelFormBtn" class="atend-btn atend-btn-secondary">Cancelar</button>
-          <button id="salvarBtn" class="atend-btn atend-btn-primary">💾 Salvar Pedido</button>
+          <button id="salvarBtn" class="atend-btn atend-btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Salvar Pedido
+          </button>
         </div>
 
       </div><!-- /formSection -->
 
       <!-- LISTA DE PEDIDOS DO DIA -->
       <div>
-        <h3 class="atend-section-title-main">📋 Pedidos cadastrados hoje</h3>
+        <h3 class="atend-section-title-main">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16v-2"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" y1="22" x2="12" y2="12"/></svg>
+          Pedidos cadastrados hoje
+        </h3>
         <div id="pedidosList" class="atend-pedidos-list">
           <div class="atend-loading">Carregando…</div>
         </div>
@@ -231,7 +263,7 @@
     <div class="atend-map-modal">
       <div class="atend-map-modal-header">
         <h3>Selecionar localização no mapa</h3>
-        <button type="button" id="atendMapPickerClose" class="atend-map-close" aria-label="Fechar">✕</button>
+        <button type="button" id="atendMapPickerClose" class="atend-map-close" aria-label="Fechar">×</button>
       </div>
       <p class="atend-map-hint">Clique em qualquer ponto do mapa para marcar o local de entrega. O endereço e CEP serão preenchidos automaticamente.</p>
       <div id="atendMapPickerContainer" class="atend-map-container"></div>
@@ -239,7 +271,10 @@
         <span id="atendMapPickerInfo" class="atend-map-info">Nenhum ponto selecionado</span>
         <div class="atend-map-footer-btns">
           <button type="button" id="atendMapPickerCancel" class="atend-btn atend-btn-secondary">Cancelar</button>
-          <button type="button" id="atendMapPickerConfirm" class="atend-btn atend-btn-primary">✅ Confirmar localização</button>
+          <button type="button" id="atendMapPickerConfirm" class="atend-btn atend-btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Confirmar localização
+          </button>
         </div>
       </div>
     </div>
@@ -249,6 +284,7 @@
   <div id="atendToast" class="atend-toast"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="js/icons.js"></script>
   <script src="js/atendente.js"></script>
 </body>
 </html>
