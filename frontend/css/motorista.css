@@ -1,38 +1,100 @@
 /* ======================================================
    MADCENTER — ÁREA DO MOTORISTA
-   Mobile-first · Tema verde escuro
+   Design system · tema claro/escuro · mobile-first + desktop
 ====================================================== */
 
+/* ── DESIGN TOKENS ─────────────────────────────────── */
+
 :root {
-  --moto-bg:       #0f3d1f;
-  --moto-surface:  #1a4d2a;
-  --moto-surface2: #1e5830;
-  --moto-border:   #2a6b3a;
-  --moto-text:     #edf6f1;
-  --moto-muted:    #8fbfa0;
-  --moto-green:    #4caf50;
-  --moto-orange:   #ff9800;
-  --moto-blue:     #2196f3;
-  --moto-red:      #ef5350;
+  --brand:       #1c6b30;
+  --brand-light: #2e9e4a;
+  --brand-lime:  #8dc63f;
+  --accent:      #2196f3;
+  --success:     #22c55e;
+  --warning:     #f59e0b;
+  --danger:      #ef4444;
+  --cyan:        #00bcd4;
+
+  /* Tema claro (padrão) */
+  --bg:          #f4f7f5;
+  --bg-elevated: #ffffff;
+  --bg-card:     #ffffff;
+  --bg-input:    #ffffff;
+  --text:        #0f1f16;
+  --text-muted:  #5b6b61;
+  --border:      #e2e8e4;
+  --shadow:      0 4px 16px rgba(15, 31, 22, 0.08);
+  --shadow-lg:   0 12px 32px rgba(15, 31, 22, 0.12);
+
+  --ring:        0 0 0 3px rgba(28, 107, 48, 0.15);
+  --radius:      16px;
+  --radius-sm:   12px;
+  --radius-xs:   10px;
+
+  --st-yellow-bg: rgba(245, 158, 11, 0.14);
+  --st-yellow-fg: #b45309;
+  --st-blue-bg:   rgba(33, 150, 243, 0.14);
+  --st-blue-fg:   #1565c0;
+  --st-green-bg:  rgba(34, 197, 94, 0.14);
+  --st-green-fg:  #15803d;
+  --st-red-bg:    rgba(239, 68, 68, 0.14);
+  --st-red-fg:    #b91c1c;
+  --st-orange-bg: rgba(255, 152, 0, 0.14);
+  --st-orange-fg: #c2630c;
 }
+
+[data-theme="dark"] {
+  --bg:          #0a1f12;
+  --bg-elevated: #0f2e1b;
+  --bg-card:     #123420;
+  --bg-input:    #0c2716;
+  --text:        #eaf3ee;
+  --text-muted:  #9bb3a5;
+  --border:      #1d4a2e;
+  --shadow:      0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg:   0 12px 32px rgba(0, 0, 0, 0.45);
+
+  --ring:        0 0 0 3px rgba(141, 198, 63, 0.22);
+
+  --st-yellow-fg: #fcd34d;
+  --st-blue-fg:   #64b5f6;
+  --st-green-fg:  #86efac;
+  --st-red-fg:    #fca5a5;
+  --st-orange-fg: #ffb74d;
+}
+
+/* ── RESET ─────────────────────────────────────────── */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
-  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 16px;
-  background: var(--moto-bg);
-  color: var(--moto-text);
+  background: var(--bg);
+  color: var(--text);
   min-height: 100vh;
+  line-height: 1.5;
   -webkit-text-size-adjust: 100%;
   -ms-text-size-adjust: 100%;
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 img { max-width: 100%; }
 
 .hidden { display: none !important; }
+
+/* Scrollbar custom */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--brand-light); background-clip: content-box; }
 
 /* ── TELA DE LOGIN ─────────────────────────────────── */
 
@@ -42,128 +104,132 @@ img { max-width: 100%; }
   justify-content: center;
   min-height: 100vh;
   padding: 24px 20px;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(46, 158, 74, 0.12), transparent 70%),
+    var(--bg);
 }
 
 .moto-login-card {
-  background: var(--moto-surface);
-  border-radius: 18px;
-  padding: 36px 24px 28px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 38px 28px 30px;
   width: 100%;
-  max-width: 360px;
+  max-width: 380px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, .45);
+  gap: 26px;
+  box-shadow: var(--shadow-lg);
 }
 
 .moto-login-logo {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   text-align: center;
 }
 
 .moto-login-logo img {
-  height: 60px;
+  height: 44px;
   object-fit: contain;
+  padding: 14px 22px;
+  background: linear-gradient(135deg, var(--brand), var(--brand-light));
+  border-radius: 14px;
+  box-shadow: 0 8px 20px rgba(28, 107, 48, 0.28);
 }
 
-.moto-login-logo strong {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--moto-text);
-  letter-spacing: -.01em;
-}
+.moto-login-logo strong { font-size: 21px; font-weight: 800; color: var(--text); letter-spacing: -0.01em; }
+.moto-login-logo span { font-size: 13px; color: var(--text-muted); }
 
-.moto-login-logo span {
-  font-size: 13px;
-  color: var(--moto-muted);
-}
-
-.moto-login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
+.moto-login-form { display: flex; flex-direction: column; gap: 16px; }
 
 .moto-label {
   display: block;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
-  color: var(--moto-muted);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: .04em;
-  margin-bottom: 6px;
+  letter-spacing: 0.05em;
+  margin-bottom: 7px;
 }
 
 .moto-select {
   width: 100%;
-  min-height: 50px;
-  border: 1.5px solid var(--moto-border);
-  border-radius: 10px;
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   padding: 10px 38px 10px 14px;
-  background: var(--moto-bg);
-  color: var(--moto-text);
-  font-size: 16px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 15px;
   outline: none;
   -webkit-appearance: none;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238fbfa0' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235b6b61' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-
-.moto-select:focus { border-color: var(--moto-green); }
+.moto-select:focus { border-color: var(--brand-light); box-shadow: var(--ring); }
 
 .moto-error {
   display: none;
-  color: #ff6b6b;
+  color: var(--danger);
   font-size: 13px;
   text-align: center;
-  padding: 8px;
-  background: rgba(239, 83, 80, .12);
-  border-radius: 8px;
+  padding: 10px;
+  background: var(--st-red-bg);
+  border-radius: var(--radius-xs);
 }
 
 /* ── BOTÕES ────────────────────────────────────────── */
 
 .moto-btn {
   width: 100%;
-  min-height: 50px;
+  min-height: 48px;
   border: none;
-  border-radius: 10px;
-  font-size: 16px;
-  font-weight: 700;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: opacity .15s, transform .1s;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease, background 0.2s ease;
   -webkit-tap-highlight-color: transparent;
 }
+.moto-btn:active { transform: scale(0.98); }
 
-.moto-btn:active { transform: scale(.97); }
+.moto-btn-primary {
+  background: linear-gradient(135deg, var(--brand), var(--brand-light));
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(28, 107, 48, 0.26);
+}
+.moto-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 7px 20px rgba(28, 107, 48, 0.34); }
 
-.moto-btn-primary  { background: var(--moto-green); color: #fff; }
-.moto-btn-primary:hover { opacity: .88; }
-
-.moto-btn-entregue { background: var(--moto-green); color: #fff; }
-.moto-btn-entregue:hover { opacity: .9; }
+.moto-btn-entregue {
+  background: linear-gradient(135deg, var(--brand), var(--brand-light));
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(28, 107, 48, 0.22);
+}
+.moto-btn-entregue:hover { transform: translateY(-1px); }
 
 .moto-btn-adiar {
-  background: var(--moto-surface2);
-  color: var(--moto-muted);
-  border: 1.5px solid var(--moto-border);
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
 }
+.moto-btn-adiar:hover { border-color: var(--warning); color: var(--text); }
 
 .moto-btn-maps {
-  background: var(--moto-blue);
+  background: linear-gradient(135deg, #1e88e5, var(--accent));
   color: #fff;
   font-size: 15px;
-  border-radius: 12px;
-  box-shadow: 0 4px 18px rgba(33, 150, 243, .35);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 22px rgba(33, 150, 243, 0.42);
 }
+.moto-btn-maps:hover { transform: translateY(-1px); }
 
 /* ── HEADER ────────────────────────────────────────── */
 
@@ -175,251 +241,262 @@ img { max-width: 100%; }
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--moto-surface);
-  border-bottom: 1px solid var(--moto-border);
-  box-shadow: 0 2px 14px rgba(0, 0, 0, .28);
+  background: linear-gradient(135deg, var(--brand), var(--brand-light));
+  box-shadow: 0 2px 18px rgba(15, 31, 22, 0.18);
 }
 
-.moto-header-logo {
-  height: 30px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
+.moto-header-logo { height: 30px; object-fit: contain; flex-shrink: 0; }
 
 .moto-header-name {
   flex: 1;
   font-size: 15px;
   font-weight: 700;
+  color: #fff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.moto-theme-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  border-radius: 10px;
+  width: 40px;
+  height: 38px;
+  font-size: 17px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+.moto-theme-btn:hover { background: rgba(255, 255, 255, 0.26); transform: translateY(-1px); }
+
 .moto-logout-btn {
-  background: transparent;
-  border: 1.5px solid var(--moto-border);
-  color: var(--moto-muted);
-  border-radius: 8px;
-  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  border-radius: 10px;
+  padding: 8px 16px;
   font-size: 14px;
   font-weight: 600;
   flex-shrink: 0;
-  transition: border-color .15s, color .15s;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+.moto-logout-btn:hover { background: rgba(239, 68, 68, 0.85); transform: translateY(-1px); }
+
+/* ── ABAS ──────────────────────────────────────────── */
+
+.moto-tabs {
+  display: flex;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 56px;
+  z-index: 99;
+  box-shadow: var(--shadow);
 }
 
-.moto-logout-btn:hover {
-  border-color: var(--moto-red);
-  color: var(--moto-red);
+.moto-tab {
+  flex: 1;
+  min-height: 48px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 700;
+  position: relative;
+  transition: color 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
 }
+.moto-tab::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  right: 50%;
+  bottom: 0;
+  height: 3px;
+  background: var(--brand-light);
+  border-radius: 3px 3px 0 0;
+  transition: left 0.25s ease, right 0.25s ease;
+}
+.moto-tab.active { color: var(--brand-light); }
+.moto-tab.active::after { left: 16%; right: 16%; }
+.moto-tab:hover:not(.active) { color: var(--text); }
 
 /* ── CONTEÚDO ──────────────────────────────────────── */
 
 .moto-content {
-  padding: 16px 16px 110px;
+  padding: 16px 16px 112px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
 }
+
+.moto-tab-panel { display: flex; flex-direction: column; gap: 14px; }
+.moto-tab-panel.hidden { display: none !important; }
 
 /* ── CARD DE PROGRESSO ─────────────────────────────── */
 
 .moto-progress-card {
-  background: var(--moto-surface);
-  border-radius: 14px;
-  padding: 18px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 18px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
+  box-shadow: var(--shadow);
 }
 
-.moto-progress-stats {
-  display: flex;
-  gap: 8px;
-}
+.moto-progress-stats { display: flex; gap: 10px; }
 
 .moto-stat {
   flex: 1;
-  background: var(--moto-bg);
-  border-radius: 10px;
-  padding: 12px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 8px;
   text-align: center;
 }
-
-.moto-stat strong {
-  display: block;
-  font-size: 26px;
-  font-weight: 800;
-  line-height: 1;
-  margin-bottom: 4px;
-}
-
+.moto-stat strong { display: block; font-size: 28px; font-weight: 800; line-height: 1; margin-bottom: 5px; color: var(--text); }
 .moto-stat span {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .04em;
-  color: var(--moto-muted);
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
 }
-
-.moto-stat-green strong { color: var(--moto-green); }
-.moto-stat-orange strong { color: var(--moto-orange); }
+.moto-stat-green strong { color: var(--success); }
+.moto-stat-orange strong { color: var(--warning); }
 
 .moto-progress-bar-wrap {
-  height: 8px;
-  background: var(--moto-bg);
-  border-radius: 4px;
+  height: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
   overflow: hidden;
+  container-type: inline-size;
 }
 
 .moto-progress-bar {
   height: 100%;
-  background: var(--moto-green);
-  border-radius: 4px;
   width: 0%;
-  transition: width .6s ease;
+  border-radius: 999px;
+  overflow: hidden;
+  /* fallback caso cqw não seja suportado */
+  background: linear-gradient(90deg, var(--danger), var(--warning), var(--success));
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* camada de gradiente fixa na largura da trilha → cor evolui vermelho→amarelo→verde */
+.moto-progress-bar > i {
+  display: block;
+  height: 100%;
+  width: 100cqw;
+  background: linear-gradient(90deg, var(--danger) 0%, var(--warning) 50%, var(--success) 100%);
 }
 
-.moto-progress-label {
-  font-size: 13px;
-  color: var(--moto-muted);
-  text-align: center;
-}
+.moto-progress-label { font-size: 13px; color: var(--text-muted); text-align: center; font-weight: 600; }
 
-/* ── SEM ROTA ──────────────────────────────────────── */
+/* ── ESTADO VAZIO ──────────────────────────────────── */
 
 .moto-sem-rota {
-  background: var(--moto-surface);
-  border-radius: 14px;
-  padding: 40px 24px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 48px 24px;
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
-
-.moto-sem-rota .moto-sem-icon { font-size: 52px; }
-.moto-sem-rota p { font-size: 16px; font-weight: 700; }
-.moto-sem-rota small { color: var(--moto-muted); font-size: 14px; }
+.moto-sem-rota .moto-sem-icon { font-size: 56px; }
+.moto-sem-rota p { font-size: 16px; font-weight: 800; color: var(--text); }
+.moto-sem-rota small { color: var(--text-muted); font-size: 14px; line-height: 1.5; }
 
 /* ── SECTION TITLE ─────────────────────────────────── */
 
 .moto-section-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  color: var(--moto-muted);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: .05em;
-  margin-bottom: 8px;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
 }
 
 /* ── CARDS DE PEDIDO ───────────────────────────────── */
 
-.moto-pedidos-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
+.moto-pedidos-list { display: flex; flex-direction: column; gap: 12px; }
 
 .moto-pedido-card {
-  background: var(--moto-surface);
-  border-radius: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   padding: 18px 16px;
-  border-left: 4px solid var(--moto-orange);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, .22);
-  transition: opacity .45s ease;
+  border-left: 4px solid var(--warning);
+  box-shadow: var(--shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.45s ease;
 }
+.moto-pedido-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 
 .moto-pedido-card.is-proximo {
-  border-left-color: var(--moto-blue);
-  box-shadow:
-    0 0 0 1px rgba(33, 150, 243, .3),
-    0 4px 20px rgba(33, 150, 243, .18);
+  border-left-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.35), 0 8px 24px rgba(33, 150, 243, 0.2);
 }
+.moto-pedido-card.is-entregue { border-left-color: var(--success); opacity: 0.55; }
 
-.moto-pedido-card.is-entregue {
-  border-left-color: var(--moto-green);
-  opacity: .45;
-}
+.moto-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
+.moto-card-codigo { font-size: 17px; font-weight: 800; color: var(--text); }
 
-.moto-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 14px;
-}
+.moto-badge { font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 999px; white-space: nowrap; }
+.moto-badge-green  { background: var(--st-green-bg);  color: var(--st-green-fg); }
+.moto-badge-orange { background: var(--st-orange-bg); color: var(--st-orange-fg); }
 
-.moto-card-codigo {
-  font-size: 17px;
-  font-weight: 800;
-}
-
-.moto-badge {
-  font-size: 12px;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-
-.moto-badge-green  { background: rgba(76, 175, 80, .18);  color: #81c784; }
-.moto-badge-orange { background: rgba(255, 152, 0, .18);  color: #ffb74d; }
-
-.moto-card-info {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  margin-bottom: 16px;
-}
-
-.moto-card-row {
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
-}
-
+.moto-card-info { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.moto-card-row { display: flex; gap: 10px; align-items: baseline; }
 .moto-card-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .04em;
-  color: var(--moto-muted);
-  min-width: 68px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  min-width: 70px;
   flex-shrink: 0;
 }
+.moto-card-value { font-size: 14px; color: var(--text); flex: 1; line-height: 1.45; }
+.moto-card-chips { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); font-weight: 600; }
 
-.moto-card-value {
-  font-size: 14px;
-  color: var(--moto-text);
-  flex: 1;
-  line-height: 1.4;
-}
-
-.moto-card-chips {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  font-size: 13px;
-  color: var(--moto-muted);
-}
-
-.moto-card-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+.moto-card-actions { display: flex; flex-direction: column; gap: 8px; }
 
 /* ── MAPA ──────────────────────────────────────────── */
 
-.moto-mapa-section { }
+.moto-mapa-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
 
 .moto-map {
-  height: 300px;
-  border-radius: 12px;
+  height: 350px;
+  min-height: 350px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  border: 1px solid var(--moto-border);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, .2);
+  border: 1px solid var(--border);
+}
+
+#motoristaMap {
+  height: 350px !important;
+  min-height: 350px !important;
+  width: 100% !important;
+  display: block !important;
 }
 
 /* ── BOTÃO FLUTUANTE ───────────────────────────────── */
@@ -430,42 +507,226 @@ img { max-width: 100%; }
   left: 16px;
   right: 16px;
   z-index: 200;
-  filter: drop-shadow(0 4px 16px rgba(33, 150, 243, .35));
+  max-width: 520px;
+  margin: 0 auto;
 }
+
+.moto-floating-mural {
+  background: linear-gradient(135deg, #1e88e5, var(--accent));
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 26px rgba(33, 150, 243, 0.45);
+}
+.moto-floating-mural .moto-btn { background: transparent; font-size: 15px; box-shadow: none; }
 
 /* ── TOAST ─────────────────────────────────────────── */
 
 .moto-toast {
   position: fixed;
-  bottom: 86px;
+  bottom: 88px;
   left: 16px;
   right: 16px;
-  padding: 13px 16px;
-  background: #163d22;
-  color: var(--moto-text);
-  border-radius: 10px;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 14px 18px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--success);
+  border-radius: var(--radius-sm);
   font-size: 14px;
   font-weight: 600;
   text-align: center;
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateY(16px);
   pointer-events: none;
   z-index: 300;
-  border-left: 4px solid var(--moto-green);
-  transition: opacity .22s ease, transform .22s ease;
+  box-shadow: var(--shadow-lg);
+  transition: opacity 0.26s ease, transform 0.26s ease;
 }
-
-.moto-toast.moto-toast-erro { border-left-color: var(--moto-red); }
-
-.moto-toast.moto-toast-show {
-  opacity: 1;
-  transform: translateY(0);
-}
+.moto-toast.moto-toast-erro { border-left-color: var(--danger); }
+.moto-toast.moto-toast-show { opacity: 1; transform: translateY(0); }
 
 /* ── ANIMAÇÕES ─────────────────────────────────────── */
 
 @keyframes moto-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(33, 150, 243, .65); }
+  0%   { box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.65); }
   70%  { box-shadow: 0 0 0 10px rgba(33, 150, 243, 0); }
   100% { box-shadow: 0 0 0 0 rgba(33, 150, 243, 0); }
+}
+
+@keyframes pulso {
+  0%   { box-shadow: 0 0 0 0 rgba(0, 188, 212, 0.6); }
+  70%  { box-shadow: 0 0 0 12px rgba(0, 188, 212, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 188, 212, 0); }
+}
+.marcador-motorista { animation: pulso 1.8s infinite; }
+
+@keyframes moto-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes moto-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* ── MURAL: RESUMO ─────────────────────────────────── */
+
+.moto-mural-resumo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.moto-mural-resumo-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 12px;
+  text-align: center;
+  border-left: 4px solid var(--success);
+  box-shadow: var(--shadow);
+}
+.moto-mural-resumo-item.urgente { border-left-color: var(--danger); }
+.moto-mural-resumo-item strong { display: block; font-size: 30px; font-weight: 800; margin-bottom: 4px; line-height: 1; color: var(--text); }
+.moto-mural-resumo-item.urgente strong { color: var(--danger); }
+.moto-mural-resumo-item span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+/* ── MURAL: LOADING ────────────────────────────────── */
+
+.moto-mural-loading {
+  text-align: center;
+  padding: 36px 16px;
+  color: var(--text-muted);
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.moto-mural-loading::before {
+  content: "";
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--brand-light);
+  border-radius: 50%;
+  animation: moto-spin 0.8s linear infinite;
+}
+@keyframes moto-spin { to { transform: rotate(360deg); } }
+
+/* ── MURAL: CARDS ──────────────────────────────────── */
+
+.moto-mural-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  border-left: 4px solid var(--warning);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.moto-mural-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+
+.moto-mural-card[data-prioridade="urgente"] { border-left-color: var(--danger); }
+.moto-mural-card[data-prioridade="alta"]    { border-left-color: var(--warning); }
+.moto-mural-card[data-prioridade="normal"]  { border-left-color: var(--success); }
+.moto-mural-card[data-prioridade="baixa"]   { border-left-color: var(--text-muted); }
+
+.moto-mural-card.is-selected { box-shadow: 0 0 0 2px var(--accent), 0 8px 24px rgba(33, 150, 243, 0.22); }
+
+.moto-mural-header { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.moto-mural-header-left { display: flex; align-items: center; gap: 10px; flex: 1; }
+
+.moto-mural-checkbox {
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.moto-mural-codigo { font-size: 16px; font-weight: 800; color: var(--text); }
+
+.moto-badge-urgente { background: var(--st-red-bg);    color: var(--st-red-fg); animation: moto-blink 1.4s ease-in-out infinite; }
+.moto-badge-alta    { background: var(--st-orange-bg); color: var(--st-orange-fg); }
+.moto-badge-normal  { background: var(--st-green-bg);  color: var(--st-green-fg); }
+.moto-badge-baixa   { background: var(--st-yellow-bg); color: var(--text-muted); }
+
+.moto-mural-info { display: flex; flex-direction: column; gap: 6px; }
+.moto-mural-row { display: flex; gap: 8px; align-items: baseline; }
+.moto-mural-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  min-width: 66px;
+  flex-shrink: 0;
+}
+.moto-mural-value { font-size: 13px; color: var(--text); flex: 1; line-height: 1.45; }
+.moto-mural-chips { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); margin-top: 2px; font-weight: 600; }
+
+.moto-btn-pegar {
+  background: linear-gradient(135deg, #1e88e5, var(--accent));
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 46px;
+  box-shadow: 0 4px 14px rgba(33, 150, 243, 0.32);
+}
+.moto-btn-pegar:hover { transform: translateY(-1px); }
+.moto-btn-pegar:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* ── DESKTOP: 2 COLUNAS ────────────────────────────── */
+
+@media (min-width: 900px) {
+  #tabEntregas {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-auto-rows: min-content;
+    gap: 16px 20px;
+    align-items: start;
+  }
+  #tabEntregas > .moto-progress-card,
+  #tabEntregas > div:not(.moto-mapa-section) { grid-column: 1; }
+  #tabEntregas > #semRotaMsg { grid-column: 1 / -1; }
+  .moto-mapa-section {
+    grid-column: 2;
+    grid-row: 1 / span 30;
+    position: sticky;
+    top: 116px;
+    align-self: start;
+  }
+  .moto-map, #motoristaMap { height: 460px !important; min-height: 460px !important; }
+
+  .moto-mural-resumo { grid-template-columns: repeat(4, 1fr); }
+  #muralList {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  #muralList .moto-mural-card { margin: 0; }
+
+  .moto-floating, .moto-toast { max-width: 460px; right: 24px; left: auto; }
+  .moto-floating { margin: 0 0 0 auto; }
+}
+
+@media (min-width: 1100px) {
+  #pedidosList { display: grid; grid-template-columns: 1fr; gap: 12px; }
+}
+
+/* ── MOBILE PEQUENO ────────────────────────────────── */
+
+@media (max-width: 360px) {
+  .moto-progress-stats { gap: 6px; }
+  .moto-stat strong { font-size: 24px; }
+  .moto-tab { font-size: 13px; }
 }

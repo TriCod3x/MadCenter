@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f3d1f">
+  <title>Madcenter — Área do Atendente</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="css/atendente.css">
+  <script>
+    // Aplica tema salvo antes da pintura (evita flash)
+    document.documentElement.setAttribute("data-theme",
+      localStorage.getItem("madcenter_tema") || "dark");
+  </script>
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════════════
+       TELA DE LOGIN
+  ══════════════════════════════════════════════════ -->
+  <div id="loginScreen">
+    <div class="atend-login-card">
+
+      <div class="atend-login-logo">
+        <img src="assets/logo_madcenter_white.svg" alt="Madcenter"
+             onerror="this.style.display='none'">
+        <strong>Área do Atendente</strong>
+        <span>Madcenter Entregas</span>
+      </div>
+
+      <div class="atend-login-form">
+        <div class="atend-login-field">
+          <label class="atend-label" for="senhaInput">Senha de acesso</label>
+          <input id="senhaInput" type="password" class="atend-login-input"
+                 placeholder="Digite a senha" autocomplete="current-password">
+        </div>
+
+        <div id="loginError" class="atend-error">
+          Senha incorreta. Tente novamente.
+        </div>
+
+        <button id="loginBtn" class="atend-btn atend-btn-primary atend-btn-full">
+          Entrar →
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       TELA PRINCIPAL
+  ══════════════════════════════════════════════════ -->
+  <div id="mainScreen" class="hidden">
+
+    <!-- HEADER -->
+    <header class="atend-header">
+      <img src="assets/logo_madcenter_white.svg" alt="Madcenter"
+           class="atend-header-logo" onerror="this.style.display='none'">
+      <span class="atend-header-title">Atendente — Madcenter</span>
+      <button id="themeToggle" class="atend-theme-btn" type="button" aria-label="Alternar tema">🌙</button>
+      <button id="logoutBtn" class="atend-logout-btn">Sair</button>
+    </header>
+
+    <div class="atend-content">
+
+      <!-- CARDS DE RESUMO -->
+      <div class="atend-resumo" id="resumoCards">
+        <div class="atend-resumo-card">
+          <strong>—</strong><span>Pedidos hoje</span>
+        </div>
+        <div class="atend-resumo-card yellow">
+          <strong>—</strong><span>Aguardando rota</span>
+        </div>
+        <div class="atend-resumo-card blue">
+          <strong>—</strong><span>Em rota</span>
+        </div>
+      </div>
+
+      <!-- BOTÃO ABRIR FORMULÁRIO -->
+      <button id="toggleFormBtn" class="atend-btn atend-btn-primary atend-btn-full">
+        ➕ Novo Pedido
+      </button>
+
+      <!-- FORMULÁRIO (inicialmente oculto) -->
+      <div id="formSection" class="atend-form-section hidden">
+
+        <!-- SEÇÃO: CLIENTE -->
+        <div class="atend-section-card">
+          <h3 class="atend-section-title">👤 Cliente</h3>
+          <div class="atend-form-grid">
+            <div class="atend-field">
+              <label for="fCliente">Nome do cliente *</label>
+              <input id="fCliente" type="text" placeholder="Nome completo" autocomplete="name">
+            </div>
+            <div class="atend-field">
+              <label for="fTelefone">Telefone / WhatsApp *</label>
+              <input id="fTelefone" type="tel" placeholder="(99) 9 9999-9999" maxlength="16"
+                     autocomplete="tel">
+            </div>
+          </div>
+        </div>
+
+        <!-- SEÇÃO: PRODUTO -->
+        <div class="atend-section-card">
+          <h3 class="atend-section-title">📦 Produto</h3>
+          <div class="atend-form-grid">
+            <div class="atend-field">
+              <label for="fProduto">Produto / material *</label>
+              <input id="fProduto" type="text" placeholder="Ex: Tinta acrílica 18L">
+            </div>
+            <div class="atend-field">
+              <label for="fCategoria">Categoria *</label>
+              <select id="fCategoria">
+                <option value="Tintas">Tintas</option>
+                <option value="Elétrica">Elétrica</option>
+                <option value="Hidráulica">Hidráulica</option>
+                <option value="Ferramentas">Ferramentas</option>
+                <option value="Pisos e revestimentos">Pisos e revestimentos</option>
+                <option value="Cimento e argamassa">Cimento e argamassa</option>
+                <option value="Outros">Outros</option>
+              </select>
+            </div>
+            <div class="atend-field">
+              <label for="fPeso">Peso (kg) *</label>
+              <input id="fPeso" type="number" placeholder="0" min="0" step="0.1">
+            </div>
+            <div class="atend-field">
+              <label for="fVolume">Volume (opcional)</label>
+              <input id="fVolume" type="text" placeholder="Ex: 2 caixas">
+            </div>
+            <div class="atend-field">
+              <label for="fPrioridade">Prioridade</label>
+              <select id="fPrioridade">
+                <option value="normal">Normal</option>
+                <option value="alta">Alta</option>
+                <option value="urgente">Urgente</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- SEÇÃO: ENTREGA -->
+        <div class="atend-section-card">
+          <h3 class="atend-section-title">📍 Entrega</h3>
+          <div class="atend-form-grid">
+            <div class="atend-field">
+              <label for="fCep">CEP *</label>
+              <input id="fCep" type="text" placeholder="00000-000" maxlength="9"
+                     autocomplete="postal-code" inputmode="numeric">
+              <span id="cepMsg" class="atend-cep-msg"></span>
+            </div>
+            <div class="atend-field">
+              <label for="fEndereco">Endereço</label>
+              <input id="fEndereco" type="text" placeholder="Rua, Av...">
+            </div>
+            <div class="atend-field">
+              <label for="fNumero">Número</label>
+              <input id="fNumero" type="text" placeholder="123">
+            </div>
+            <div class="atend-field">
+              <label for="fComplemento">Complemento (opcional)</label>
+              <input id="fComplemento" type="text" placeholder="Apto, Bloco...">
+            </div>
+            <div class="atend-field">
+              <label for="fMunicipio">Município de destino *</label>
+              <input id="fMunicipio" type="text" placeholder="Cidade">
+            </div>
+            <div class="atend-field">
+              <label for="fEstado">Estado *</label>
+              <input id="fEstado" type="text" placeholder="MA" maxlength="2">
+            </div>
+            <div class="atend-field atend-field-full">
+              <button type="button" id="btnMapPickerAtend" class="atend-btn-map-picker">
+                📍 Selecionar no mapa
+              </button>
+              <div id="atendLocationPreview" class="atend-location-preview hidden"></div>
+            </div>
+            <div class="atend-field">
+              <label for="fDataEntrega">Data prevista de entrega *</label>
+              <input id="fDataEntrega" type="date">
+            </div>
+            <div class="atend-field">
+              <label for="fVeiculo">Tipo de veículo *</label>
+              <select id="fVeiculo">
+                <option value="moto">Moto</option>
+                <option value="caminhonete" selected>Caminhonete</option>
+                <option value="bau-leve">Caminhão baú leve</option>
+                <option value="tres-quartos">Caminhão 3/4</option>
+                <option value="carroceria-aberta">Caminhão carroceria aberta</option>
+              </select>
+            </div>
+            <div class="atend-field atend-field-full">
+              <label for="fObs">Observações (opcional)</label>
+              <textarea id="fObs" rows="3" placeholder="Informações adicionais para o motorista..."></textarea>
+            </div>
+          </div>
+
+          <!-- FRETE ESTIMADO -->
+          <div class="atend-frete-info" id="freteInfo" style="display:none">
+            <span>Frete estimado (Haversine):</span>
+            <strong id="freteValor">—</strong>
+          </div>
+        </div>
+
+        <!-- BOTÕES DE AÇÃO -->
+        <div class="atend-form-actions">
+          <button id="cancelFormBtn" class="atend-btn atend-btn-secondary">Cancelar</button>
+          <button id="salvarBtn" class="atend-btn atend-btn-primary">💾 Salvar Pedido</button>
+        </div>
+
+      </div><!-- /formSection -->
+
+      <!-- LISTA DE PEDIDOS DO DIA -->
+      <div>
+        <h3 class="atend-section-title-main">📋 Pedidos cadastrados hoje</h3>
+        <div id="pedidosList" class="atend-pedidos-list">
+          <div class="atend-loading">Carregando…</div>
+        </div>
+      </div>
+
+    </div><!-- /atend-content -->
+  </div><!-- /mainScreen -->
+
+  <!-- MODAL: SELETOR DE LOCALIZAÇÃO NO MAPA -->
+  <div id="atendMapPickerBackdrop" class="atend-map-backdrop">
+    <div class="atend-map-modal">
+      <div class="atend-map-modal-header">
+        <h3>Selecionar localização no mapa</h3>
+        <button type="button" id="atendMapPickerClose" class="atend-map-close" aria-label="Fechar">✕</button>
+      </div>
+      <p class="atend-map-hint">Clique em qualquer ponto do mapa para marcar o local de entrega. O endereço e CEP serão preenchidos automaticamente.</p>
+      <div id="atendMapPickerContainer" class="atend-map-container"></div>
+      <div class="atend-map-footer">
+        <span id="atendMapPickerInfo" class="atend-map-info">Nenhum ponto selecionado</span>
+        <div class="atend-map-footer-btns">
+          <button type="button" id="atendMapPickerCancel" class="atend-btn atend-btn-secondary">Cancelar</button>
+          <button type="button" id="atendMapPickerConfirm" class="atend-btn atend-btn-primary">✅ Confirmar localização</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="atendToast" class="atend-toast"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="js/atendente.js"></script>
+</body>
+</html>

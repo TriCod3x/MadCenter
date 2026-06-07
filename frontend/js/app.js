@@ -1706,6 +1706,7 @@ async function syncRouteStatus(routeId) {
 }
 
 async function syncDriverStatus(driverId) {
+  if (!driverId || driverId === "null") return;
   const activeRoutes = getRotas().filter((rota) => rota.motoristaId === driverId && ["planejada", "em andamento"].includes(rota.status));
   if (!activeRoutes.length) {
     await updateMotorista(driverId, { status: "disponível" });

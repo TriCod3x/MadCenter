@@ -7,8 +7,16 @@
   <title>Madcenter — Área do Motorista</title>
   <link rel="icon" href="data:,">
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <link rel="stylesheet" href="css/motorista.css">
+  <script>
+    // Aplica tema salvo antes da pintura (evita flash)
+    document.documentElement.setAttribute("data-theme",
+      localStorage.getItem("madcenter_tema") || "dark");
+  </script>
 </head>
 <body>
 
@@ -55,60 +63,119 @@
       <img src="assets/logo_madcenter_white.svg" alt="Madcenter"
            class="moto-header-logo" onerror="this.style.display='none'">
       <span id="headerName" class="moto-header-name"></span>
+      <button id="themeToggle" class="moto-theme-btn" type="button" aria-label="Alternar tema">🌙</button>
       <button id="logoutBtn" class="moto-logout-btn">Sair</button>
     </header>
 
-    <div class="moto-content">
-
-      <!-- CARD DE PROGRESSO -->
-      <div class="moto-progress-card">
-        <div class="moto-progress-stats">
-          <div class="moto-stat">
-            <strong id="statTotal">0</strong>
-            <span>Total</span>
-          </div>
-          <div class="moto-stat moto-stat-green">
-            <strong id="statFeito">0</strong>
-            <span>Entregues</span>
-          </div>
-          <div class="moto-stat moto-stat-orange">
-            <strong id="statPendente">0</strong>
-            <span>Pendentes</span>
-          </div>
-        </div>
-        <div class="moto-progress-bar-wrap">
-          <div class="moto-progress-bar" id="progressBar"></div>
-        </div>
-        <div id="progressLabel" class="moto-progress-label">— de — entregas concluídas</div>
-      </div>
-
-      <!-- AVISO SEM ROTA -->
-      <div id="semRotaMsg" class="moto-sem-rota hidden">
-        <span class="moto-sem-icon">🚚</span>
-        <p>Nenhuma rota em andamento</p>
-        <small>Aguarde a ativação pelo administrador.</small>
-      </div>
-
-      <!-- LISTA DE PEDIDOS -->
-      <div>
-        <h3 class="moto-section-title" id="listTitle" style="display:none">
-          📦 Seus pedidos do dia
-        </h3>
-        <div id="pedidosList" class="moto-pedidos-list"></div>
-      </div>
-
-      <!-- MAPA -->
-      <div id="mapaSection" class="moto-mapa-section hidden">
-        <h3 class="moto-section-title">📍 Mapa de entregas</h3>
-        <div id="motoristaMap" class="moto-map"></div>
-      </div>
-
+    <!-- ABAS DE NAVEGAÇÃO -->
+    <div class="moto-tabs">
+      <button class="moto-tab active" data-tab="entregas" id="tabBtnEntregas">
+        🚚 Minhas Entregas
+      </button>
+      <button class="moto-tab" data-tab="mural" id="tabBtnMural">
+        📋 Pedidos Disponíveis
+      </button>
     </div>
 
-    <!-- BOTÃO FLUTUANTE -->
+    <div class="moto-content">
+
+      <!-- ════════════════════════════════════════════
+           ABA: MINHAS ENTREGAS
+      ════════════════════════════════════════════ -->
+      <div id="tabEntregas" class="moto-tab-panel">
+
+        <!-- CARD DE PROGRESSO -->
+        <div class="moto-progress-card">
+          <div class="moto-progress-stats">
+            <div class="moto-stat">
+              <strong id="statTotal">0</strong>
+              <span>Total</span>
+            </div>
+            <div class="moto-stat moto-stat-green">
+              <strong id="statFeito">0</strong>
+              <span>Entregues</span>
+            </div>
+            <div class="moto-stat moto-stat-orange">
+              <strong id="statPendente">0</strong>
+              <span>Pendentes</span>
+            </div>
+          </div>
+          <div class="moto-progress-bar-wrap">
+            <div class="moto-progress-bar" id="progressBar"><i></i></div>
+          </div>
+          <div id="progressLabel" class="moto-progress-label">— de — entregas concluídas</div>
+        </div>
+
+        <!-- AVISO SEM ROTA -->
+        <div id="semRotaMsg" class="moto-sem-rota hidden">
+          <span class="moto-sem-icon">🚚</span>
+          <p>Nenhuma rota em andamento</p>
+          <small>Vá até "Pedidos Disponíveis" para pegar pedidos.</small>
+        </div>
+
+        <!-- LISTA DE PEDIDOS -->
+        <div>
+          <h3 class="moto-section-title" id="listTitle" style="display:none">
+            📦 Seus pedidos do dia
+          </h3>
+          <div id="pedidosList" class="moto-pedidos-list"></div>
+        </div>
+
+        <!-- MAPA -->
+        <div id="mapaSection" class="moto-mapa-section hidden">
+          <h3 class="moto-section-title">📍 Mapa de entregas</h3>
+          <div id="motoristaMap" class="moto-map"></div>
+        </div>
+
+      </div><!-- /tabEntregas -->
+
+      <!-- ════════════════════════════════════════════
+           ABA: MURAL DE PEDIDOS
+      ════════════════════════════════════════════ -->
+      <div id="tabMural" class="moto-tab-panel hidden">
+
+        <!-- RESUMO DO MURAL -->
+        <div class="moto-mural-resumo" id="muralResumo" style="display:none">
+          <div class="moto-mural-resumo-item">
+            <strong id="muralCount">0</strong>
+            <span>Disponíveis</span>
+          </div>
+          <div class="moto-mural-resumo-item urgente">
+            <strong id="muralUrgente">0</strong>
+            <span>Urgentes</span>
+          </div>
+        </div>
+
+        <!-- AVISO VAZIO -->
+        <div id="muralVazio" class="moto-sem-rota hidden">
+          <span class="moto-sem-icon">📋</span>
+          <p>Nenhum pedido disponível</p>
+          <small>Novos pedidos aparecerão aqui assim que cadastrados.</small>
+        </div>
+
+        <!-- LOADING -->
+        <div id="muralLoading" class="moto-mural-loading">
+          Carregando pedidos…
+        </div>
+
+        <!-- CARDS DOS PEDIDOS -->
+        <div id="muralList" class="moto-pedidos-list"></div>
+
+      </div><!-- /tabMural -->
+
+    </div><!-- /moto-content -->
+
+    <!-- BOTÃO FLUTUANTE: abrir no Maps (aba entregas) -->
     <div id="floatingBtn" class="moto-floating hidden">
       <button class="moto-btn moto-btn-maps" onclick="abrirNoMaps()">
         📍 Abrir próxima entrega no Maps
+      </button>
+    </div>
+
+    <!-- BOTÃO FLUTUANTE: pegar selecionados (aba mural) -->
+    <div id="floatingBtnMural" class="moto-floating moto-floating-mural hidden">
+      <button class="moto-btn moto-btn-primary" onclick="pegarPedidosSelecionados()">
+        ✋ Pegar selecionados (<span id="selCount">0</span>)
       </button>
     </div>
 

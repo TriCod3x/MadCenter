@@ -1382,7 +1382,15 @@ tr:hover td {
 }
 
 .toast.show { display: block; }
+.toast.active { display: block; }
 .mobile-only { display: none; }
+
+.quick-access-btn {
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 /* ======================================
    RESPONSIVIDADE — TABLET

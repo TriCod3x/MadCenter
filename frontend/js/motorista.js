@@ -5,6 +5,28 @@
 const API_BASE = window.location.port === "3000" ? "" : "http://localhost:3000";
 const MOTO_SESSION_KEY = "madcenter_motorista";
 
+// Coordenadas fixas da loja (ponto de partida de todas as rotas)
+const LOJA_LAT = -4.760287;
+const LOJA_LNG = -42.573777;
+
+// Coordenadas de municípios para fallback quando pedido não tem lat/lng
+const MUNICIPIOS_COORDS_MOTO = {
+  "timon-ma":           { lat: -4.760287, lng: -42.573777 },
+  "jose de freitas-pi": { lat: -4.43028,  lng: -42.62778  },
+  "teresina-pi":        { lat: -5.0892,   lng: -42.8016   },
+  "caxias-ma":          { lat: -4.8589,   lng: -43.3561   },
+  "codo-ma":            { lat: -4.4556,   lng: -43.8924   },
+  "campo maior-pi":     { lat: -4.8278,   lng: -42.1686   },
+  "sao luis-ma":        { lat: -2.5307,   lng: -44.3068   }
+};
+
+function obterCoordsMunicipio(municipio, estado) {
+  const key = `${(municipio || "").toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ").trim()}-${(estado || "").toLowerCase()}`;
+  return MUNICIPIOS_COORDS_MOTO[key] || { lat: LOJA_LAT, lng: LOJA_LNG };
+}
+
 // ── Estado global ────────────────────────────────────────────────────────────
 
 const state = {
@@ -15,6 +37,7 @@ const state = {
   driverMarker:    null,
   deliveryMarkers: {},
   routeLine:       null,
+  rotaLayer:       null,
   geoWatchId:      null,
   currentPos:      null    // { lat, lng }
 };
@@ -23,6 +46,17 @@ const state = {
 
 async function apiGet(url) {
   const res = await fetch(url);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+  return json;
+}
+
+async function apiPost(url, data) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
   return json;
@@ -132,7 +166,7 @@ function mostrarTelaPrincipal() {
 
 async function carregarEntregasDoDia(motoristaId) {
   document.getElementById("pedidosList").innerHTML =
-    `<div style="text-align:center;padding:24px;color:var(--moto-muted)">Carregando…</div>`;
+    `<div class="moto-mural-loading">Carregando…</div>`;
 
   try {
     const [todasRotas, todosPedidos] = await Promise.all([
@@ -328,7 +362,7 @@ async function marcarEntregue(pedidoId, rotaId) {
 
     renderPedidos();
     atualizarProgresso();
-    atualizarMarcadoresMapa();
+    desenharRota();
 
   } catch (e) {
     console.error(e);
@@ -372,7 +406,7 @@ async function deixarParaDepois(pedidoId, rotaId) {
     toast("📅 Pedido adiado para outro dia.");
     renderPedidos();
     atualizarProgresso();
-    atualizarMarcadoresMapa();
+    desenharRota();
 
   } catch (e) {
     console.error(e);
@@ -384,29 +418,37 @@ async function deixarParaDepois(pedidoId, rotaId) {
 // ── Mapa Leaflet ──────────────────────────────────────────────────────────────
 
 function iniciarMapa() {
-  const container = document.getElementById("motoristaMap");
-  if (!container || !window.L) return;
-
-  // Remove mapa anterior
+  // Destrói instância anterior
   if (state.map) {
     if (state.geoWatchId !== null) {
       navigator.geolocation.clearWatch(state.geoWatchId);
       state.geoWatchId = null;
     }
     state.map.remove();
-    state.map = null;
-    state.driverMarker = null;
+    state.map             = null;
+    state.driverMarker    = null;
     state.deliveryMarkers = {};
-    state.routeLine = null;
+    state.routeLine       = null;
+    state.rotaLayer       = null;
   }
 
-  // Centro inicial: primeiro pedido pendente com coords ou coordenada padrão
+  if (!window.L) return;
+
+  const container = document.getElementById("motoristaMap");
+  if (!container) return;
+
+  // Retry enquanto o container ainda não tem altura real no DOM
+  if (container.offsetHeight === 0) {
+    setTimeout(iniciarMapa, 300);
+    return;
+  }
+
   const primeiroPendente = state.pedidos.find(
     p => p.status !== "entregue" && p.lat && p.lng
   );
   const centro = primeiroPendente
     ? [Number(primeiroPendente.lat), Number(primeiroPendente.lng)]
-    : [-5.0892, -42.8016]; // Teresina/PI
+    : [LOJA_LAT, LOJA_LNG];
 
   state.map = L.map("motoristaMap", { zoomControl: true }).setView(centro, 12);
 
@@ -415,112 +457,396 @@ function iniciarMapa() {
     attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>'
   }).addTo(state.map);
 
-  atualizarMarcadoresMapa();
-  iniciarGeolocalizacao();
+  // Marcador fixo da loja
+  L.marker([LOJA_LAT, LOJA_LNG], {
+    icon: L.divIcon({
+      className: "",
+      html: `<div style="width:18px;height:18px;border-radius:50%;background:#4caf50;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45);"></div>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9]
+    })
+  }).bindPopup("🏪 Madcenter — Ponto de partida").addTo(state.map);
 
-  setTimeout(() => state.map?.invalidateSize(), 180);
+  setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 200);
+
+  desenharRota();
+  iniciarGeolocalizacao();
 }
 
-function atualizarMarcadoresMapa() {
-  if (!state.map) return;
-
-  // Remove marcadores anteriores
-  Object.values(state.deliveryMarkers).forEach(m => { try { m.remove(); } catch {} });
-  state.deliveryMarkers = {};
-  if (state.routeLine) { try { state.routeLine.remove(); } catch {} state.routeLine = null; }
-
-  const pendentes = state.pedidos.filter(p => p.status !== "entregue" && p.lat && p.lng);
-  const entregues = state.pedidos.filter(p => p.status === "entregue" && p.lat && p.lng);
-  const proximo   = pendentes[0];
-
-  // Marcadores verdes (entregues)
-  entregues.forEach(p => {
-    const icon = divIcon("#4caf50", 14, false);
-    const m = L.marker([Number(p.lat), Number(p.lng)], { icon });
-    m.bindPopup(`<b>${p.codigo}</b><br>${p.cliente}<br>✅ Entregue`);
-    m.addTo(state.map);
-    state.deliveryMarkers[p.id] = m;
-  });
-
-  // Marcadores pendentes (azul pulsante = próximo, laranja = demais)
-  pendentes.forEach((p, idx) => {
-    const isNext = idx === 0;
-    const color  = isNext ? "#2196f3" : "#ff9800";
-    const size   = isNext ? 20 : 14;
-    const icon   = divIcon(color, size, isNext);
-    const m = L.marker([Number(p.lat), Number(p.lng)], { icon });
-    const label = isNext ? "📍 Próxima entrega" : "⏳ Pendente";
-    m.bindPopup(`<b>${p.codigo}</b><br>${p.cliente}<br>${label}`);
-    m.addTo(state.map);
-    state.deliveryMarkers[p.id] = m;
-  });
-
-  // Polyline: posição atual (ou última entrega) → próximo pedido
-  const partida = state.currentPos ||
-    (entregues.length
-      ? { lat: Number(entregues[entregues.length - 1].lat), lng: Number(entregues[entregues.length - 1].lng) }
-      : null);
-
-  if (proximo && partida) {
-    state.routeLine = L.polyline(
-      [[partida.lat, partida.lng], [Number(proximo.lat), Number(proximo.lng)]],
-      { color: "#2196f3", weight: 3, opacity: .85, dashArray: "8 5" }
-    ).addTo(state.map);
+async function buscarRotaOSRM(pontos) {
+  try {
+    const coords = pontos.map(p => `${p.lng},${p.lat}`).join(";");
+    const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.code !== "Ok" || !data.routes?.length) return null;
+    return data.routes[0].geometry;
+  } catch {
+    return null;
   }
 }
 
-function divIcon(color, size, pulse = false) {
-  const animation = pulse
-    ? `animation:moto-pulse 1.6s ease-out infinite;`
-    : "";
-  return L.divIcon({
-    className: "",
-    html: `<div style="
-      width:${size}px;height:${size}px;
-      border-radius:50%;
-      background:${color};
-      border:2px solid #fff;
-      box-shadow:0 2px 8px rgba(0,0,0,.35);
-      ${animation}
-    "></div>`,
-    iconSize:   [size, size],
-    iconAnchor: [size / 2, size / 2]
+async function desenharRota() {
+  if (!state.map) return;
+
+  // Remove marcadores e camada de rota anteriores
+  Object.values(state.deliveryMarkers).forEach(m => { try { m.remove(); } catch {} });
+  state.deliveryMarkers = {};
+  if (state.routeLine) { try { state.routeLine.remove(); } catch {} state.routeLine = null; }
+  if (state.rotaLayer) { try { state.map.removeLayer(state.rotaLayer); } catch {} state.rotaLayer = null; }
+
+  const entregues = state.pedidos.filter(p => p.status === "entregue");
+  const pendentes = state.pedidos.filter(p => p.status !== "entregue");
+  if (!pendentes.length && !entregues.length) return;
+
+  const getCoordsP = p => ({
+    lat: p.lat ? Number(p.lat) : obterCoordsMunicipio(p.destino_municipio, p.destino_estado).lat,
+    lng: p.lng ? Number(p.lng) : obterCoordsMunicipio(p.destino_municipio, p.destino_estado).lng
+  });
+
+  const ultimoEntregue = entregues.length ? entregues[entregues.length - 1] : null;
+  const pontoPartida   = ultimoEntregue ? getCoordsP(ultimoEntregue) : { lat: LOJA_LAT, lng: LOJA_LNG };
+  const pontos         = [pontoPartida, ...pendentes.map(getCoordsP)];
+
+  if (pontos.length >= 2) {
+    const geojson = await buscarRotaOSRM(pontos);
+    if (geojson) {
+      state.rotaLayer = L.geoJSON(geojson, {
+        style: { color: "#2196f3", weight: 5, opacity: 0.85 }
+      }).addTo(state.map);
+    } else {
+      // Fallback: linha pontilhada se OSRM não responder
+      state.rotaLayer = L.polyline(
+        pontos.map(p => [p.lat, p.lng]),
+        { color: "#2196f3", weight: 4, dashArray: "8,6" }
+      ).addTo(state.map);
+    }
+    try { state.map.fitBounds(state.rotaLayer.getBounds(), { padding: [30, 30] }); } catch {}
+  }
+
+  // Marcadores dos pedidos (circleMarker)
+  const allPedidos = [...entregues, ...pendentes];
+  allPedidos.forEach((p, i) => {
+    const { lat, lng } = getCoordsP(p);
+    const isEntregue = p.status === "entregue";
+    const isProximo  = !isEntregue && i === entregues.length;
+    const cor = isEntregue ? "#4caf50" : isProximo ? "#2196f3" : "#ff9800";
+    const marker = L.circleMarker([lat, lng], {
+      radius: 10, color: "#fff", weight: 2, fillColor: cor, fillOpacity: 1
+    });
+    const label = isEntregue ? "✅ Entregue" : isProximo ? "📍 Próxima entrega" : "⏳ Pendente";
+    marker.bindPopup(`<b>${p.codigo || "—"}</b><br>${p.cliente || "—"}<br>${label}`);
+    marker.addTo(state.map);
+    state.deliveryMarkers[p.id] = marker;
   });
 }
 
 function iniciarGeolocalizacao() {
   if (!navigator.geolocation || !state.map) return;
 
-  const driverIcon = L.divIcon({
-    className: "",
-    html: `<div style="
-      width:22px;height:22px;border-radius:50%;
-      background:#2374c6;border:3px solid #fff;
-      box-shadow:0 0 0 5px rgba(33,116,198,.25);
-    "></div>`,
-    iconSize:   [22, 22],
-    iconAnchor: [11, 11]
-  });
-
   state.geoWatchId = navigator.geolocation.watchPosition(
     pos => {
-      const { latitude: lat, longitude: lng } = pos.coords;
-      state.currentPos = { lat, lng };
+      const { latitude, longitude } = pos.coords;
+      state.currentPos = { lat: latitude, lng: longitude };
 
-      if (!state.driverMarker) {
-        state.driverMarker = L.marker([lat, lng], { icon: driverIcon });
-        state.driverMarker.bindPopup("📍 Sua posição atual");
-        state.driverMarker.addTo(state.map);
+      if (state.driverMarker) {
+        state.driverMarker.setLatLng([latitude, longitude]);
       } else {
-        state.driverMarker.setLatLng([lat, lng]);
+        state.driverMarker = L.marker([latitude, longitude], {
+          icon: L.divIcon({
+            className: "marcador-motorista",
+            html: `<div style="width:20px;height:20px;background:#00bcd4;border:3px solid white;border-radius:50%;box-shadow:0 0 8px rgba(0,188,212,0.8);"></div>`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+          }),
+          title: "Sua localização"
+        }).addTo(state.map)
+          .bindPopup("📍 Você está aqui");
       }
-
-      // Atualiza polyline com posição real
-      atualizarMarcadoresMapa();
     },
     err => console.warn("Geolocalização indisponível:", err.message),
-    { enableHighAccuracy: true, maximumAge: 8000, timeout: 12000 }
+    { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
   );
+}
+
+// ── Abas ─────────────────────────────────────────────────────────────────────
+
+function switchTab(tab) {
+  const isEntregas = tab === "entregas";
+
+  document.getElementById("tabEntregas").classList.toggle("hidden", !isEntregas);
+  document.getElementById("tabMural").classList.toggle("hidden", isEntregas);
+
+  document.getElementById("tabBtnEntregas").classList.toggle("active", isEntregas);
+  document.getElementById("tabBtnMural").classList.toggle("active", !isEntregas);
+
+  // Botões flutuantes
+  if (isEntregas) {
+    const proximoComCoord = state.pedidos.find(
+      p => p.status !== "entregue" && p.lat && p.lng
+    );
+    if (proximoComCoord) show("floatingBtn"); else hide("floatingBtn");
+    hide("floatingBtnMural");
+  } else {
+    hide("floatingBtn");
+    atualizarBotaoMural();
+    carregarMural();
+  }
+}
+
+// ── Mural de Pedidos ──────────────────────────────────────────────────────────
+
+const muralState = {
+  pedidos:     [],
+  selecionados: new Set()
+};
+
+const PRIORIDADE_ORDEM = { urgente: 3, alta: 2, normal: 1, baixa: 0 };
+
+const moneyMural = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+async function carregarMural() {
+  const loading = document.getElementById("muralLoading");
+  const vazio   = document.getElementById("muralVazio");
+  const resumo  = document.getElementById("muralResumo");
+  const list    = document.getElementById("muralList");
+
+  loading.style.display = "block";
+  list.innerHTML        = "";
+  vazio.classList.add("hidden");
+  resumo.style.display = "none";
+
+  try {
+    const todos = await apiGet(`${API_BASE}/api/pedidos`);
+    muralState.pedidos     = todos.filter(p => p.status === "aguardando rota");
+    muralState.selecionados.clear();
+    atualizarBotaoMural();
+    renderMural();
+  } catch (e) {
+    list.innerHTML = `<div class="moto-mural-loading">Erro ao carregar pedidos. Tente novamente.</div>`;
+    console.error(e);
+  } finally {
+    loading.style.display = "none";
+  }
+}
+
+function renderMural() {
+  const vazio  = document.getElementById("muralVazio");
+  const resumo = document.getElementById("muralResumo");
+  const list   = document.getElementById("muralList");
+
+  if (!muralState.pedidos.length) {
+    vazio.classList.remove("hidden");
+    resumo.style.display = "none";
+    list.innerHTML       = "";
+    return;
+  }
+
+  vazio.classList.add("hidden");
+  resumo.style.display = "grid";
+
+  const urgentes = muralState.pedidos.filter(p => p.prioridade === "urgente").length;
+  document.getElementById("muralCount").textContent   = muralState.pedidos.length;
+  document.getElementById("muralUrgente").textContent = urgentes;
+
+  // Ordena: prioridade desc, depois data prevista de entrega asc
+  const ordenados = [...muralState.pedidos].sort((a, b) => {
+    const pa = PRIORIDADE_ORDEM[a.prioridade] ?? 1;
+    const pb = PRIORIDADE_ORDEM[b.prioridade] ?? 1;
+    if (pb !== pa) return pb - pa;
+    return (a.entrega || "").localeCompare(b.entrega || "");
+  });
+
+  list.innerHTML = ordenados.map(p => {
+    const endereco = [p.endereco_entrega, p.numero, p.complemento]
+      .filter(Boolean).join(", ");
+    const destino  = [p.destino_municipio, p.destino_estado]
+      .filter(Boolean).join("/");
+    const prio     = p.prioridade || "normal";
+    const prioLabel = {
+      urgente: "🔴 Urgente", alta: "🟠 Alta",
+      normal:  "🟢 Normal",  baixa: "⚪ Baixa"
+    }[prio] || prio;
+
+    const dataEntrega = p.entrega
+      ? new Date(p.entrega + "T00:00").toLocaleDateString("pt-BR")
+      : "—";
+
+    const selecionado = muralState.selecionados.has(p.id);
+
+    return `
+      <div class="moto-mural-card${selecionado ? " is-selected" : ""}"
+           data-prioridade="${prio}" id="mural-card-${p.id}">
+        <div class="moto-mural-header">
+          <div class="moto-mural-header-left">
+            <input type="checkbox" class="moto-mural-checkbox"
+                   id="chk-${p.id}"
+                   ${selecionado ? "checked" : ""}
+                   onchange="toggleSelecionado('${p.id}', this.checked)">
+            <span class="moto-mural-codigo">${p.codigo || "—"}</span>
+            <span class="moto-badge moto-badge-${prio}">${prioLabel}</span>
+          </div>
+        </div>
+
+        <div class="moto-mural-info">
+          <div class="moto-mural-row">
+            <span class="moto-mural-label">Cliente</span>
+            <span class="moto-mural-value">${p.cliente || "—"}${p.telefone ? ` · ${p.telefone}` : ""}</span>
+          </div>
+          <div class="moto-mural-row">
+            <span class="moto-mural-label">Material</span>
+            <span class="moto-mural-value">${p.descricao || "—"}</span>
+          </div>
+          ${endereco ? `
+          <div class="moto-mural-row">
+            <span class="moto-mural-label">Endereço</span>
+            <span class="moto-mural-value">${endereco}</span>
+          </div>` : ""}
+          <div class="moto-mural-row">
+            <span class="moto-mural-label">Destino</span>
+            <span class="moto-mural-value">${destino || "—"}</span>
+          </div>
+          <div class="moto-mural-chips">
+            <span>⚖️ ${p.peso || 0} kg</span>
+            <span>💰 ${moneyMural.format(Number(p.valor_frete || 0))}</span>
+            <span>📅 ${dataEntrega}</span>
+          </div>
+        </div>
+
+        <button class="moto-btn moto-btn-pegar"
+                id="btn-pegar-${p.id}"
+                onclick="pegarPedido('${p.id}')">
+          ✋ Pegar este pedido
+        </button>
+      </div>
+    `;
+  }).join("");
+}
+
+function toggleSelecionado(pedidoId, checked) {
+  const card = document.getElementById(`mural-card-${pedidoId}`);
+  if (checked) {
+    muralState.selecionados.add(pedidoId);
+    card?.classList.add("is-selected");
+  } else {
+    muralState.selecionados.delete(pedidoId);
+    card?.classList.remove("is-selected");
+  }
+  atualizarBotaoMural();
+}
+
+function atualizarBotaoMural() {
+  const n   = muralState.selecionados.size;
+  const btn = document.getElementById("floatingBtnMural");
+  const cnt = document.getElementById("selCount");
+  if (cnt) cnt.textContent = n;
+  if (btn) btn.classList.toggle("hidden", n < 2);
+}
+
+async function pegarPedido(pedidoId) {
+  const btn = document.getElementById(`btn-pegar-${pedidoId}`);
+  if (btn) { btn.disabled = true; btn.textContent = "Processando…"; }
+
+  try {
+    const pedido = muralState.pedidos.find(p => p.id === pedidoId);
+    if (!pedido) return;
+
+    await _associarPedidosARota([pedido]);
+
+    toast("Pedido adicionado à sua rota! 🚚");
+
+    // Remove do mural local
+    muralState.pedidos     = muralState.pedidos.filter(p => p.id !== pedidoId);
+    muralState.selecionados.delete(pedidoId);
+    atualizarBotaoMural();
+    renderMural();
+
+    // Atualiza aba de entregas em background
+    carregarEntregasDoDia(state.motorista.id).catch(() => {});
+  } catch (e) {
+    console.error(e);
+    toast("Erro ao pegar pedido. Tente novamente.", "erro");
+    if (btn) { btn.disabled = false; btn.textContent = "✋ Pegar este pedido"; }
+  }
+}
+
+async function pegarPedidosSelecionados() {
+  const ids     = [...muralState.selecionados];
+  const pedidos = muralState.pedidos.filter(p => ids.includes(p.id));
+  if (!pedidos.length) return;
+
+  const btn = document.getElementById("floatingBtnMural");
+  if (btn) btn.style.opacity = ".5";
+
+  try {
+    await _associarPedidosARota(pedidos);
+
+    toast(`${pedidos.length} pedidos adicionados à sua rota! 🚚`);
+
+    muralState.pedidos     = muralState.pedidos.filter(p => !ids.includes(p.id));
+    muralState.selecionados.clear();
+    atualizarBotaoMural();
+    renderMural();
+
+    carregarEntregasDoDia(state.motorista.id).catch(() => {});
+  } catch (e) {
+    console.error(e);
+    toast("Erro ao criar rota. Tente novamente.", "erro");
+  } finally {
+    if (btn) btn.style.opacity = "";
+  }
+}
+
+async function _associarPedidosARota(pedidos) {
+  // Busca rotas do motorista para saber se já tem uma "em andamento"
+  const todasRotas = await apiGet(`${API_BASE}/api/rotas`);
+  const rotaAtiva  = todasRotas.find(r =>
+    r.motorista_id === state.motorista.id &&
+    r.status       === "em andamento"
+  );
+
+  const pedidoIds   = pedidos.map(p => p.id);
+  const freteExtra  = pedidos.reduce((s, p) => s + Number(p.valor_frete || 0), 0);
+  const distExtra   = pedidos.reduce((s, p) => s + Number(p.distancia_km || 0), 0);
+
+  if (rotaAtiva) {
+    // Adiciona à rota existente
+    const novasIds   = [...(rotaAtiva.cargas_ids || []), ...pedidoIds];
+    const novoFrete  = Number((Number(rotaAtiva.frete_total || 0) + freteExtra).toFixed(2));
+    const novaDist   = Number((Number(rotaAtiva.distancia || 0) + distExtra).toFixed(1));
+    await apiPut(`${API_BASE}/api/rotas/${rotaAtiva.id}`, {
+      cargas_ids:  novasIds,
+      frete_total: novoFrete,
+      distancia:   novaDist
+    });
+  } else {
+    // Cria nova rota
+    const primeiro = pedidos[0];
+    await apiPost(`${API_BASE}/api/rotas`, {
+      nome:              `${primeiro.destino_municipio} · ${state.motorista.nome}`,
+      tipo_rota:         "Rodoviária",
+      destino_municipio: primeiro.destino_municipio,
+      destino_estado:    primeiro.destino_estado,
+      motorista_id:      state.motorista.id,
+      status:            "em andamento",
+      cargas_ids:        pedidoIds,
+      frete_total:       Number(freteExtra.toFixed(2)),
+      distancia:         Number(distExtra.toFixed(1)),
+      saida:             null,
+      chegada:           null,
+      tempo:             null,
+      observacoes:       "Rota criada pelo motorista via mural de pedidos."
+    });
+  }
+
+  // Atualiza status de cada pedido para "em rota"
+  for (const pedido of pedidos) {
+    await apiPut(`${API_BASE}/api/pedidos/${pedido.id}`, { status: "em rota" });
+  }
+
+  // Atualiza status do motorista para "em entrega"
+  await apiPut(`${API_BASE}/api/motoristas/${state.motorista.id}`, { status: "em entrega" });
 }
 
 // ── Google Maps ───────────────────────────────────────────────────────────────
@@ -535,9 +861,31 @@ function abrirNoMaps() {
   window.open(url, "_blank");
 }
 
+// ── Tema claro/escuro ─────────────────────────────────────────────────────────
+
+function aplicarTema(tema) {
+  document.documentElement.setAttribute("data-theme", tema);
+  const btn = document.getElementById("themeToggle");
+  if (btn) btn.textContent = tema === "dark" ? "☀️" : "🌙";
+}
+
+function alternarTema() {
+  const atual = document.documentElement.getAttribute("data-theme") || "dark";
+  const novo  = atual === "dark" ? "light" : "dark";
+  localStorage.setItem("madcenter_tema", novo);
+  aplicarTema(novo);
+  // Recalcula o mapa após troca de tema (caso layout mude)
+  if (state.map) setTimeout(() => state.map.invalidateSize(), 60);
+}
+
 // ── Inicialização ────────────────────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Tema (já aplicado no <head>; aqui só sincroniza o ícone e o listener)
+  aplicarTema(localStorage.getItem("madcenter_tema") || "dark");
+  const themeBtn = document.getElementById("themeToggle");
+  if (themeBtn) themeBtn.addEventListener("click", alternarTema);
+
   // Verifica sessão existente
   const saved = sessionStorage.getItem(MOTO_SESSION_KEY);
   if (saved) {
@@ -551,6 +899,11 @@ document.addEventListener("DOMContentLoaded", () => {
   } else {
     carregarMotoristas();
   }
+
+  // Abas
+  document.querySelectorAll(".moto-tab").forEach(btn => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
 
   // Eventos
   document.getElementById("loginBtn").addEventListener("click", fazerLogin);
