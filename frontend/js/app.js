@@ -103,23 +103,8 @@ function _iniciarPolling() {
     try {
       await initStorage();
       renderAll();
-      _mostrarSincBadge();
     } catch { /* ignora erros de rede no polling silencioso */ }
   }, 10000);
-}
-
-function _mostrarSincBadge() {
-  let badge = document.getElementById("adminSyncBadge");
-  if (!badge) {
-    badge = document.createElement("div");
-    badge.id = "adminSyncBadge";
-    badge.className = "admin-sync-badge";
-    document.body.appendChild(badge);
-  }
-  badge.textContent = "✓ atualizado";
-  badge.classList.add("visible");
-  clearTimeout(badge._t);
-  badge._t = setTimeout(() => badge.classList.remove("visible"), 1500);
 }
 
 document.addEventListener("DOMContentLoaded", async () => {

@@ -151,23 +151,9 @@ async function _pollSilencioso() {
     } else {
       await carregarMural(true);
     }
-    _mostrarSincBadge();
   } catch { /* ignora erros de rede no polling silencioso */ }
 }
 
-function _mostrarSincBadge() {
-  let badge = document.getElementById("motoSyncBadge");
-  if (!badge) {
-    badge = document.createElement("div");
-    badge.id = "motoSyncBadge";
-    badge.className = "moto-sync-badge";
-    document.body.appendChild(badge);
-  }
-  badge.textContent = "✓ atualizado";
-  badge.classList.add("visible");
-  clearTimeout(badge._t);
-  badge._t = setTimeout(() => badge.classList.remove("visible"), 1500);
-}
 
 async function carregarEntregasDoDia(motoristaId, silencioso = false) {
   if (!silencioso) {

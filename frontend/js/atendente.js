@@ -181,7 +181,6 @@ async function carregarPedidos(silencioso = false) {
     const hoje  = filtrarHoje(todos);
     atualizarResumo(hoje);
     renderLista(hoje);
-    if (silencioso) _mostrarSincBadge();
   } catch {
     if (!silencioso) {
       document.getElementById("pedidosList").innerHTML =
@@ -416,20 +415,6 @@ function _pararPolling() {
 function _iniciarPolling() {
   _pararPolling();
   _pollingId = setInterval(() => carregarPedidos(true).catch(() => {}), 10000);
-}
-
-function _mostrarSincBadge() {
-  let badge = document.getElementById("atendSyncBadge");
-  if (!badge) {
-    badge = document.createElement("div");
-    badge.id = "atendSyncBadge";
-    badge.className = "atend-sync-badge";
-    document.body.appendChild(badge);
-  }
-  badge.textContent = "✓ atualizado";
-  badge.classList.add("visible");
-  clearTimeout(badge._t);
-  badge._t = setTimeout(() => badge.classList.remove("visible"), 1500);
 }
 
 function mostrarTelaPrincipal() {
