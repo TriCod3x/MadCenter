@@ -50,8 +50,6 @@ const fields = {
     ["complemento", "Complemento", "text", false],
     ["cliente", "Cliente", "text", true],
     ["telefone", "Telefone/WhatsApp", "phone", true],
-    ["coleta", "Data prevista de saída", "date", true],
-    ["entrega", "Data prevista de entrega", "date", true],
     ["prioridade", "Prioridade", "select:baixa,normal,alta,urgente", true],
     ["veiculoTipo", "Tipo de veículo", "vehicle", true],
     ["status", "Status", "select:aguardando rota,em rota,próximo dia,entregue,cancelado", true],
@@ -86,26 +84,6 @@ let _mapPickerCoords = null;
 let _mapPickerForm = null;
 let _mapPickerInitTimer = null;
 
-let _pollingId = null;
-
-// ── Polling de atualização em tempo real ─────────────────────────────────────
-
-function _pararPolling() {
-  if (_pollingId !== null) {
-    clearInterval(_pollingId);
-    _pollingId = null;
-  }
-}
-
-function _iniciarPolling() {
-  _pararPolling();
-  _pollingId = setInterval(async () => {
-    try {
-      await initStorage();
-      renderAll();
-    } catch { /* ignora erros de rede no polling silencioso */ }
-  }, 10000);
-}
 
 document.addEventListener("DOMContentLoaded", async () => {
   const _token  = sessionStorage.getItem("madcenter_token");
@@ -121,7 +99,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     await initStorage();
     renderAll();
-    _iniciarPolling();
   } catch (e) {
     console.error("Erro ao carregar dados do servidor:", e);
     toast("Erro ao conectar ao servidor. Verifique se o backend está rodando.");
@@ -173,7 +150,6 @@ function bindLayoutEvents() {
     renderEntregasChart(_chartPeriodo);
   });
   document.getElementById("logoutBtn").addEventListener("click", () => {
-    _pararPolling();
     sessionStorage.removeItem("madcenter_token");
     sessionStorage.removeItem("madcenter_nome");
     sessionStorage.removeItem("madcenter_perfil");
@@ -315,57 +291,80 @@ function renderDashboard() {
 let _entregasChart = null;
 let _chartPeriodo = "semana";
 
+// Resolve a melhor data disponível para um pedido entregue.
+// Prioridade: dataEntrega → entrega → criadoEm → criado_em (fallback para pedidos sem data de entrega).
+function _resolverDataEntrega(c) {
+  const raw = c.dataEntrega || c.entrega || c.criadoEm || c.criado_em;
+  if (!raw) return null;
+  const str = String(raw);
+  const dt = new Date(str.length === 10 ? str + "T00:00Z" : str);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
 function getEntregasFiltradas(periodo) {
+  // Datas salvas como "fake-UTC" (horário de Brasília embutido com sufixo Z).
+  // Para comparar corretamente, deslocamos "agora" em -3h e usamos métodos getUTC*,
+  // que passam a retornar os valores em horário de Brasília — independente do timezone do browser.
+  const BRASILIA_MS = 3 * 60 * 60 * 1000;
   const agora = new Date();
+  const agoraBrasilia = new Date(agora.getTime() - BRASILIA_MS);
+
   return getCargas().filter((c) => {
     if (c.status !== "entregue") return false;
-    const dt = c.entrega ? new Date(c.entrega) : null;
+    const dt = _resolverDataEntrega(c);
     if (!dt) return false;
+
     if (periodo === "hoje") {
-      return dt.toDateString() === agora.toDateString();
+      return dt.getUTCDate()     === agoraBrasilia.getUTCDate()     &&
+             dt.getUTCMonth()    === agoraBrasilia.getUTCMonth()    &&
+             dt.getUTCFullYear() === agoraBrasilia.getUTCFullYear();
     }
     if (periodo === "semana") {
-      const inicioSemana = new Date(agora);
-      inicioSemana.setDate(agora.getDate() - agora.getDay());
-      inicioSemana.setHours(0, 0, 0, 0);
+      const inicioSemana = new Date(agoraBrasilia);
+      inicioSemana.setUTCDate(agoraBrasilia.getUTCDate() - agoraBrasilia.getUTCDay());
+      inicioSemana.setUTCHours(0, 0, 0, 0);
       const fimSemana = new Date(inicioSemana);
-      fimSemana.setDate(inicioSemana.getDate() + 6);
-      fimSemana.setHours(23, 59, 59, 999);
+      fimSemana.setUTCDate(inicioSemana.getUTCDate() + 6);
+      fimSemana.setUTCHours(23, 59, 59, 999);
       return dt >= inicioSemana && dt <= fimSemana;
     }
     if (periodo === "mes") {
-      return dt.getMonth() === agora.getMonth() && dt.getFullYear() === agora.getFullYear();
+      return dt.getUTCMonth()    === agoraBrasilia.getUTCMonth()    &&
+             dt.getUTCFullYear() === agoraBrasilia.getUTCFullYear();
     }
     return false;
   });
 }
 
 function agruparEntregas(pedidos, periodo) {
+  const BRASILIA_MS = 3 * 60 * 60 * 1000;
   const agora = new Date();
+  const agoraBrasilia = new Date(agora.getTime() - BRASILIA_MS);
 
   if (periodo === "hoje") {
     const labels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}h`);
     const data = new Array(24).fill(0);
     pedidos.forEach((c) => {
-      const h = new Date(c.entrega).getHours();
-      data[h]++;
+      const dt = _resolverDataEntrega(c);
+      if (dt) data[dt.getUTCHours()]++;
     });
     return { labels, data };
   }
 
   if (periodo === "semana") {
     const diasNomes = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-    const inicioSemana = new Date(agora);
-    inicioSemana.setDate(agora.getDate() - agora.getDay());
-    inicioSemana.setHours(0, 0, 0, 0);
+    const inicioSemana = new Date(agoraBrasilia);
+    inicioSemana.setUTCDate(agoraBrasilia.getUTCDate() - agoraBrasilia.getUTCDay());
+    inicioSemana.setUTCHours(0, 0, 0, 0);
     const labels = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(inicioSemana);
-      d.setDate(inicioSemana.getDate() + i);
-      return diasNomes[d.getDay()];
+      d.setUTCDate(inicioSemana.getUTCDate() + i);
+      return diasNomes[d.getUTCDay()];
     });
     const data = new Array(7).fill(0);
     pedidos.forEach((c) => {
-      const dt = new Date(c.entrega);
+      const dt = _resolverDataEntrega(c);
+      if (!dt) return;
       const diff = Math.floor((dt - inicioSemana) / 86400000);
       if (diff >= 0 && diff < 7) data[diff]++;
     });
@@ -373,11 +372,13 @@ function agruparEntregas(pedidos, periodo) {
   }
 
   if (periodo === "mes") {
-    const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
+    const diasNoMes = new Date(agoraBrasilia.getUTCFullYear(), agoraBrasilia.getUTCMonth() + 1, 0).getUTCDate();
     const labels = Array.from({ length: diasNoMes }, (_, i) => String(i + 1));
     const data = new Array(diasNoMes).fill(0);
     pedidos.forEach((c) => {
-      const d = new Date(c.entrega).getDate();
+      const dt = _resolverDataEntrega(c);
+      if (!dt) return;
+      const d = dt.getUTCDate();
       if (d >= 1 && d <= diasNoMes) data[d - 1]++;
     });
     return { labels, data };
@@ -876,26 +877,7 @@ function fieldHtml(field, item) {
       </label>
       <label class="form-field">
         <span>Frete (R$)</span>
-        <div class="frete-wrap">
-          <div class="frete-input-row">
-            <input type="number" id="freteManual" name="valorFrete" value="${freteAtual}" placeholder="0.00" min="0" step="0.01">
-            <button type="button" class="btn-frete-calc" onclick="toggleFreteCalc()">${Icons.zap(14)} Calcular combustível</button>
-          </div>
-          <div id="freteCalcPanel" class="frete-calc-panel" style="display:none">
-            <div class="frete-calc-header">${Icons.zap(14)} Calculadora de combustível</div>
-            <div class="frete-calc-body">
-              <div class="frete-calc-fields">
-                <label class="frete-calc-label">Distância (km)<input type="number" id="calcDistancia" placeholder="150" min="0" step="0.1" oninput="calcularFreteLive()"></label>
-                <label class="frete-calc-label">Consumo (km/L)<input type="number" id="calcConsumo" placeholder="12" min="0.1" step="0.1" oninput="calcularFreteLive()"></label>
-                <label class="frete-calc-label">Gasolina (R$/L)<input type="number" id="calcGasolina" placeholder="6.50" min="0" step="0.01" oninput="calcularFreteLive()"></label>
-              </div>
-              <div class="frete-calc-footer">
-                <span id="freteCalcResult" class="frete-calc-result"></span>
-                <button type="button" class="btn-aplicar-frete" onclick="aplicarFreteCombustivel()">Aplicar</button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <input type="number" id="freteManual" name="valorFrete" value="${freteAtual}" placeholder="0.00" min="0" step="0.01">
       </label>
       <input type="hidden" name="lat" value="${item?.lat || ""}">
       <input type="hidden" name="lng" value="${item?.lng || ""}">
@@ -1841,7 +1823,7 @@ async function syncRouteStatus(routeId) {
   const route = getRotas().find((item) => item.id === routeId);
   if (!route) return;
 
-  const pedidos = getCargas().filter((carga) => (route.cargasIds || []).includes(carga.id));
+  const pedidos = getCargas().filter((carga) => (route.cargasIds || []).includes(carga.id) && carga.status !== "cancelado");
 
   if (!pedidos.length) {
     // Sem pedidos restantes: cancela rota e libera motorista

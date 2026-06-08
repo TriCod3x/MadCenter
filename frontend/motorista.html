@@ -168,6 +168,21 @@
   <!-- TOAST -->
   <div id="motoToast" class="moto-toast"></div>
 
+  <!-- MODAL: Seleção de veículo -->
+  <div id="veiculoModalBackdrop" class="moto-veiculo-backdrop hidden">
+    <div class="moto-veiculo-modal" role="dialog" aria-modal="true" aria-labelledby="veiculoModalTitle">
+      <div class="moto-veiculo-modal-header">
+        <h2 id="veiculoModalTitle" class="moto-veiculo-modal-title">Selecionar Veículo</h2>
+        <button class="moto-veiculo-close" id="veiculoModalClose" aria-label="Fechar">✕</button>
+      </div>
+      <div id="veiculoList" class="moto-veiculo-list"></div>
+      <div class="moto-veiculo-footer">
+        <button class="moto-btn" id="veiculoModalCancelar">Cancelar</button>
+        <button class="moto-btn moto-btn-primary" id="veiculoModalConfirmar" disabled>Confirmar</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="js/icons.js"></script>
   <script src="js/motorista.js"></script>

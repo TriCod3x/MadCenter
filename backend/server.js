@@ -75,9 +75,132 @@ async function deletar(req, res, tabela) {
 
 // ── Pedidos ───────────────────────────────────────────────────────────────────
 app.get("/api/pedidos", (req, res) => listar(req, res, "pedidos"));
-app.post("/api/pedidos", (req, res) => criar(req, res, "pedidos"));
-app.put("/api/pedidos/:id", (req, res) => atualizar(req, res, "pedidos"));
-app.delete("/api/pedidos/:id", (req, res) => deletar(req, res, "pedidos"));
+app.post("/api/pedidos", async (req, res) => {
+  try {
+    const { data: pedido, error: errIns } = await supabase
+      .from("pedidos")
+      .insert(req.body)
+      .select()
+      .single();
+    if (errIns) return res.status(400).json({ error: errIns.message });
+
+    // Se existe rota planejada com pedidos no mesmo município → status disponivel
+    const municipio = req.body.municipio;
+    if (municipio) {
+      const { data: rotasPlanejadas } = await supabase
+        .from("rotas")
+        .select("cargas_ids")
+        .eq("status", "planejada");
+
+      const idsNasRotas = (rotasPlanejadas || [])
+        .flatMap((r) => Array.isArray(r.cargas_ids) ? r.cargas_ids : []);
+
+      if (idsNasRotas.length > 0) {
+        const { data: match } = await supabase
+          .from("pedidos")
+          .select("id")
+          .in("id", idsNasRotas)
+          .eq("municipio", municipio)
+          .limit(1);
+
+        if (match?.length > 0) {
+          await supabase.from("pedidos")
+            .update({ status: "disponivel" })
+            .eq("id", pedido.id);
+          pedido.status = "disponivel";
+        }
+      }
+    }
+
+    res.json(pedido);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.put("/api/pedidos/:id", async (req, res) => {
+  const { id } = req.params;
+
+  // Auto-preenche datas com base na mudança de status (horário de Brasília UTC-3)
+  const body = { ...req.body };
+  if (body.status === "em rota" || body.status === "entregue") {
+    const agora = new Date();
+    const brasiliaOffset = -3 * 60; // minutos
+    const brasiliaTime = new Date(agora.getTime() + brasiliaOffset * 60000);
+    const isoUTC3 = brasiliaTime.toISOString();
+    if (body.status === "em rota"  && !body.coleta)  body.coleta  = isoUTC3;
+    if (body.status === "entregue" && !body.entrega) body.entrega = isoUTC3;
+  }
+
+  const { data, error } = await supabase
+    .from("pedidos")
+    .update(body)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+
+  // Quando pedido é cancelado, limpa a rota vinculada
+  if (body.status === "cancelado") {
+    try {
+      const { data: rotas } = await supabase
+        .from("rotas")
+        .select("id, cargas_ids")
+        .not("status", "in", '("cancelada","concluida")');
+
+      const idStr = String(id);
+      for (const rota of rotas || []) {
+        const ids = Array.isArray(rota.cargas_ids) ? rota.cargas_ids : [];
+        if (!ids.some((i) => String(i) === idStr)) continue;
+        const novasIds = ids.filter((i) => String(i) !== idStr);
+        const updates = novasIds.length === 0
+          ? { cargas_ids: [], status: "cancelada" }
+          : { cargas_ids: novasIds };
+        await supabase.from("rotas").update(updates).eq("id", rota.id);
+      }
+
+      await supabase.from("rota_pedidos").delete().eq("pedido_id", id);
+    } catch (_) {
+      // limpeza de rota não bloqueia a resposta
+    }
+  }
+
+  res.json(data);
+});
+app.delete("/api/pedidos/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    // 1. Exclui o pedido
+    const { error: errDel } = await supabase
+      .from("pedidos")
+      .delete()
+      .eq("id", id);
+    if (errDel) return res.status(400).json({ error: errDel.message });
+
+    // 2. Remove o pedido de cargas_ids em todas as rotas que o contêm
+    const { data: rotas } = await supabase
+      .from("rotas")
+      .select("id, cargas_ids")
+      .not("status", "in", '("cancelada","concluida")');
+
+    for (const rota of rotas || []) {
+      const ids = Array.isArray(rota.cargas_ids) ? rota.cargas_ids : [];
+      const idStr = String(id);
+      if (!ids.some((i) => String(i) === idStr)) continue;
+      const novasIds = ids.filter((i) => String(i) !== idStr);
+      const updates = novasIds.length === 0
+        ? { cargas_ids: [], status: "cancelada" }
+        : { cargas_ids: novasIds };
+      await supabase.from("rotas").update(updates).eq("id", rota.id);
+    }
+
+    // 3. Remove de rota_pedidos se existir
+    await supabase.from("rota_pedidos").delete().eq("pedido_id", id);
+
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ── Motoristas ────────────────────────────────────────────────────────────────
 app.get("/api/motoristas", (req, res) => listar(req, res, "motoristas"));
@@ -321,27 +444,39 @@ app.delete("/api/veiculos/:id", async (req, res) => {
 app.put("/api/pedidos/:id/cancelar-motorista", async (req, res) => {
   const { id } = req.params;
   try {
+    // 1. Encontra rota ativa que contém este pedido
+    const { data: todasRotas } = await supabase
+      .from("rotas")
+      .select("id, cargas_ids")
+      .not("status", "in", '("cancelada","concluida")');
+
+    const idStr = String(id);
+    let rotaVinculada = null;
+    for (const rota of todasRotas || []) {
+      const ids = Array.isArray(rota.cargas_ids) ? rota.cargas_ids : [];
+      if (ids.some((i) => String(i) === idStr)) {
+        rotaVinculada = rota;
+        break;
+      }
+    }
+
+    // 2. Status do pedido depende de existir rota planejada vinculada
+    //    'disponivel'    → pedido está em rota planejada, sem motorista
+    //    'aguardando rota' → pedido sem nenhuma rota
+    const novoPedidoStatus = rotaVinculada ? "disponivel" : "aguardando rota";
     const { data: pedido, error: errPed } = await supabase
       .from("pedidos")
-      .update({ status: "aguardando rota" })
+      .update({ status: novoPedidoStatus })
       .eq("id", id)
       .select("id")
       .single();
     if (errPed) return res.status(400).json({ error: errPed.message });
 
-    // Remove o pedido de qualquer rota "em andamento" que o contenha
-    const { data: rotas } = await supabase
-      .from("rotas")
-      .select("id, cargas_ids")
-      .eq("status", "em andamento");
-
-    for (const rota of rotas || []) {
-      const ids = Array.isArray(rota.cargas_ids) ? rota.cargas_ids : [];
-      if (!ids.includes(id)) continue;
-      const novasIds = ids.filter(cid => cid !== id);
+    // 3. Rota volta para "planejada" sem motorista (pedido permanece em cargas_ids)
+    if (rotaVinculada) {
       await supabase.from("rotas")
-        .update(novasIds.length ? { cargas_ids: novasIds } : { cargas_ids: [], status: "cancelada" })
-        .eq("id", rota.id);
+        .update({ status: "planejada", motorista_id: null })
+        .eq("id", rotaVinculada.id);
     }
 
     res.json({ success: true, pedido });

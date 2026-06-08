@@ -41,7 +41,9 @@ const state = {
   currentPos:      null    // { lat, lng }
 };
 
-let _pollingId = null;
+// Estado do modal de seleção de veículo
+let _modalVeiculoPedidoId  = null;
+let _modalVeiculoSelecionado = null;
 
 // ── Utilitários ──────────────────────────────────────────────────────────────
 
@@ -108,7 +110,6 @@ function toast(msg, tipo = "ok") {
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 function sair() {
-  _pararPolling();
   sessionStorage.removeItem("madcenter_token");
   sessionStorage.removeItem("madcenter_nome");
   sessionStorage.removeItem("madcenter_perfil");
@@ -125,33 +126,6 @@ function mostrarTelaPrincipal() {
   document.getElementById("headerName").textContent = state.motorista.nome;
   show("mainScreen");
   carregarEntregasDoDia(state.motorista.id);
-  _iniciarPolling();
-}
-
-// ── Polling de atualização em tempo real ─────────────────────────────────────
-
-function _pararPolling() {
-  if (_pollingId !== null) {
-    clearInterval(_pollingId);
-    _pollingId = null;
-  }
-}
-
-function _iniciarPolling() {
-  _pararPolling();
-  _pollingId = setInterval(_pollSilencioso, 10000);
-}
-
-async function _pollSilencioso() {
-  if (!state.motorista?.id) return;
-  const tabEntregas = !document.getElementById("tabEntregas")?.classList.contains("hidden");
-  try {
-    if (tabEntregas) {
-      await carregarEntregasDoDia(state.motorista.id, true);
-    } else {
-      await carregarMural(true);
-    }
-  } catch { /* ignora erros de rede no polling silencioso */ }
 }
 
 
@@ -441,24 +415,18 @@ async function cancelarPedido(pedidoId, rotaId) {
 // ── Mapa Leaflet ──────────────────────────────────────────────────────────────
 
 function iniciarMapa() {
-  // Destrói instância anterior
-  if (state.map) {
-    if (state.geoWatchId !== null) {
-      navigator.geolocation.clearWatch(state.geoWatchId);
-      state.geoWatchId = null;
-    }
-    state.map.remove();
-    state.map             = null;
-    state.driverMarker    = null;
-    state.deliveryMarkers = {};
-    state.routeLine       = null;
-    state.rotaLayer       = null;
-  }
-
   if (!window.L) return;
 
   const container = document.getElementById("motoristaMap");
   if (!container) return;
+
+  // Mapa já existe: apenas atualiza os layers sem destruir a instância
+  // (preserva zoom e posição entre refreshes)
+  if (state.map) {
+    setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 100);
+    desenharRota();
+    return;
+  }
 
   // Retry enquanto o container ainda não tem altura real no DOM
   if (container.offsetHeight === 0) {
@@ -611,6 +579,9 @@ function switchTab(tab) {
     );
     if (proximoComCoord) show("floatingBtn"); else hide("floatingBtn");
     hide("floatingBtnMural");
+    // O container do mapa ficou oculto enquanto a aba estava escondida;
+    // força recálculo de tamanho para eliminar a área cinza do Leaflet
+    setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 100);
   } else {
     hide("floatingBtn");
     atualizarBotaoMural();
@@ -769,7 +740,77 @@ function atualizarBotaoMural() {
   if (btn) btn.classList.toggle("hidden", n < 2);
 }
 
+// ── Modal de seleção de veículo ───────────────────────────────────────────────
+
+async function abrirModalVeiculo(pedidoId) {
+  _modalVeiculoPedidoId    = pedidoId;
+  _modalVeiculoSelecionado = null;
+
+  const list        = document.getElementById("veiculoList");
+  const confirmarBtn = document.getElementById("veiculoModalConfirmar");
+  confirmarBtn.disabled = true;
+  list.innerHTML = '<div class="moto-veiculo-loading">Carregando veículos…</div>';
+
+  document.getElementById("veiculoModalBackdrop").classList.remove("hidden");
+
+  try {
+    const [veiculos, pedidos] = await Promise.all([
+      apiGet(`${API_BASE}/api/veiculos`),
+      apiGet(`${API_BASE}/api/pedidos`)
+    ]);
+
+    const emUso = new Set(
+      pedidos
+        .filter(p => p.status === "em rota" && p.veiculo_tipo)
+        .map(p => p.veiculo_tipo)
+    );
+
+    list.innerHTML = veiculos.map(v => {
+      const usado = emUso.has(v.id);
+      return `<div class="moto-veiculo-card${usado ? " is-disabled" : ""}"
+                   data-id="${v.id}"
+                   ${usado ? "" : `onclick="selecionarVeiculo('${v.id}')"`}>
+        ${usado ? '<span class="moto-veiculo-badge-uso">Em uso</span>' : ""}
+        <div class="moto-veiculo-nome">${v.nome}</div>
+        <div class="moto-veiculo-specs">
+          <span>${Number(v.capacidade || 0).toLocaleString("pt-BR")} kg</span>
+          <span>R$ ${Number(v.custo_km || 0).toFixed(2)}/km</span>
+        </div>
+        ${v.uso ? `<div class="moto-veiculo-uso">${v.uso}</div>` : ""}
+      </div>`;
+    }).join("");
+  } catch {
+    list.innerHTML = '<div class="moto-veiculo-erro">Erro ao carregar veículos.</div>';
+  }
+}
+
+function selecionarVeiculo(id) {
+  _modalVeiculoSelecionado = id;
+  document.querySelectorAll(".moto-veiculo-card").forEach(card => {
+    card.classList.toggle("is-selected", card.dataset.id === id);
+  });
+  document.getElementById("veiculoModalConfirmar").disabled = false;
+}
+
+function fecharModalVeiculo() {
+  document.getElementById("veiculoModalBackdrop").classList.add("hidden");
+  _modalVeiculoPedidoId    = null;
+  _modalVeiculoSelecionado = null;
+}
+
+async function confirmarVeiculo() {
+  const pedidoId  = _modalVeiculoPedidoId;
+  const veiculoId = _modalVeiculoSelecionado;
+  if (!pedidoId || !veiculoId) return;
+  fecharModalVeiculo();
+  await _executarPegarPedido(pedidoId, veiculoId);
+}
+
 async function pegarPedido(pedidoId) {
+  await abrirModalVeiculo(pedidoId);
+}
+
+async function _executarPegarPedido(pedidoId, veiculoId) {
   const btn = document.getElementById(`btn-pegar-${pedidoId}`);
   if (btn) { btn.disabled = true; btn.textContent = "Processando…"; }
 
@@ -777,17 +818,18 @@ async function pegarPedido(pedidoId) {
     const pedido = muralState.pedidos.find(p => p.id === pedidoId);
     if (!pedido) return;
 
+    await apiPut(`${API_BASE}/api/pedidos/${pedidoId}`, { veiculo_tipo: veiculoId });
+    pedido.veiculo_tipo = veiculoId;
+
     await _associarPedidosARota([pedido]);
 
     toast("Pedido adicionado à sua rota!");
 
-    // Remove do mural local
-    muralState.pedidos     = muralState.pedidos.filter(p => p.id !== pedidoId);
+    muralState.pedidos = muralState.pedidos.filter(p => p.id !== pedidoId);
     muralState.selecionados.delete(pedidoId);
     atualizarBotaoMural();
     renderMural();
 
-    // Atualiza aba de entregas em background
     carregarEntregasDoDia(state.motorista.id).catch(() => {});
   } catch (e) {
     console.error(e);
@@ -878,22 +920,42 @@ async function _associarPedidosARota(pedidos) {
       return;
     }
   } else {
-    const primeiro = disponiveis[0];
-    await apiPost(`${API_BASE}/api/rotas`, {
-      nome:              `${primeiro.destino_municipio} · ${state.motorista.nome}`,
-      tipo_rota:         "Rodoviária",
-      destino_municipio: primeiro.destino_municipio,
-      destino_estado:    primeiro.destino_estado,
-      motorista_id:      state.motorista.id,
-      status:            "em andamento",
-      cargas_ids:        pedidoIds,
-      frete_total:       Number(freteExtra.toFixed(2)),
-      distancia:         Number(distExtra.toFixed(1)),
-      saida:             null,
-      chegada:           null,
-      tempo:             null,
-      observacoes:       "Rota criada pelo motorista via mural de pedidos."
-    });
+    // Antes de criar nova rota, verifica se algum pedido já está em rota ativa
+    const rotaComPedido = todasRotas.find(r =>
+      !["cancelada", "concluida"].includes(r.status) &&
+      pedidoIds.some(id => (r.cargas_ids || []).includes(id))
+    );
+
+    if (rotaComPedido) {
+      // Reutiliza a rota existente, apenas atualiza motorista e status
+      const idsExistentes = new Set(rotaComPedido.cargas_ids || []);
+      const idsFaltando   = pedidoIds.filter(id => !idsExistentes.has(id));
+      const updates = { motorista_id: state.motorista.id, status: "em andamento" };
+      if (idsFaltando.length) {
+        const ped = disponiveis.filter(p => idsFaltando.includes(p.id));
+        updates.cargas_ids  = [...(rotaComPedido.cargas_ids || []), ...idsFaltando];
+        updates.frete_total = Number((Number(rotaComPedido.frete_total || 0) + ped.reduce((s, p) => s + Number(p.valor_frete || 0), 0)).toFixed(2));
+        updates.distancia   = Number((Number(rotaComPedido.distancia   || 0) + ped.reduce((s, p) => s + Number(p.distancia_km || 0), 0)).toFixed(1));
+      }
+      await apiPut(`${API_BASE}/api/rotas/${rotaComPedido.id}`, updates);
+    } else {
+      const primeiro = disponiveis[0];
+      await apiPost(`${API_BASE}/api/rotas`, {
+        nome:              `${primeiro.destino_municipio} · ${state.motorista.nome}`,
+        tipo_rota:         "Rodoviária",
+        destino_municipio: primeiro.destino_municipio,
+        destino_estado:    primeiro.destino_estado,
+        motorista_id:      state.motorista.id,
+        status:            "em andamento",
+        cargas_ids:        pedidoIds,
+        frete_total:       Number(freteExtra.toFixed(2)),
+        distancia:         Number(distExtra.toFixed(1)),
+        saida:             null,
+        chegada:           null,
+        tempo:             null,
+        observacoes:       "Rota criada pelo motorista via mural de pedidos."
+      });
+    }
   }
 
   for (const pedido of disponiveis) {
@@ -973,6 +1035,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.getElementById("logoutBtn").addEventListener("click", sair);
+
+  document.getElementById("veiculoModalClose").addEventListener("click", fecharModalVeiculo);
+  document.getElementById("veiculoModalCancelar").addEventListener("click", fecharModalVeiculo);
+  document.getElementById("veiculoModalConfirmar").addEventListener("click", confirmarVeiculo);
+  document.getElementById("veiculoModalBackdrop").addEventListener("click", e => {
+    if (e.target === e.currentTarget) fecharModalVeiculo();
+  });
 
   mostrarTelaPrincipal();
 });

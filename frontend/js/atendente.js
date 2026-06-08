@@ -7,23 +7,10 @@ const API_BASE = window.location.port === "3000" ? "" : "http://localhost:3000";
 // Coordenadas da loja (Timon/MA)
 const STORE_LAT = -4.760287;
 const STORE_LNG = -42.573777;
-const FRETE_MINIMO = 20;
-
-// Tipos de veículo (mesmos do data.js)
-const VEICULOS = [
-  { id: "moto",              custoBase: 10,  custoKm: 1.4, capacidade: 20   },
-  { id: "caminhonete",       custoBase: 25,  custoKm: 2.8, capacidade: 500  },
-  { id: "bau-leve",          custoBase: 60,  custoKm: 4.3, capacidade: 1500 },
-  { id: "tres-quartos",      custoBase: 95,  custoKm: 5.9, capacidade: 3000 },
-  { id: "carroceria-aberta", custoBase: 130, custoKm: 7.0, capacidade: 5000 }
-];
-
 const moneyFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 // Estado do formulário: coordenadas obtidas via CEP/geocodificação
 let formState = { lat: null, lng: null };
-
-let _pollingId = null;
 
 // Estado do map picker
 let _mapPicker = null;
@@ -137,7 +124,6 @@ async function geocodificarEndereco(viaCepData) {
     if (list.length) {
       formState.lat = Number(list[0].lat);
       formState.lng = Number(list[0].lon);
-      atualizarFreteDisplay();
     }
   } catch { /* geocodificação falhou — frete não exibido */ }
 }
@@ -151,26 +137,6 @@ function calcularDistanciaKm(lat1, lng1, lat2, lng2) {
   const a = Math.sin(dLat / 2) ** 2
           + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function calcularFrete(veiculoId, lat, lng) {
-  const v = VEICULOS.find(x => x.id === veiculoId);
-  if (!v || !lat || !lng) return 0;
-  const dist  = calcularDistanciaKm(STORE_LAT, STORE_LNG, lat, lng);
-  const frete = v.custoBase + dist * v.custoKm;
-  return Math.max(frete, FRETE_MINIMO);
-}
-
-function atualizarFreteDisplay() {
-  const veiculoId  = document.getElementById("fVeiculo").value;
-  const { lat, lng } = formState;
-  if (!lat || !lng) return;
-  const frete    = calcularFrete(veiculoId, lat, lng);
-  const distKm   = calcularDistanciaKm(STORE_LAT, STORE_LNG, lat, lng);
-  const freteInfo = document.getElementById("freteInfo");
-  document.getElementById("freteValor").textContent =
-    `${moneyFmt.format(frete)} · ${distKm.toFixed(1)} km`;
-  freteInfo.style.display = "flex";
 }
 
 // ── Carregar / Renderizar ─────────────────────────────────────────────────────
@@ -293,8 +259,6 @@ async function salvarPedido() {
   const complemento      = document.getElementById("fComplemento").value.trim();
   const destinoMunicipio = document.getElementById("fMunicipio").value.trim();
   const destinoEstado    = document.getElementById("fEstado").value.trim().toUpperCase();
-  const entrega          = document.getElementById("fDataEntrega").value;
-  const veiculoTipo      = document.getElementById("fVeiculo").value;
   const observacoes      = document.getElementById("fObs").value.trim();
 
   // Validações
@@ -304,10 +268,7 @@ async function salvarPedido() {
   if (!peso || peso <= 0)      { toast("Preencha o peso em kg."); return; }
   if (cepDigits.length !== 8)  { toast("CEP inválido. Use 8 dígitos."); return; }
   if (!destinoMunicipio)       { toast("Preencha o município de destino."); return; }
-  if (!entrega)                { toast("Preencha a data prevista de entrega."); return; }
 
-  // Cálculo de frete e distância
-  const frete  = calcularFrete(veiculoTipo, formState.lat, formState.lng);
   const distKm = (formState.lat && formState.lng)
     ? calcularDistanciaKm(STORE_LAT, STORE_LNG, formState.lat, formState.lng)
     : 0;
@@ -319,25 +280,25 @@ async function salvarPedido() {
     descricao,
     tipo,
     peso,
-    volume:           volume           || null,
-    cep:              cepFormatado,
+    volume:            volume           || null,
+    cep:               cepFormatado,
     destino_municipio: destinoMunicipio,
-    destino_estado:    destinoEstado   || "",
-    endereco_entrega:  enderecoEntrega || null,
-    numero:           numero           || null,
-    complemento:      complemento      || null,
+    destino_estado:    destinoEstado    || "",
+    endereco_entrega:  enderecoEntrega  || null,
+    numero:            numero           || null,
+    complemento:       complemento      || null,
     cliente,
     telefone,
-    coleta:           null,
-    entrega:          entrega          || null,
+    coleta:            null,
+    entrega:           null,
     prioridade,
-    veiculo_tipo:     veiculoTipo,
-    distancia_km:     Number(distKm.toFixed(1)),
-    valor_frete:      Number(frete.toFixed(2)),
-    status:           "aguardando rota",
-    observacoes:      observacoes      || null,
-    lat:              formState.lat    || null,
-    lng:              formState.lng    || null
+    veiculo_tipo:      null,
+    distancia_km:      Number(distKm.toFixed(1)),
+    valor_frete:       null,
+    status:            "aguardando rota",
+    observacoes:       observacoes      || null,
+    lat:               formState.lat    || null,
+    lng:               formState.lng    || null
   };
 
   btn.disabled   = true;
@@ -360,16 +321,12 @@ async function salvarPedido() {
 function limparFormulario() {
   const ids = ["fCodigo", "fCliente", "fTelefone", "fProduto", "fVolume", "fCep",
                "fEndereco", "fNumero", "fComplemento", "fMunicipio",
-               "fEstado", "fDataEntrega", "fObs", "fPeso"];
+               "fEstado", "fObs", "fPeso"];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
   document.getElementById("fCategoria").value  = "Tintas";
   document.getElementById("fPrioridade").value = "normal";
-  const selVeiculo = document.getElementById("fVeiculo");
-  if (selVeiculo.options.length > 0) selVeiculo.selectedIndex = 0;
   const cepMsg = document.getElementById("cepMsg");
   if (cepMsg) { cepMsg.textContent = ""; cepMsg.className = "atend-cep-msg"; }
-  const freteInfo = document.getElementById("freteInfo");
-  if (freteInfo) freteInfo.style.display = "none";
   formState = { lat: null, lng: null };
   _destroyMapPickerAtend();
   _mapPickerCoords = null;
@@ -396,25 +353,10 @@ function fecharFormulario() {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 function sair() {
-  _pararPolling();
   sessionStorage.removeItem("madcenter_token");
   sessionStorage.removeItem("madcenter_nome");
   sessionStorage.removeItem("madcenter_perfil");
   window.location.href = "login.html";
-}
-
-// ── Polling de atualização em tempo real ─────────────────────────────────────
-
-function _pararPolling() {
-  if (_pollingId !== null) {
-    clearInterval(_pollingId);
-    _pollingId = null;
-  }
-}
-
-function _iniciarPolling() {
-  _pararPolling();
-  _pollingId = setInterval(() => carregarPedidos(true).catch(() => {}), 10000);
 }
 
 function mostrarTelaPrincipal() {
@@ -423,7 +365,6 @@ function mostrarTelaPrincipal() {
   if (titulo && nome) titulo.textContent = `${nome} — Madcenter`;
   todayStr = new Date().toISOString().slice(0, 10);
   carregarPedidos();
-  _iniciarPolling();
 }
 
 // ── Map Picker ─────────────────────────────────────────────────────────────────
@@ -497,7 +438,6 @@ async function confirmMapLocationAtendente() {
   formState.lat = lat;
   formState.lng = lng;
 
-  atualizarFreteDisplay();
   closeMapPickerAtendente();
 
   const msg = document.getElementById("cepMsg");
@@ -761,20 +701,6 @@ function alternarTema() {
   aplicarTema(novo);
 }
 
-// ── Veículos ──────────────────────────────────────────────────────────────────
-
-async function popularSelectVeiculos() {
-  const sel = document.getElementById("fVeiculo");
-  try {
-    const veiculos = await apiGet(`${API_BASE}/api/veiculos`);
-    sel.innerHTML = veiculos
-      .map(v => `<option value="${v.id}">${v.nome}</option>`)
-      .join("");
-    if (sel.options.length > 0) sel.options[0].selected = true;
-  } catch {
-    // select permanece vazio; salvarPedido validará
-  }
-}
 
 // ── Inicialização ─────────────────────────────────────────────────────────────
 
@@ -793,7 +719,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   mostrarTelaPrincipal();
-  popularSelectVeiculos();
 
   document.getElementById("logoutBtn").addEventListener("click", sair);
 
@@ -813,10 +738,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Telefone
   const telInput = document.getElementById("fTelefone");
   telInput.addEventListener("input", () => applyPhoneMask(telInput));
-
-  // Recalcular frete ao mudar veículo ou peso
-  document.getElementById("fVeiculo").addEventListener("change", atualizarFreteDisplay);
-  document.getElementById("fPeso").addEventListener("input",    atualizarFreteDisplay);
 
   // Modal de edição
   document.getElementById("editModalClose").addEventListener("click", fecharModalEdicao);
