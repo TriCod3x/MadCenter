@@ -209,9 +209,11 @@ async function carregarEntregasDoDia(motoristaId, silencioso = false) {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function getPedidosOrdenados() {
-  const pendentes = state.pedidos.filter(p => p.status !== "entregue");
-  const entregues = state.pedidos.filter(p => p.status === "entregue");
-  return [...pendentes, ...entregues];
+  const emRota   = state.pedidos.filter(p => p.status === "em rota");
+  const pendente = state.pedidos.filter(p => p.status === "pendente");
+  const entregue = state.pedidos.filter(p => p.status === "entregue");
+  const outros   = state.pedidos.filter(p => !["em rota","pendente","entregue"].includes(p.status));
+  return [...emRota, ...outros, ...pendente, ...entregue];
 }
 
 function getRotaDoPedido(pedidoId) {
@@ -235,11 +237,13 @@ function renderPedidos() {
   hide("semRotaMsg");
   if (title) title.style.display = "block";
 
-  const pendentes = ordenados.filter(p => p.status !== "entregue");
-  const primeiroPendenteId = pendentes[0]?.id;
+  const naoEntregues = ordenados.filter(p => p.status !== "entregue");
+  const primeiroPendenteId = naoEntregues.find(p => p.status === "em rota")?.id
+    || naoEntregues[0]?.id;
 
   list.innerHTML = ordenados.map(p => {
     const isEntregue = p.status === "entregue";
+    const isPendente = p.status === "pendente";
     const isProximo  = p.id === primeiroPendenteId;
     const rota = getRotaDoPedido(p.id);
 
@@ -250,12 +254,14 @@ function renderPedidos() {
 
     const cardClass = [
       "moto-pedido-card",
-      isEntregue ? "is-entregue" : isProximo ? "is-proximo" : ""
+      isEntregue ? "is-entregue" : isPendente ? "is-pendente" : isProximo ? "is-proximo" : ""
     ].join(" ").trim();
 
     const statusBadge = isEntregue
       ? `<span class="moto-badge moto-badge-green">Entregue</span>`
-      : `<span class="moto-badge moto-badge-blue">Em rota</span>`;
+      : isPendente
+        ? `<span class="moto-badge moto-badge-purple">Pendente</span>`
+        : `<span class="moto-badge moto-badge-blue">Em rota</span>`;
 
     const botoes = !isEntregue ? `
       <div class="moto-card-actions">
@@ -263,9 +269,14 @@ function renderPedidos() {
           onclick="marcarEntregue('${p.id}','${rota?.id || ""}')">
           ${Icons.checkCircle(16)} Entregue
         </button>
+        ${!isPendente ? `
         <button class="moto-btn moto-btn-adiar"
-          onclick="deixarParaDepois('${p.id}','${rota?.id || ""}')">
+          onclick="deixarParaDepois('${p.id}')">
           ${Icons.calendar(16)} Deixar para depois
+        </button>` : ""}
+        <button class="moto-btn moto-btn-cancelar"
+          onclick="cancelarPedido('${p.id}','${rota?.id || ""}')">
+          Cancelar pedido
         </button>
       </div>
     ` : "";
@@ -306,8 +317,9 @@ function renderPedidos() {
     `;
   }).join("");
 
-  // Botão flutuante: visível se houver pendente com coords
-  const proximoComCoord = pendentes.find(p => p.lat && p.lng);
+  // Botão flutuante: visível se houver pedido ativo (em rota) com coords
+  const proximoComCoord = naoEntregues.find(p => p.status === "em rota" && p.lat && p.lng)
+    || naoEntregues.find(p => p.lat && p.lng);
   if (proximoComCoord) show("floatingBtn");
   else hide("floatingBtn");
 
@@ -318,7 +330,7 @@ function renderPedidos() {
 function atualizarProgresso() {
   const total    = state.pedidos.length;
   const feito    = state.pedidos.filter(p => p.status === "entregue").length;
-  const pendente = total - feito;
+  const pendente = state.pedidos.filter(p => p.status !== "entregue").length;
   const pct      = total > 0 ? Math.round((feito / total) * 100) : 0;
 
   document.getElementById("statTotal").textContent    = total;
@@ -378,39 +390,20 @@ async function marcarEntregue(pedidoId, rotaId) {
   }
 }
 
-async function deixarParaDepois(pedidoId, rotaId) {
-  if (!confirm("Deixar este pedido para outro dia?")) return;
+async function deixarParaDepois(pedidoId) {
+  if (!confirm("Deixar este pedido para depois? Ele ficará pendente na sua rota.")) return;
 
   const card = document.getElementById(`card-${pedidoId}`);
   if (card) card.style.opacity = "0.35";
 
   try {
-    // 1. Muda status do pedido
-    await apiPut(`${API_BASE}/api/pedidos/${pedidoId}`, { status: "aguardando rota" });
+    // Muda status para "pendente" mantendo o pedido vinculado à rota
+    await apiPut(`${API_BASE}/api/pedidos/${pedidoId}/deixar-para-depois`, {});
 
-    // 2. Remove da rota
-    if (rotaId) {
-      const rota = state.rotas.find(r => r.id === rotaId);
-      if (rota) {
-        const novasIds = (rota.cargas_ids || []).filter(id => id !== pedidoId);
-        await apiPut(`${API_BASE}/api/rotas/${rotaId}`, { cargas_ids: novasIds });
-        rota.cargas_ids = novasIds;
+    const pedido = state.pedidos.find(p => p.id === pedidoId);
+    if (pedido) pedido.status = "pendente";
 
-        // Se ficou vazia, cancela a rota e libera o motorista
-        if (novasIds.length === 0) {
-          await apiPut(`${API_BASE}/api/rotas/${rotaId}`, { status: "cancelada" });
-          if (state.motorista?.id) {
-            await apiPut(`${API_BASE}/api/motoristas/${state.motorista.id}`, { status: "disponível" });
-          }
-          state.rotas = state.rotas.filter(r => r.id !== rotaId);
-        }
-      }
-    }
-
-    // 3. Remove do estado local
-    state.pedidos = state.pedidos.filter(p => p.id !== pedidoId);
-
-    toast("Pedido adiado para outro dia.");
+    toast("Pedido marcado como pendente.");
     renderPedidos();
     atualizarProgresso();
     desenharRota();
@@ -419,6 +412,43 @@ async function deixarParaDepois(pedidoId, rotaId) {
     console.error(e);
     if (card) card.style.opacity = "";
     toast("Erro ao adiar pedido. Tente novamente.", "erro");
+  }
+}
+
+async function cancelarPedido(pedidoId, rotaId) {
+  if (!confirm("Devolver este pedido ao mural? Ele ficará disponível para outros motoristas.")) return;
+
+  const card = document.getElementById(`card-${pedidoId}`);
+  if (card) card.style.opacity = "0.35";
+
+  try {
+    await apiPut(`${API_BASE}/api/pedidos/${pedidoId}/cancelar-motorista`, {});
+
+    // Atualiza estado local da rota (remove o pedido do array local)
+    if (rotaId) {
+      const rota = state.rotas.find(r => r.id === rotaId);
+      if (rota) {
+        rota.cargas_ids = (rota.cargas_ids || []).filter(id => id !== pedidoId);
+        if (rota.cargas_ids.length === 0) {
+          state.rotas = state.rotas.filter(r => r.id !== rotaId);
+          if (state.motorista?.id) {
+            await apiPut(`${API_BASE}/api/motoristas/${state.motorista.id}`, { status: "disponível" });
+          }
+        }
+      }
+    }
+
+    state.pedidos = state.pedidos.filter(p => p.id !== pedidoId);
+
+    toast("Pedido devolvido ao mural de pedidos.");
+    renderPedidos();
+    atualizarProgresso();
+    desenharRota();
+
+  } catch (e) {
+    console.error(e);
+    if (card) card.style.opacity = "";
+    toast("Erro ao cancelar pedido. Tente novamente.", "erro");
   }
 }
 
@@ -835,21 +865,32 @@ async function _associarPedidosARota(pedidos) {
   const distExtra  = disponiveis.reduce((s, p) => s + Number(p.distancia_km || 0), 0);
 
   if (rotaAtiva) {
-    // Dedup: não adiciona IDs que já estão na rota (previne duplicatas no array)
+    // Dedup: separa os que já estão na rota dos que precisam ser inseridos
     const idsExistentes = new Set(rotaAtiva.cargas_ids || []);
     const idsFiltrados  = pedidoIds.filter(id => !idsExistentes.has(id));
-    if (!idsFiltrados.length) return;
+    const idsJaExistem  = pedidoIds.filter(id => idsExistentes.has(id));
 
-    const ped       = disponiveis.filter(p => idsFiltrados.includes(p.id));
-    const novasIds  = [...(rotaAtiva.cargas_ids || []), ...idsFiltrados];
-    const novoFrete = Number((Number(rotaAtiva.frete_total || 0) + ped.reduce((s, p) => s + Number(p.valor_frete || 0), 0)).toFixed(2));
-    const novaDist  = Number((Number(rotaAtiva.distancia  || 0) + ped.reduce((s, p) => s + Number(p.distancia_km || 0), 0)).toFixed(1));
+    // Pedidos já presentes na rota: apenas corrige o status (fix de duplicação)
+    for (const id of idsJaExistem) {
+      await apiPut(`${API_BASE}/api/pedidos/${id}`, { status: "em rota" });
+    }
 
-    await apiPut(`${API_BASE}/api/rotas/${rotaAtiva.id}`, {
-      cargas_ids:  novasIds,
-      frete_total: novoFrete,
-      distancia:   novaDist
-    });
+    if (idsFiltrados.length) {
+      const ped       = disponiveis.filter(p => idsFiltrados.includes(p.id));
+      const novasIds  = [...(rotaAtiva.cargas_ids || []), ...idsFiltrados];
+      const novoFrete = Number((Number(rotaAtiva.frete_total || 0) + ped.reduce((s, p) => s + Number(p.valor_frete || 0), 0)).toFixed(2));
+      const novaDist  = Number((Number(rotaAtiva.distancia  || 0) + ped.reduce((s, p) => s + Number(p.distancia_km || 0), 0)).toFixed(1));
+
+      await apiPut(`${API_BASE}/api/rotas/${rotaAtiva.id}`, {
+        cargas_ids:  novasIds,
+        frete_total: novoFrete,
+        distancia:   novaDist
+      });
+    } else {
+      // Todos já estavam na rota — não precisa fazer mais nada além da correção de status
+      await apiPut(`${API_BASE}/api/motoristas/${state.motorista.id}`, { status: "em entrega" });
+      return;
+    }
   } else {
     const primeiro = disponiveis[0];
     await apiPost(`${API_BASE}/api/rotas`, {

@@ -628,6 +628,7 @@ tr:hover td {
 .badge-gray { background: #e5e7eb; color: #374151; }
 .badge-orange { background: #ffedd5; color: #9a4b00; }
  .badge-purple { background: #f5e8ff; color: #5f2d82; }
+.badge-sky    { background: #dbeafe; color: #1d4ed8; }
 
  [data-theme="dark"] .badge-yellow { background: #5b4b18; color: #ffeaa0; }
  [data-theme="dark"] .badge-blue { background: #193f31; color: #b7f2d5; }
@@ -636,6 +637,7 @@ tr:hover td {
  [data-theme="dark"] .badge-gray { background: #374151; color: #e5e7eb; }
  [data-theme="dark"] .badge-orange { background: #5b351b; color: #ffd0a0; }
  [data-theme="dark"] .badge-purple { background: #4d3166; color: #f9d7ff; }
+[data-theme="dark"] .badge-sky    { background: #1e3a5f; color: #93c5fd; }
 
 .modal-backdrop {
   position: fixed;

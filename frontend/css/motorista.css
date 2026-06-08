@@ -227,6 +227,24 @@ img { max-width: 100%; }
 }
 .moto-btn-adiar:hover { border-color: var(--primary-2); background: var(--surface-soft); }
 
+/* Botão "Cancelar pedido" — vermelho destrutivo */
+.moto-btn-cancelar {
+  background: transparent;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  min-height: 36px;
+  font-size: 13px;
+}
+.moto-btn-cancelar:hover { background: #fee2e2; border-color: #f87171; }
+[data-theme="dark"] .moto-btn-cancelar { color: #fca5a5; border-color: #7f1d1d; }
+[data-theme="dark"] .moto-btn-cancelar:hover { background: #450a0a; border-color: #ef4444; }
+
+/* Card com pedido pendente — estilo visual diferenciado */
+.moto-pedido-card.is-pendente {
+  opacity: 0.82;
+  border-left: 3px solid #a855f7;
+}
+
 /* Botão "Abrir no Maps" — azul accent do admin */
 .moto-btn-maps {
   background: var(--blue);
@@ -554,6 +572,7 @@ img { max-width: 100%; }
 .moto-badge-blue   { background: #dbeafe;  color: #1e40af; }
 .moto-badge-red    { background: #fee2e2;  color: #991b1b; }
 .moto-badge-gray   { background: #e5e7eb;  color: #374151; }
+.moto-badge-purple { background: #fff4c7;  color: #92400e; }
 
 [data-theme="dark"] .moto-badge-green  { background: #174b34; color: #b6f2cf; }
 [data-theme="dark"] .moto-badge-orange { background: #5b351b; color: #ffd0a0; }
@@ -561,6 +580,7 @@ img { max-width: 100%; }
 [data-theme="dark"] .moto-badge-blue   { background: #1e2e50; color: #93c5fd; }
 [data-theme="dark"] .moto-badge-red    { background: #5b2525; color: #ffd0d0; }
 [data-theme="dark"] .moto-badge-gray   { background: #374151; color: #e5e7eb; }
+[data-theme="dark"] .moto-badge-purple { background: #78350f; color: #fde68a; }
 
 /* Labels e valores dos cards */
 .moto-card-info { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }

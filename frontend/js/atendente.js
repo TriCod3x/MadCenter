@@ -34,10 +34,25 @@ let _mapPickerInitTimer = null;
 // Data de hoje para filtrar pedidos
 let todayStr = new Date().toISOString().slice(0, 10);
 
+// Cache dos pedidos exibidos (para edição)
+let _pedidosCache = [];
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 async function apiGet(url) {
   const res = await fetch(url);
+  if (res.status === 401) { sair(); return; }
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+  return json;
+}
+
+async function apiPut(url, data) {
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
   if (res.status === 401) { sair(); return; }
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
@@ -216,6 +231,7 @@ const STATUS_MAP = {
 };
 
 function renderLista(pedidos) {
+  _pedidosCache = pedidos;
   const list = document.getElementById("pedidosList");
   if (!pedidos.length) {
     list.innerHTML = `<div class="atend-empty">Nenhum pedido cadastrado hoje.</div>`;
@@ -224,6 +240,7 @@ function renderLista(pedidos) {
   const sorted = [...pedidos].sort((a, b) =>
     (b.created_at || "").localeCompare(a.created_at || "")
   );
+  const editavel = s => s !== "entregue" && s !== "em rota";
   list.innerHTML = sorted.map(p => {
     const st      = STATUS_MAP[p.status] || { cls: "yellow", label: p.status || "—" };
     const destino = [p.destino_municipio, p.destino_estado].filter(Boolean).join("/");
@@ -244,6 +261,12 @@ function renderLista(pedidos) {
         <div class="atend-pedido-row">
           <span class="atend-pedido-label">Destino</span>
           <span class="atend-pedido-value">${destino || "—"}</span>
+        </div>
+        <div class="atend-pedido-actions">
+          <button class="atend-btn atend-btn-edit"
+            onclick="editarPedido('${p.id}')">
+            ${Icons.edit(14)} Editar
+          </button>
         </div>
       </div>
     `;
@@ -554,6 +577,189 @@ function _getStateCodeAtend(stateName) {
   return map[stateName] || stateName.slice(0, 2).toUpperCase();
 }
 
+// ── Edição de pedido ─────────────────────────────────────────────────────────
+
+function fecharModalEdicao() {
+  document.getElementById("editModalBackdrop").classList.remove("active");
+}
+
+function editarPedido(id) {
+  const p = _pedidosCache.find(x => x.id === id);
+  if (!p) return;
+
+  if (p.status === "entregue" || p.status === "em rota") {
+    toast("Pedido em andamento, não pode ser editado.");
+    return;
+  }
+
+  const cepFmt = (p.cep || "").replace(/\D/g, "");
+  const cepDisplay = cepFmt.length === 8 ? `${cepFmt.slice(0, 5)}-${cepFmt.slice(5)}` : (p.cep || "");
+
+  document.getElementById("editModalBody").innerHTML = `
+    <form id="editForm" class="atend-edit-form">
+
+      <div class="atend-section-card" style="margin-bottom:0;box-shadow:none;border:none;padding:0 0 16px">
+        <h4 class="atend-edit-section-title">Cliente</h4>
+        <div class="atend-form-grid">
+          <div class="atend-field">
+            <label for="eCodigo">Código do pedido</label>
+            <input id="eCodigo" type="text" value="${p.codigo || ""}">
+          </div>
+          <div class="atend-field">
+            <label for="eCliente">Nome do cliente *</label>
+            <input id="eCliente" type="text" value="${p.cliente || ""}" required autocomplete="name">
+          </div>
+          <div class="atend-field">
+            <label for="eTelefone">Telefone / WhatsApp</label>
+            <input id="eTelefone" type="tel" value="${p.telefone || ""}" maxlength="16" autocomplete="tel">
+          </div>
+        </div>
+      </div>
+
+      <div class="atend-section-card" style="margin-bottom:0;box-shadow:none;border:none;padding:0 0 16px">
+        <h4 class="atend-edit-section-title">Produto</h4>
+        <div class="atend-form-grid">
+          <div class="atend-field">
+            <label for="eProduto">Produto / material *</label>
+            <input id="eProduto" type="text" value="${p.descricao || ""}" required>
+          </div>
+          <div class="atend-field">
+            <label for="eCategoria">Categoria</label>
+            <select id="eCategoria">
+              ${["Tintas","Elétrica","Hidráulica","Ferramentas","Pisos e revestimentos","Cimento e argamassa","Outros"]
+                .map(o => `<option${p.tipo === o ? " selected" : ""}>${o}</option>`).join("")}
+            </select>
+          </div>
+          <div class="atend-field">
+            <label for="ePeso">Peso (kg) *</label>
+            <input id="ePeso" type="number" value="${p.peso || ""}" min="0" step="0.1" required>
+          </div>
+          <div class="atend-field">
+            <label for="ePrioridade">Prioridade</label>
+            <select id="ePrioridade">
+              ${["normal","alta","urgente"]
+                .map(o => `<option value="${o}"${p.prioridade === o ? " selected" : ""}>${o.charAt(0).toUpperCase()+o.slice(1)}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="atend-section-card" style="margin-bottom:0;box-shadow:none;border:none;padding:0 0 16px">
+        <h4 class="atend-edit-section-title">Entrega</h4>
+        <div class="atend-form-grid">
+          <div class="atend-field">
+            <label for="eCep">CEP</label>
+            <input id="eCep" type="text" value="${cepDisplay}" maxlength="9" inputmode="numeric">
+          </div>
+          <div class="atend-field">
+            <label for="eEndereco">Endereço</label>
+            <input id="eEndereco" type="text" value="${p.endereco_entrega || ""}">
+          </div>
+          <div class="atend-field">
+            <label for="eNumero">Número</label>
+            <input id="eNumero" type="text" value="${p.numero || ""}">
+          </div>
+          <div class="atend-field">
+            <label for="eComplemento">Complemento</label>
+            <input id="eComplemento" type="text" value="${p.complemento || ""}">
+          </div>
+          <div class="atend-field">
+            <label for="eMunicipio">Município de destino *</label>
+            <input id="eMunicipio" type="text" value="${p.destino_municipio || ""}" required>
+          </div>
+          <div class="atend-field">
+            <label for="eEstado">Estado</label>
+            <input id="eEstado" type="text" value="${p.destino_estado || ""}" maxlength="2">
+          </div>
+          <div class="atend-field">
+            <label for="eDataEntrega">Data prevista de entrega</label>
+            <input id="eDataEntrega" type="date" value="${p.entrega || ""}">
+          </div>
+          <div class="atend-field">
+            <label for="eVeiculo">Tipo de veículo</label>
+            <select id="eVeiculo">
+              ${[["moto","Moto"],["caminhonete","Caminhonete"],["bau-leve","Caminhão baú leve"],["tres-quartos","Caminhão 3/4"],["carroceria-aberta","Caminhão carroceria aberta"]]
+                .map(([v,l]) => `<option value="${v}"${p.veiculo_tipo === v ? " selected" : ""}>${l}</option>`).join("")}
+            </select>
+          </div>
+          <div class="atend-field atend-field-full">
+            <label for="eObs">Observações</label>
+            <textarea id="eObs" rows="3">${p.observacoes || ""}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="atend-form-actions" style="margin-top:8px">
+        <button type="button" class="atend-btn atend-btn-secondary" onclick="fecharModalEdicao()">Cancelar</button>
+        <button type="submit" class="atend-btn atend-btn-primary">
+          ${Icons.checkCircle(16)} Salvar alterações
+        </button>
+      </div>
+    </form>
+  `;
+
+  document.getElementById("editForm").addEventListener("submit", e => {
+    e.preventDefault();
+    salvarEdicaoPedido(id);
+  });
+
+  const telEdit = document.getElementById("eTelefone");
+  if (telEdit) telEdit.addEventListener("input", () => applyPhoneMask(telEdit));
+  const cepEdit = document.getElementById("eCep");
+  if (cepEdit) cepEdit.addEventListener("input", () => applyCepMask(cepEdit));
+
+  document.getElementById("editModalBackdrop").classList.add("active");
+}
+
+async function salvarEdicaoPedido(id) {
+  const cliente   = document.getElementById("eCliente").value.trim();
+  const municipio = document.getElementById("eMunicipio").value.trim();
+  const descricao = document.getElementById("eProduto").value.trim();
+  const peso      = Number(document.getElementById("ePeso").value || 0);
+
+  if (!cliente)   { toast("Preencha o nome do cliente.");        return; }
+  if (!descricao) { toast("Preencha o produto / material.");     return; }
+  if (!peso || peso <= 0) { toast("Preencha o peso em kg.");    return; }
+  if (!municipio) { toast("Preencha o município de destino."); return; }
+
+  const cepDigits = document.getElementById("eCep").value.replace(/\D/g, "");
+  const payload = {
+    codigo:            document.getElementById("eCodigo").value.trim() || undefined,
+    cliente,
+    telefone:          document.getElementById("eTelefone").value.trim() || null,
+    descricao,
+    tipo:              document.getElementById("eCategoria").value,
+    peso,
+    prioridade:        document.getElementById("ePrioridade").value,
+    cep:               cepDigits.length === 8 ? `${cepDigits.slice(0,5)}-${cepDigits.slice(5)}` : undefined,
+    endereco_entrega:  document.getElementById("eEndereco").value.trim()     || null,
+    numero:            document.getElementById("eNumero").value.trim()        || null,
+    complemento:       document.getElementById("eComplemento").value.trim()   || null,
+    destino_municipio: municipio,
+    destino_estado:    document.getElementById("eEstado").value.trim().toUpperCase() || null,
+    entrega:           document.getElementById("eDataEntrega").value          || null,
+    veiculo_tipo:      document.getElementById("eVeiculo").value,
+    observacoes:       document.getElementById("eObs").value.trim()           || null
+  };
+
+  // Remove chaves undefined para não sobrescrever com null
+  Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
+
+  const btn = document.querySelector("#editForm [type='submit']");
+  if (btn) { btn.disabled = true; btn.innerHTML = "Salvando…"; }
+
+  try {
+    await apiPut(`${API_BASE}/api/pedidos/${id}`, payload);
+    toast("Pedido atualizado com sucesso!");
+    fecharModalEdicao();
+    await carregarPedidos();
+  } catch (e) {
+    toast(`Erro ao salvar: ${e.message}`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = `${Icons.checkCircle(16)} Salvar alterações`; }
+  }
+}
+
 // ── Tema claro/escuro ─────────────────────────────────────────────────────────
 
 function aplicarTema(tema) {
@@ -609,6 +815,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // Recalcular frete ao mudar veículo ou peso
   document.getElementById("fVeiculo").addEventListener("change", atualizarFreteDisplay);
   document.getElementById("fPeso").addEventListener("input",    atualizarFreteDisplay);
+
+  // Modal de edição
+  document.getElementById("editModalClose").addEventListener("click", fecharModalEdicao);
+  document.getElementById("editModalBackdrop").addEventListener("click", e => {
+    if (e.target === e.currentTarget) fecharModalEdicao();
+  });
 
   // Map picker
   document.getElementById("btnMapPickerAtend").addEventListener("click", openMapPickerAtendente);

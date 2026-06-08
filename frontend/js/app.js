@@ -11,7 +11,8 @@ const pageNames = {
   rotas: "Rotas",
   mapa: "Mapa de Entregas",
   configuracoes: "Configurações",
-  usuarios: "Usuários"
+  usuarios: "Usuários",
+  veiculos: "Veículos"
 };
 
 const API_BASE = window.location.port === "3000" ? "" : "http://localhost:3000";
@@ -25,7 +26,7 @@ const statusColors = {
   "disponível": "green",
   "em entrega": "blue",
   "inativo": "gray",
-  "planejada": "yellow",
+  "planejada": "sky",
   "em andamento": "blue",
   "concluída": "green",
   "cancelada": "red"
@@ -60,6 +61,8 @@ const fields = {
     ["nome", "Nome", "text", true],
     ["telefone", "WhatsApp", "phone", true],
     ["categoria", "Categoria CNH", "select:B,C,D,E", true],
+    ["cidade", "Cidade", "text", false],
+    ["estado", "Estado (UF)", "text", false],
     ["observacoes", "Observações", "textarea", false]
   ],
   rotas: [
@@ -143,6 +146,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 function bindUsuariosEvents() {
   document.getElementById("newUserBtn")?.addEventListener("click", () => openUserForm());
   document.getElementById("usuariosSearch")?.addEventListener("input", renderUsuarios);
+  document.getElementById("newVeiculoBtn")?.addEventListener("click", () => openVeiculoForm());
+  document.getElementById("veiculosSearch")?.addEventListener("input", renderVeiculos);
 }
 
 function bindLayoutEvents() {
@@ -225,6 +230,7 @@ function showPage(page) {
   updateFab(page);
   if (page === "mapa") renderMapPanel();
   if (page === "usuarios") renderUsuarios();
+  else if (page === "veiculos") renderVeiculos();
   else renderAll();
 }
 
@@ -2195,5 +2201,153 @@ async function excluirUsuario(id, nome) {
   } catch (e) {
     console.error(e);
     toast(`Erro ao excluir: ${e.message}`);
+  }
+}
+
+// ── Veículos ──────────────────────────────────────────────────────────────────
+
+let _veiculos = [];
+
+async function fetchVeiculos() {
+  const res = await fetch(`${API_BASE}/api/veiculos`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  _veiculos = await res.json();
+  return _veiculos;
+}
+
+async function renderVeiculos() {
+  const tbl = document.getElementById("veiculosTable");
+  if (!tbl) return;
+
+  try {
+    await fetchVeiculos();
+  } catch (e) {
+    tbl.innerHTML = `<tbody><tr><td colspan="6" class="empty-table-cell">Erro ao carregar veículos. Verifique a conexão.</td></tr></tbody>`;
+    return;
+  }
+
+  const search = (document.getElementById("veiculosSearch")?.value || "").toLowerCase();
+  const filtered = _veiculos.filter((v) =>
+    `${v.id} ${v.nome} ${v.uso || ""}`.toLowerCase().includes(search)
+  );
+
+  const moneyFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+  const headers = ["ID", "Nome", "Capacidade (kg)", "Custo base", "Custo/km", "Uso", "Ações"];
+  const rows = filtered.map((v) => [
+    v.id,
+    v.nome,
+    `${Number(v.capacidade || 0).toLocaleString("pt-BR")} kg`,
+    moneyFmt.format(Number(v.custo_base || 0)),
+    `R$ ${Number(v.custo_km || 0).toFixed(2)}/km`,
+    v.uso || "—",
+    `<div class="actions-cell">
+      <button class="table-action" onclick="openVeiculoForm('${v.id}')">${Icons.edit(14)} Editar</button>
+      <button class="table-action" onclick="excluirVeiculo('${v.id}','${(v.nome || "").replace(/'/g, "\\'")}')">${Icons.trash(14)}</button>
+    </div>`
+  ]);
+
+  table("veiculosTable", headers, rows);
+}
+
+function openVeiculoForm(id = null) {
+  const veiculo = id ? _veiculos.find((v) => v.id === id) : null;
+  const isEdit  = Boolean(veiculo);
+
+  document.getElementById("modalTitle").innerHTML =
+    `${Icons.truck(18)} ${isEdit ? "Editar" : "Novo"} Veículo`;
+
+  document.getElementById("modalBody").innerHTML = `
+    <form id="veiculoForm" class="form-grid">
+      <label class="form-field">
+        <span>ID *</span>
+        <input type="text" name="id" value="${veiculo?.id || ""}" ${isEdit ? "readonly style=\"opacity:.6\"" : "required"} placeholder="ex: caminhonete">
+      </label>
+      <label class="form-field">
+        <span>Nome *</span>
+        <input type="text" name="nome" value="${veiculo?.nome || ""}" required placeholder="ex: Caminhonete">
+      </label>
+      <label class="form-field">
+        <span>Capacidade (kg) *</span>
+        <input type="number" name="capacidade" value="${veiculo?.capacidade ?? ""}" required min="0" step="0.1" placeholder="ex: 1200">
+      </label>
+      <label class="form-field">
+        <span>Custo base (R$) *</span>
+        <input type="number" name="custo_base" value="${veiculo?.custo_base ?? ""}" required min="0" step="0.01" placeholder="ex: 50.00">
+      </label>
+      <label class="form-field">
+        <span>Custo por km (R$/km) *</span>
+        <input type="number" name="custo_km" value="${veiculo?.custo_km ?? ""}" required min="0" step="0.01" placeholder="ex: 1.80">
+      </label>
+      <label class="form-field full">
+        <span>Uso ideal</span>
+        <input type="text" name="uso" value="${veiculo?.uso || ""}" placeholder="ex: Entregas urbanas até 1200 kg">
+      </label>
+      <div class="modal-actions form-field full">
+        <button class="secondary-button" type="button" onclick="closeModal()">Cancelar</button>
+        <button class="primary-button" type="submit">${Icons.checkCircle(16)} Salvar</button>
+      </div>
+    </form>
+  `;
+
+  document.getElementById("veiculoForm").addEventListener("submit", (e) => submitVeiculoForm(e, isEdit, veiculo?.id));
+  openModal();
+}
+
+async function submitVeiculoForm(event, isEdit, veiculoId) {
+  event.preventDefault();
+  const form = event.target;
+  const data = Object.fromEntries(new FormData(form).entries());
+
+  data.capacidade = Number(data.capacidade);
+  data.custo_base = Number(data.custo_base);
+  data.custo_km   = Number(data.custo_km);
+
+  const submitBtn = form.querySelector("[type='submit']");
+  submitBtn.disabled = true;
+
+  try {
+    let res;
+    if (isEdit) {
+      res = await fetch(`${API_BASE}/api/veiculos/${veiculoId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+    } else {
+      res = await fetch(`${API_BASE}/api/veiculos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+    }
+
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
+
+    closeModal();
+    toast(`Veículo ${isEdit ? "atualizado" : "criado"} com sucesso.`);
+    await renderVeiculos();
+  } catch (e) {
+    console.error(e);
+    toast(`Erro ao salvar veículo: ${e.message}`);
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+async function excluirVeiculo(id, nome) {
+  if (!confirm(`Excluir o veículo "${nome}"? Esta ação não pode ser desfeita.`)) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/veiculos/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    toast(`Veículo "${nome}" excluído.`);
+    await renderVeiculos();
+  } catch (e) {
+    console.error(e);
+    toast(`Erro ao excluir veículo: ${e.message}`);
   }
 }
