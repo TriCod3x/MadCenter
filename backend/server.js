@@ -308,6 +308,37 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+// POST /api/auth/reset-admin — atualiza hash da senha do admin (temporário)
+app.post("/api/auth/reset-admin", async (req, res) => {
+  const { usuario, senha, chave } = req.body;
+
+  if (chave !== "RESET_MADCENTER_2025") {
+    return res.status(403).json({ error: "Não autorizado" });
+  }
+  if (!usuario || !senha) {
+    return res.status(400).json({ error: "usuario e senha obrigatórios" });
+  }
+
+  try {
+    const hash = await bcrypt.hash(senha, 10);
+    const { data, error } = await supabaseAdmin
+      .from("admin_auth")
+      .update({ senha_hash: hash })
+      .eq("usuario", usuario)
+      .select("id, usuario, ativo")
+      .single();
+
+    if (error) return res.status(400).json({ error: error.message });
+    res.json({
+      success: true,
+      message: `Senha do admin "${usuario}" atualizada com sucesso`,
+      admin: data
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Setup utilitário ──────────────────────────────────────────────────────────
 
 // GET /api/auth/setup-motoristas — DESATIVADO
