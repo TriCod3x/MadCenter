@@ -51,7 +51,6 @@ const fields = {
     ["cliente", "Cliente", "text", true],
     ["telefone", "Telefone/WhatsApp", "phone", true],
     ["prioridade", "Prioridade", "select:baixa,normal,alta,urgente", true],
-    ["veiculoTipo", "Tipo de veículo", "vehicle", true],
     ["status", "Status", "select:aguardando rota,em rota,próximo dia,entregue,cancelado", true],
     ["observacoes", "Observações", "textarea", false]
   ],
@@ -1756,6 +1755,9 @@ function buildRotaPedidosHtml(rotaId) {
             <span>${Icons.package(14)} ${c.tipo} · ${c.peso} kg${c.volume ? " · " + c.volume : ""}</span>
             <span>${Icons.tag(14)} ${money.format(Number(c.valorFrete || 0))}</span>
             <span>Prioridade: ${c.prioridade || "normal"}</span>
+          </div>
+          <div class="pedido-detail-row">
+            <span>${Icons.navigation(14)} ${vehicleName(c.veiculoTipo)}</span>
           </div>
           ${entregue && c.dataEntrega ? `<div class="pedido-detail-row"><span>${Icons.checkCircle(14)} Entregue em: <strong>${formatDateTime(c.dataEntrega)}</strong></span></div>` : ""}
           ${c.observacoes ? `<div class="pedido-detail-obs">${Icons.file(14)} ${c.observacoes}</div>` : ""}
