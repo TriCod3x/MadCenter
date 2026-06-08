@@ -19,49 +19,16 @@
 <body>
 
   <!-- ══════════════════════════════════════════════════
-       TELA DE LOGIN
-  ══════════════════════════════════════════════════ -->
-  <div id="loginScreen">
-    <div class="atend-login-card">
-
-      <div class="atend-login-logo">
-        <img src="assets/logo_madcenter_white.svg" alt="Madcenter"
-             onerror="this.style.display='none'">
-        <strong>Área do Atendente</strong>
-        <span>Madcenter Entregas</span>
-      </div>
-
-      <div class="atend-login-form">
-        <div class="atend-login-field">
-          <label class="atend-label" for="senhaInput">Senha de acesso</label>
-          <input id="senhaInput" type="password" class="atend-login-input"
-                 placeholder="Digite a senha" autocomplete="current-password">
-        </div>
-
-        <div id="loginError" class="atend-error">
-          Senha incorreta. Tente novamente.
-        </div>
-
-        <button id="loginBtn" class="atend-btn atend-btn-primary atend-btn-full">
-          Entrar
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-        </button>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ══════════════════════════════════════════════════
        TELA PRINCIPAL
   ══════════════════════════════════════════════════ -->
-  <div id="mainScreen" class="hidden">
+  <div id="mainScreen">
 
     <!-- HEADER — mesma altura (78px) e padrão do admin -->
     <header class="atend-header">
       <img src="assets/logo_madcenter_white.svg" alt="Madcenter"
            class="atend-header-logo" onerror="this.style.display='none'">
       <div class="atend-header-info">
-        <h1 class="atend-header-title">Atendente — Madcenter</h1>
+        <h1 class="atend-header-title" id="atendHeaderTitle">Atendente — Madcenter</h1>
         <span class="atend-header-subtitle">Sistema de Entregas</span>
       </div>
       <div class="atend-header-actions">
@@ -112,6 +79,10 @@
             Cliente
           </h3>
           <div class="atend-form-grid">
+            <div class="atend-field">
+              <label for="fCodigo">Código do pedido</label>
+              <input id="fCodigo" type="text" placeholder="Ex: PD-1084 (deixe vazio para gerar automaticamente)">
+            </div>
             <div class="atend-field">
               <label for="fCliente">Nome do cliente *</label>
               <input id="fCliente" type="text" placeholder="Nome completo" autocomplete="name">

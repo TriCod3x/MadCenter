@@ -3,7 +3,6 @@
 // ── Configuração ─────────────────────────────────────────────────────────────
 
 const API_BASE = window.location.port === "3000" ? "" : "http://localhost:3000";
-const MOTO_SESSION_KEY = "madcenter_motorista";
 
 // Coordenadas fixas da loja (ponto de partida de todas as rotas)
 const LOJA_LAT = -4.760287;
@@ -46,6 +45,7 @@ const state = {
 
 async function apiGet(url) {
   const res = await fetch(url);
+  if (res.status === 401) { sair(); return; }
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
   return json;
@@ -57,6 +57,7 @@ async function apiPost(url, data) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
   });
+  if (res.status === 401) { sair(); return; }
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
   return json;
@@ -68,6 +69,7 @@ async function apiPut(url, data) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
   });
+  if (res.status === 401) { sair(); return; }
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
   return json;
@@ -101,65 +103,23 @@ function toast(msg, tipo = "ok") {
   el._t = setTimeout(() => el.classList.remove("moto-toast-show"), 3200);
 }
 
-// ── Login / Auth ─────────────────────────────────────────────────────────────
+// ── Auth ─────────────────────────────────────────────────────────────────────
 
-async function carregarMotoristas() {
-  const select = document.getElementById("motoristaSelect");
-  try {
-    const lista = await apiGet(`${API_BASE}/api/usuarios?perfil=motorista`);
-    const ativos = lista.filter(u => u.ativo !== false);
-    if (!ativos.length) {
-      select.innerHTML = `<option value="">Nenhum motorista cadastrado</option>`;
-      return;
-    }
-    ativos.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-    select.innerHTML =
-      `<option value="">— Selecione seu nome —</option>` +
-      ativos.map(m =>
-        `<option value="${m.id}" data-nome="${m.nome}">${m.nome}</option>`
-      ).join("");
-  } catch (e) {
-    console.error(e);
-    select.innerHTML = `<option value="">Erro ao carregar — tente recarregar</option>`;
-    toast("Erro ao conectar ao servidor.", "erro");
-  }
-}
-
-function fazerLogin() {
-  const select = document.getElementById("motoristaSelect");
-  const id   = select.value;
-  const nome = select.options[select.selectedIndex]?.dataset.nome;
-
-  if (!id) {
-    document.getElementById("loginError").style.display = "block";
-    return;
-  }
-  document.getElementById("loginError").style.display = "none";
-
-  state.motorista = { id, nome };
-  sessionStorage.setItem(MOTO_SESSION_KEY, JSON.stringify({ id, nome }));
-  mostrarTelaPrincipal();
-}
-
-function fazerLogout() {
-  sessionStorage.removeItem(MOTO_SESSION_KEY);
-  state.motorista = null;
-
+function sair() {
+  sessionStorage.removeItem("madcenter_token");
+  sessionStorage.removeItem("madcenter_nome");
+  sessionStorage.removeItem("madcenter_perfil");
   if (state.geoWatchId !== null) {
     navigator.geolocation.clearWatch(state.geoWatchId);
     state.geoWatchId = null;
   }
-
-  hide("mainScreen");
-  show("loginScreen");
-  carregarMotoristas();
+  window.location.href = "login.html";
 }
 
 // ── Tela principal ───────────────────────────────────────────────────────────
 
 function mostrarTelaPrincipal() {
   document.getElementById("headerName").textContent = state.motorista.nome;
-  hide("loginScreen");
   show("mainScreen");
   carregarEntregasDoDia(state.motorista.id);
 }
@@ -880,24 +840,37 @@ function alternarTema() {
 
 // ── Inicialização ────────────────────────────────────────────────────────────
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   // Tema (já aplicado no <head>; aqui só sincroniza o ícone e o listener)
   aplicarTema(localStorage.getItem("madcenter_tema") || "dark");
   const themeBtn = document.getElementById("themeToggle");
   if (themeBtn) themeBtn.addEventListener("click", alternarTema);
 
-  // Verifica sessão existente
-  const saved = sessionStorage.getItem(MOTO_SESSION_KEY);
-  if (saved) {
-    try {
-      state.motorista = JSON.parse(saved);
-      mostrarTelaPrincipal();
-    } catch {
-      sessionStorage.removeItem(MOTO_SESSION_KEY);
-      carregarMotoristas();
+  // Verificação de autenticação
+  const token      = sessionStorage.getItem("madcenter_token");
+  const perfil     = sessionStorage.getItem("madcenter_perfil");
+  const nomeLogado = sessionStorage.getItem("madcenter_nome");
+  if (!token || perfil !== "motorista") {
+    window.location.replace("login.html");
+    return;
+  }
+
+  // Busca o registro do motorista pelo nome na tabela motoristas
+  try {
+    const motoristas = await apiGet(`${API_BASE}/api/motoristas`);
+    const moto = (motoristas || []).find(
+      m => (m.nome || "").toLowerCase() === (nomeLogado || "").toLowerCase()
+    );
+    if (!moto) {
+      toast("Motorista não encontrado. Entre em contato com o administrador.", "erro");
+      setTimeout(sair, 3000);
+      return;
     }
-  } else {
-    carregarMotoristas();
+    state.motorista = { id: moto.id, nome: moto.nome };
+  } catch (e) {
+    console.error(e);
+    toast("Erro ao carregar dados. Tente novamente.", "erro");
+    return;
   }
 
   // Abas
@@ -905,17 +878,7 @@ document.addEventListener("DOMContentLoaded", () => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
 
-  // Eventos
-  document.getElementById("loginBtn").addEventListener("click", fazerLogin);
-  document.getElementById("logoutBtn").addEventListener("click", fazerLogout);
+  document.getElementById("logoutBtn").addEventListener("click", sair);
 
-  // Enter no select faz login
-  document.getElementById("motoristaSelect").addEventListener("keydown", e => {
-    if (e.key === "Enter") fazerLogin();
-  });
-
-  // Esconde erro ao mudar seleção
-  document.getElementById("motoristaSelect").addEventListener("change", () => {
-    document.getElementById("loginError").style.display = "none";
-  });
+  mostrarTelaPrincipal();
 });

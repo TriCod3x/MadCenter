@@ -3,8 +3,6 @@
 // ── Configuração ─────────────────────────────────────────────────────────────
 
 const API_BASE = window.location.port === "3000" ? "" : "http://localhost:3000";
-const ATEND_SESSION_KEY = "atendente_auth";
-const SENHA_ATENDENTE = "madcenter2025";
 
 // Coordenadas da loja (Timon/MA)
 const STORE_LAT = -4.760287;
@@ -38,6 +36,7 @@ let todayStr = new Date().toISOString().slice(0, 10);
 
 async function apiGet(url) {
   const res = await fetch(url);
+  if (res.status === 401) { sair(); return; }
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
   return json;
@@ -49,6 +48,7 @@ async function apiPost(url, data) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
   });
+  if (res.status === 401) { sair(); return; }
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
   return json;
@@ -171,11 +171,14 @@ async function carregarPedidos() {
 }
 
 function filtrarHoje(pedidos) {
-  // Filtra pelo campo created_at (adicionado automaticamente pelo Supabase)
-  // com fallback para coleta ou entrega
+  const agora  = new Date();
+  const inicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+  const fim    = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() + 1);
   return pedidos.filter(p => {
-    const dt = p.created_at || p.coleta || p.entrega || "";
-    return dt.slice(0, 10) === todayStr;
+    const dtStr = p.created_at || p.criado_em || "";
+    if (!dtStr) return false;
+    const d = new Date(dtStr);
+    return d >= inicio && d < fim;
   });
 }
 
@@ -248,6 +251,7 @@ async function salvarPedido() {
   const btn = document.getElementById("salvarBtn");
 
   // Leitura dos campos
+  const codigoInput      = document.getElementById("fCodigo").value.trim();
   const cliente          = document.getElementById("fCliente").value.trim();
   const telefone         = document.getElementById("fTelefone").value.trim();
   const descricao        = document.getElementById("fProduto").value.trim();
@@ -284,6 +288,7 @@ async function salvarPedido() {
   const cepFormatado = `${cepDigits.slice(0, 5)}-${cepDigits.slice(5)}`;
 
   const payload = {
+    ...(codigoInput ? { codigo: codigoInput } : {}),
     descricao,
     tipo,
     peso,
@@ -326,7 +331,7 @@ async function salvarPedido() {
 }
 
 function limparFormulario() {
-  const ids = ["fCliente", "fTelefone", "fProduto", "fVolume", "fCep",
+  const ids = ["fCodigo", "fCliente", "fTelefone", "fProduto", "fVolume", "fCep",
                "fEndereco", "fNumero", "fComplemento", "fMunicipio",
                "fEstado", "fDataEntrega", "fObs", "fPeso"];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
@@ -362,30 +367,17 @@ function fecharFormulario() {
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
-function fazerLogin() {
-  const senha = document.getElementById("senhaInput").value;
-  const erro  = document.getElementById("loginError");
-  if (senha === SENHA_ATENDENTE) {
-    sessionStorage.setItem(ATEND_SESSION_KEY, "1");
-    erro.style.display = "none";
-    mostrarTelaPrincipal();
-  } else {
-    erro.style.display = "block";
-    document.getElementById("senhaInput").value = "";
-    document.getElementById("senhaInput").focus();
-  }
-}
-
-function fazerLogout() {
-  sessionStorage.removeItem(ATEND_SESSION_KEY);
-  document.getElementById("mainScreen").classList.add("hidden");
-  document.getElementById("loginScreen").classList.remove("hidden");
-  document.getElementById("senhaInput").value = "";
+function sair() {
+  sessionStorage.removeItem("madcenter_token");
+  sessionStorage.removeItem("madcenter_nome");
+  sessionStorage.removeItem("madcenter_perfil");
+  window.location.href = "login.html";
 }
 
 function mostrarTelaPrincipal() {
-  document.getElementById("loginScreen").classList.add("hidden");
-  document.getElementById("mainScreen").classList.remove("hidden");
+  const nome = sessionStorage.getItem("madcenter_nome");
+  const titulo = document.getElementById("atendHeaderTitle");
+  if (titulo && nome) titulo.textContent = `${nome} — Madcenter`;
   todayStr = new Date().toISOString().slice(0, 10);
   carregarPedidos();
 }
@@ -550,17 +542,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const themeBtn = document.getElementById("themeToggle");
   if (themeBtn) themeBtn.addEventListener("click", alternarTema);
 
-  // Verifica sessão existente
-  if (sessionStorage.getItem(ATEND_SESSION_KEY) === "1") {
-    mostrarTelaPrincipal();
+  // Verificação de autenticação
+  const token  = sessionStorage.getItem("madcenter_token");
+  const perfil = sessionStorage.getItem("madcenter_perfil");
+  if (!token || perfil !== "atendente") {
+    window.location.replace("login.html");
+    return;
   }
 
-  // Eventos de login / logout
-  document.getElementById("loginBtn").addEventListener("click", fazerLogin);
-  document.getElementById("senhaInput").addEventListener("keydown", e => {
-    if (e.key === "Enter") fazerLogin();
-  });
-  document.getElementById("logoutBtn").addEventListener("click", fazerLogout);
+  mostrarTelaPrincipal();
+
+  document.getElementById("logoutBtn").addEventListener("click", sair);
 
   // Formulário
   document.getElementById("toggleFormBtn").addEventListener("click", abrirFormulario);

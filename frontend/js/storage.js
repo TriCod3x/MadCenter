@@ -72,6 +72,7 @@ function pedidoFromDB(p) {
 
 function pedidoToDB(p) {
   return {
+    ...(p.codigo ? { codigo: p.codigo } : {}),
     descricao: p.descricao,
     tipo: p.tipo,
     peso: Number(p.peso || 0),

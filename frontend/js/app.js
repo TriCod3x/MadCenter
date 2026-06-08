@@ -36,6 +36,7 @@ const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL
 
 const fields = {
   cargas: [
+    ["codigo", "Código do pedido", "text", false],
     ["descricao", "Produto/material", "text", true],
     ["tipo", "Categoria do material", "select:Tintas,Elétrica,Hidráulica,Ferramentas,Pisos e revestimentos,Cimento e argamassa,Outros", true],
     ["peso", "Peso (kg)", "number", true],
@@ -58,9 +59,7 @@ const fields = {
   motoristas: [
     ["nome", "Nome", "text", true],
     ["telefone", "WhatsApp", "phone", true],
-    ["categoria", "Categoria", "select:B,C,D,E", true],
-    ["cidade", "Cidade atual", "text", true],
-    ["estado", "Estado atual", "text", true],
+    ["categoria", "Categoria CNH", "select:B,C,D,E", true],
     ["observacoes", "Observações", "textarea", false]
   ],
   rotas: [
@@ -85,7 +84,9 @@ let _mapPickerForm = null;
 let _mapPickerInitTimer = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
-  if (localStorage.getItem(SESSION_KEY) !== "1") {
+  const _token  = sessionStorage.getItem("madcenter_token");
+  const _perfil = sessionStorage.getItem("madcenter_perfil");
+  if (!_token || _perfil !== "admin") {
     window.location.replace("login.html");
     return;
   }
@@ -145,7 +146,9 @@ function bindLayoutEvents() {
     renderEntregasChart(_chartPeriodo);
   });
   document.getElementById("logoutBtn").addEventListener("click", () => {
-    localStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem("madcenter_token");
+    sessionStorage.removeItem("madcenter_nome");
+    sessionStorage.removeItem("madcenter_perfil");
     window.location.replace("login.html");
   });
   document.getElementById("quickSearch").addEventListener("input", (event) => {
@@ -561,7 +564,6 @@ function renderMotoristasTable() {
     `<select class="table-status-select" onchange="changeMotoristaStatus('${m.id}', this.value)">${["disponível", "em entrega", "inativo"].map((s) => `<option value="${s}" ${m.status === s ? "selected" : ""}>${s}</option>`).join("")}</select>`,
     `<div class="actions-cell">
       <button class="table-action" onclick="openForm('motoristas','${m.id}')">${Icons.edit(14)} Editar</button>
-      <button class="table-action" onclick="confirmDelete('motoristas','${m.id}')">${Icons.trash(14)}</button>
       <button class="table-action" onclick="copiarLinkMotorista()" title="Copiar link da área do motorista">${Icons.link(14)} Link</button>
     </div>`
   ]));
@@ -709,9 +711,21 @@ function openForm(entity, id = null) {
   App.modal = { entity, mode: id ? "edit" : "new", id };
   const item = id ? getCollection(entity).find((record) => record.id === id) : defaultItem(entity);
   document.getElementById("modalTitle").innerHTML = `${_entityIcon(entity, 18)} ${id ? "Editar" : "Cadastrar"} ${singular(entity)}`;
+
+  const mapaHtml = (entity === "motoristas" && id) ? `
+    <div class="form-field full" style="display:flex;flex-direction:column;gap:.5rem">
+      <span style="font-weight:600;font-size:.875rem;color:var(--text)">📍 Últimas entregas realizadas</span>
+      <div id="mapaHistoricoMotorista" style="height:260px;border-radius:12px;background:var(--surface-soft);overflow:hidden"></div>
+      <p id="semEntregasMsg" style="display:none;color:var(--muted);font-size:.8rem;text-align:center;padding:8px 0;margin:0">
+        Nenhuma entrega registrada para este motorista.
+      </p>
+    </div>
+  ` : "";
+
   document.getElementById("modalBody").innerHTML = `
     <form id="entityForm" class="form-grid">
       ${fields[entity].map((field) => fieldHtml(field, item)).join("")}
+      ${mapaHtml}
       <div class="modal-actions form-field full">
         <button class="secondary-button" type="button" onclick="closeModal()">Cancelar</button>
         <button class="primary-button" type="submit">Salvar</button>
@@ -722,6 +736,10 @@ function openForm(entity, id = null) {
   const munInput = document.querySelector('#entityForm [name="destinoMunicipio"]');
   if (munInput) setupMunicipioAutocomplete(munInput);
   openModal();
+
+  if (entity === "motoristas" && id) {
+    carregarMapaHistoricoMotorista(id);
+  }
 }
 
 function defaultItem(entity) {
@@ -1154,7 +1172,85 @@ function openModal() {
 }
 
 function closeModal() {
+  if (window._mapaHistorico) {
+    try { window._mapaHistorico.remove(); } catch {}
+    window._mapaHistorico = null;
+  }
   document.getElementById("modalBackdrop").classList.remove("active");
+}
+
+// ── Mapa de histórico de entregas (modal motorista) ────────────────────────
+
+function carregarMapaHistoricoMotorista(motoristaId) {
+  // Destrói instância anterior se existir
+  if (window._mapaHistorico) {
+    try { window._mapaHistorico.remove(); } catch {}
+    window._mapaHistorico = null;
+  }
+
+  const container = document.getElementById("mapaHistoricoMotorista");
+  const semMsg    = document.getElementById("semEntregasMsg");
+  if (!container) return;
+
+  // Rotas concluídas deste motorista
+  const rotas = getRotas().filter(r =>
+    r.status === "concluída" && r.motoristaId === motoristaId
+  );
+
+  // IDs de pedidos dessas rotas
+  const pedidosIds = new Set(rotas.flatMap(r => r.cargasIds || []));
+
+  // Pedidos entregues com coordenadas
+  const pedidos = getCargas().filter(p =>
+    pedidosIds.has(p.id) && p.status === "entregue" && p.lat && p.lng
+  );
+
+  if (!pedidos.length) {
+    container.style.display = "none";
+    if (semMsg) semMsg.style.display = "block";
+    return;
+  }
+
+  container.style.display = "block";
+  if (semMsg) semMsg.style.display = "none";
+
+  // Inicializa o mapa com delay para garantir que o container está visível
+  setTimeout(() => {
+    if (!document.getElementById("mapaHistoricoMotorista")) return;
+
+    const map = L.map("mapaHistoricoMotorista", { zoomControl: true });
+    window._mapaHistorico = map;
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: "© OpenStreetMap"
+    }).addTo(map);
+
+    const bounds = pedidos.map(p => [p.lat, p.lng]);
+
+    pedidos.forEach(p => {
+      L.circleMarker([p.lat, p.lng], {
+        radius: 8,
+        color: "#fff",
+        weight: 2,
+        fillColor: "#22c55e",
+        fillOpacity: 1
+      }).bindPopup(`
+        <b>${p.codigo || "—"}</b><br>
+        ${p.cliente || "—"}<br>
+        ${p.enderecoEntrega ? p.enderecoEntrega + "<br>" : ""}
+        <small style="color:#666">${p.destinoMunicipio || ""}/${p.destinoEstado || ""}</small>
+      `).addTo(map);
+    });
+
+    if (bounds.length === 1) {
+      map.setView(bounds[0], 13);
+    } else {
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
+
+    map.invalidateSize();
+  }, 300);
 }
 
 // ── Seletor de localização no mapa ─────────────────────────────────────────
@@ -1907,6 +2003,7 @@ async function renderUsuarios() {
       `<div class="actions-cell">
         <button class="table-action" onclick="openUserForm('${u.id}')">${Icons.edit(14)} Editar</button>
         <button class="table-action" onclick="toggleUsuario('${u.id}')">${toggleIcon} ${toggleLabel}</button>
+        <button class="table-action" style="color:var(--danger)" onclick="excluirUsuario('${u.id}','${u.nome.replace(/'/g, "\\'")}')">${Icons.trash(14)} Excluir</button>
       </div>`
     ];
   });
@@ -1929,11 +2026,16 @@ function openUserForm(id = null) {
       </label>
       <label class="form-field">
         <span>Perfil *</span>
-        <select name="perfil" required>
+        <select name="perfil" required
+          onchange="document.getElementById('motoristaNote').style.display=this.value==='motorista'?'flex':'none'">
           <option value="atendente" ${user?.perfil === "atendente" ? "selected" : ""}>Atendente</option>
           <option value="motorista" ${user?.perfil === "motorista" ? "selected" : ""}>Motorista</option>
         </select>
       </label>
+      <div id="motoristaNote" class="form-field full" style="display:${user?.perfil === "motorista" ? "flex" : "none"};align-items:flex-start;gap:.5rem;padding:.6rem .85rem;background:var(--surface-soft);border-radius:var(--radius);border:1px solid var(--line);font-size:.82rem;color:var(--muted);line-height:1.45">
+        <span style="flex-shrink:0">ℹ️</span>
+        <span>Motoristas cadastrados aqui também aparecem na aba <strong>Motoristas</strong> para gerenciamento de rotas.</span>
+      </div>
       <label class="form-field">
         <span>${isEdit ? "Nova senha (deixe vazio para manter)" : "Senha *"}</span>
         <input type="password" name="senha" ${isEdit ? "" : "required"} autocomplete="new-password"
@@ -2030,5 +2132,22 @@ async function toggleUsuario(id) {
   } catch (e) {
     console.error(e);
     toast(`Erro ao alterar status: ${e.message}`);
+  }
+}
+
+async function excluirUsuario(id, nome) {
+  if (!confirm(`Tem certeza que deseja excluir o usuário "${nome}"?\nEsta ação é permanente e não pode ser desfeita.`)) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/usuarios/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    _usuarios = _usuarios.filter((u) => u.id !== id);
+    toast(`Usuário "${nome}" excluído.`);
+    await renderUsuarios();
+  } catch (e) {
+    console.error(e);
+    toast(`Erro ao excluir: ${e.message}`);
   }
 }
