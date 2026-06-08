@@ -19,7 +19,10 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
-const JWT_SECRET = process.env.JWT_SECRET || "fallback-inseguro-troque-no-env";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET não foi configurado. Defina JWT_SECRET no arquivo .env.");
+}
 
 async function listar(req, res, tabela) {
   const { data, error } = await supabase.from(tabela).select("*");
@@ -240,8 +243,11 @@ app.patch("/api/usuarios/:id/toggle", async (req, res) => {
 
 // GET /api/auth/gerar-hash?senha=... — rota temporária para gerar hash bcrypt
 app.get("/api/auth/gerar-hash", async (req, res) => {
-  const senha = req.query.senha || "mad2026center";
-  const hash  = await bcrypt.hash(senha, 10);
+  const senha = req.query.senha;
+  if (!senha) {
+    return res.status(400).json({ error: "Parâmetro senha é obrigatório." });
+  }
+  const hash = await bcrypt.hash(senha, 10);
   res.json({ senha, hash });
 });
 
@@ -306,47 +312,6 @@ app.get("/api/auth/setup-motoristas", async (req, res) => {
     erro: "Rota desativada. Use a tela de Usuários para cadastrar motoristas.",
     fluxo: "POST /api/usuarios com perfil='motorista' cria automaticamente na tabela motoristas."
   });
-  // eslint-disable-next-line no-unreachable
-  try {
-    const { data: motoristas, error: errMoto } = await supabase
-      .from("motoristas")
-      .select("*");
-    if (errMoto) return res.status(400).json({ error: errMoto.message });
-
-    const { data: usuariosExistentes, error: errUsr } = await supabase
-      .from("usuarios")
-      .select("nome, perfil");
-    if (errUsr) return res.status(400).json({ error: errUsr.message });
-
-    const nomesExistentes = new Set(
-      usuariosExistentes
-        .filter(u => u.perfil === "motorista")
-        .map(u => u.nome.toLowerCase())
-    );
-
-    const novos = motoristas.filter(
-      m => m.nome && !nomesExistentes.has(m.nome.toLowerCase())
-    );
-
-    if (!novos.length) {
-      return res.json({ criados: 0, mensagem: "Nenhum motorista novo para importar." });
-    }
-
-    const senha_hash = await bcrypt.hash("motor123", 10);
-    const registros = novos.map(m => ({
-      nome: m.nome, perfil: "motorista", senha_hash, ativo: true
-    }));
-
-    const { data, error } = await supabase
-      .from("usuarios")
-      .insert(registros)
-      .select("id, nome, perfil");
-    if (error) return res.status(400).json({ error: error.message });
-
-    res.json({ criados: data.length, usuarios: data });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
