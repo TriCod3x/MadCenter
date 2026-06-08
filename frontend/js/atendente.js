@@ -365,7 +365,8 @@ function limparFormulario() {
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
   document.getElementById("fCategoria").value  = "Tintas";
   document.getElementById("fPrioridade").value = "normal";
-  document.getElementById("fVeiculo").value    = "caminhonete";
+  const selVeiculo = document.getElementById("fVeiculo");
+  if (selVeiculo.options.length > 0) selVeiculo.selectedIndex = 0;
   const cepMsg = document.getElementById("cepMsg");
   if (cepMsg) { cepMsg.textContent = ""; cepMsg.className = "atend-cep-msg"; }
   const freteInfo = document.getElementById("freteInfo");
@@ -775,6 +776,21 @@ function alternarTema() {
   aplicarTema(novo);
 }
 
+// ── Veículos ──────────────────────────────────────────────────────────────────
+
+async function popularSelectVeiculos() {
+  const sel = document.getElementById("fVeiculo");
+  try {
+    const veiculos = await apiGet(`${API_BASE}/api/veiculos`);
+    sel.innerHTML = veiculos
+      .map(v => `<option value="${v.id}">${v.nome}</option>`)
+      .join("");
+    if (sel.options.length > 0) sel.options[0].selected = true;
+  } catch {
+    // select permanece vazio; salvarPedido validará
+  }
+}
+
 // ── Inicialização ─────────────────────────────────────────────────────────────
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -792,6 +808,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   mostrarTelaPrincipal();
+  popularSelectVeiculos();
 
   document.getElementById("logoutBtn").addEventListener("click", sair);
 
