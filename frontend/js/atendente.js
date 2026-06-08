@@ -23,6 +23,8 @@ const moneyFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "
 // Estado do formulário: coordenadas obtidas via CEP/geocodificação
 let formState = { lat: null, lng: null };
 
+let _pollingId = null;
+
 // Estado do map picker
 let _mapPicker = null;
 let _mapPickerMarker = null;
@@ -158,15 +160,18 @@ function atualizarFreteDisplay() {
 
 // ── Carregar / Renderizar ─────────────────────────────────────────────────────
 
-async function carregarPedidos() {
+async function carregarPedidos(silencioso = false) {
   try {
     const todos = await apiGet(`${API_BASE}/api/pedidos`);
     const hoje  = filtrarHoje(todos);
     atualizarResumo(hoje);
     renderLista(hoje);
+    if (silencioso) _mostrarSincBadge();
   } catch {
-    document.getElementById("pedidosList").innerHTML =
-      `<div class="atend-empty">Erro ao carregar pedidos. Verifique a conexão.</div>`;
+    if (!silencioso) {
+      document.getElementById("pedidosList").innerHTML =
+        `<div class="atend-empty">Erro ao carregar pedidos. Verifique a conexão.</div>`;
+    }
   }
 }
 
@@ -368,10 +373,39 @@ function fecharFormulario() {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 function sair() {
+  _pararPolling();
   sessionStorage.removeItem("madcenter_token");
   sessionStorage.removeItem("madcenter_nome");
   sessionStorage.removeItem("madcenter_perfil");
   window.location.href = "login.html";
+}
+
+// ── Polling de atualização em tempo real ─────────────────────────────────────
+
+function _pararPolling() {
+  if (_pollingId !== null) {
+    clearInterval(_pollingId);
+    _pollingId = null;
+  }
+}
+
+function _iniciarPolling() {
+  _pararPolling();
+  _pollingId = setInterval(() => carregarPedidos(true).catch(() => {}), 10000);
+}
+
+function _mostrarSincBadge() {
+  let badge = document.getElementById("atendSyncBadge");
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.id = "atendSyncBadge";
+    badge.className = "atend-sync-badge";
+    document.body.appendChild(badge);
+  }
+  badge.textContent = "✓ atualizado";
+  badge.classList.add("visible");
+  clearTimeout(badge._t);
+  badge._t = setTimeout(() => badge.classList.remove("visible"), 1500);
 }
 
 function mostrarTelaPrincipal() {
@@ -380,6 +414,7 @@ function mostrarTelaPrincipal() {
   if (titulo && nome) titulo.textContent = `${nome} — Madcenter`;
   todayStr = new Date().toISOString().slice(0, 10);
   carregarPedidos();
+  _iniciarPolling();
 }
 
 // ── Map Picker ─────────────────────────────────────────────────────────────────

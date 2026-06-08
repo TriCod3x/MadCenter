@@ -198,6 +198,10 @@ img { max-width: 100%; }
 .atend-field input::placeholder,
 .atend-field textarea::placeholder { color: var(--muted); opacity: .7; }
 
+[data-theme="dark"] .atend-field input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
 .atend-field select {
   -webkit-appearance: none;
   appearance: none;
@@ -722,6 +726,26 @@ img { max-width: 100%; }
   max-width: calc(100vw - 32px);
 }
 .atend-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── Indicador de sincronização ──────────────────── */
+.atend-sync-badge {
+  position: fixed;
+  top: 14px;
+  right: 16px;
+  background: rgba(15, 169, 88, .13);
+  color: var(--primary-2);
+  border: 1px solid rgba(15, 169, 88, .25);
+  border-radius: 20px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  z-index: 200;
+  opacity: 0;
+  transition: opacity .4s ease;
+  pointer-events: none;
+}
+.atend-sync-badge.visible { opacity: 1; }
+[data-theme="dark"] .atend-sync-badge { color: var(--primary-3); }
 
 /* ── MODAL DO MAPA ─────────────────────────────────── */
 

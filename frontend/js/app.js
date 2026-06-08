@@ -83,6 +83,42 @@ let _mapPickerCoords = null;
 let _mapPickerForm = null;
 let _mapPickerInitTimer = null;
 
+let _pollingId = null;
+
+// ── Polling de atualização em tempo real ─────────────────────────────────────
+
+function _pararPolling() {
+  if (_pollingId !== null) {
+    clearInterval(_pollingId);
+    _pollingId = null;
+  }
+}
+
+function _iniciarPolling() {
+  _pararPolling();
+  _pollingId = setInterval(async () => {
+    try {
+      await initStorage();
+      renderAll();
+      _mostrarSincBadge();
+    } catch { /* ignora erros de rede no polling silencioso */ }
+  }, 10000);
+}
+
+function _mostrarSincBadge() {
+  let badge = document.getElementById("adminSyncBadge");
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.id = "adminSyncBadge";
+    badge.className = "admin-sync-badge";
+    document.body.appendChild(badge);
+  }
+  badge.textContent = "✓ atualizado";
+  badge.classList.add("visible");
+  clearTimeout(badge._t);
+  badge._t = setTimeout(() => badge.classList.remove("visible"), 1500);
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   const _token  = sessionStorage.getItem("madcenter_token");
   const _perfil = sessionStorage.getItem("madcenter_perfil");
@@ -97,6 +133,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     await initStorage();
     renderAll();
+    _iniciarPolling();
   } catch (e) {
     console.error("Erro ao carregar dados do servidor:", e);
     toast("Erro ao conectar ao servidor. Verifique se o backend está rodando.");
@@ -146,6 +183,7 @@ function bindLayoutEvents() {
     renderEntregasChart(_chartPeriodo);
   });
   document.getElementById("logoutBtn").addEventListener("click", () => {
+    _pararPolling();
     sessionStorage.removeItem("madcenter_token");
     sessionStorage.removeItem("madcenter_nome");
     sessionStorage.removeItem("madcenter_perfil");
@@ -1468,6 +1506,13 @@ function formatDate(value) {
   return date.toLocaleDateString("pt-BR");
 }
 
+function formatDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("pt-BR") + " " + date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
 function capitalizeFirstLetter(text) {
   return String(text || "").charAt(0).toUpperCase() + String(text || "").slice(1);
 }
@@ -1739,6 +1784,7 @@ function buildRotaPedidosHtml(rotaId) {
             <span>${Icons.tag(14)} ${money.format(Number(c.valorFrete || 0))}</span>
             <span>Prioridade: ${c.prioridade || "normal"}</span>
           </div>
+          ${entregue && c.dataEntrega ? `<div class="pedido-detail-row"><span>${Icons.checkCircle(14)} Entregue em: <strong>${formatDateTime(c.dataEntrega)}</strong></span></div>` : ""}
           ${c.observacoes ? `<div class="pedido-detail-obs">${Icons.file(14)} ${c.observacoes}</div>` : ""}
         </div>
         <div class="pedido-detail-actions">
@@ -1754,7 +1800,7 @@ function buildRotaPedidosHtml(rotaId) {
 
 async function markPedidoEntregue(pedidoId, rotaId) {
   try {
-    await updateCarga(pedidoId, { status: "entregue" });
+    await updateCarga(pedidoId, { status: "entregue", dataEntrega: new Date().toISOString() });
     await syncRouteStatus(rotaId);
     renderAll();
     if (App.page === "mapa") renderLogisticsMap(App.mapFilters);
@@ -1845,7 +1891,7 @@ async function syncDriverStatus(driverId) {
 async function markAsDelivered(id) {
   const pedido = getCargas().find((item) => item.id === id);
   if (!pedido) return;
-  await updateCarga(id, { status: "entregue" });
+  await updateCarga(id, { status: "entregue", dataEntrega: new Date().toISOString() });
   const rota = getRotas().find((route) => (route.cargasIds || []).includes(id));
   if (rota) await syncRouteStatus(rota.id);
   renderAll();

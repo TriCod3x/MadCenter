@@ -1383,6 +1383,27 @@ tr:hover td {
 
 .toast.show { display: block; }
 .toast.active { display: block; }
+
+/* ── Indicador de sincronização ──────────────────── */
+.admin-sync-badge {
+  position: fixed;
+  top: 14px;
+  right: 220px;
+  background: rgba(15, 169, 88, .13);
+  color: var(--primary-2);
+  border: 1px solid rgba(15, 169, 88, .25);
+  border-radius: 20px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  z-index: 200;
+  opacity: 0;
+  transition: opacity .4s ease;
+  pointer-events: none;
+}
+.admin-sync-badge.visible { opacity: 1; }
+[data-theme="dark"] .admin-sync-badge { color: var(--primary-3); }
+
 .mobile-only { display: none; }
 
 .quick-access-btn {

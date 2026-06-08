@@ -41,6 +41,8 @@ const state = {
   currentPos:      null    // { lat, lng }
 };
 
+let _pollingId = null;
+
 // ── Utilitários ──────────────────────────────────────────────────────────────
 
 async function apiGet(url) {
@@ -106,6 +108,7 @@ function toast(msg, tipo = "ok") {
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 function sair() {
+  _pararPolling();
   sessionStorage.removeItem("madcenter_token");
   sessionStorage.removeItem("madcenter_nome");
   sessionStorage.removeItem("madcenter_perfil");
@@ -122,11 +125,55 @@ function mostrarTelaPrincipal() {
   document.getElementById("headerName").textContent = state.motorista.nome;
   show("mainScreen");
   carregarEntregasDoDia(state.motorista.id);
+  _iniciarPolling();
 }
 
-async function carregarEntregasDoDia(motoristaId) {
-  document.getElementById("pedidosList").innerHTML =
-    `<div class="moto-mural-loading">Carregando…</div>`;
+// ── Polling de atualização em tempo real ─────────────────────────────────────
+
+function _pararPolling() {
+  if (_pollingId !== null) {
+    clearInterval(_pollingId);
+    _pollingId = null;
+  }
+}
+
+function _iniciarPolling() {
+  _pararPolling();
+  _pollingId = setInterval(_pollSilencioso, 10000);
+}
+
+async function _pollSilencioso() {
+  if (!state.motorista?.id) return;
+  const tabEntregas = !document.getElementById("tabEntregas")?.classList.contains("hidden");
+  try {
+    if (tabEntregas) {
+      await carregarEntregasDoDia(state.motorista.id, true);
+    } else {
+      await carregarMural(true);
+    }
+    _mostrarSincBadge();
+  } catch { /* ignora erros de rede no polling silencioso */ }
+}
+
+function _mostrarSincBadge() {
+  let badge = document.getElementById("motoSyncBadge");
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.id = "motoSyncBadge";
+    badge.className = "moto-sync-badge";
+    document.body.appendChild(badge);
+  }
+  badge.textContent = "✓ atualizado";
+  badge.classList.add("visible");
+  clearTimeout(badge._t);
+  badge._t = setTimeout(() => badge.classList.remove("visible"), 1500);
+}
+
+async function carregarEntregasDoDia(motoristaId, silencioso = false) {
+  if (!silencioso) {
+    document.getElementById("pedidosList").innerHTML =
+      `<div class="moto-mural-loading">Carregando…</div>`;
+  }
 
   try {
     const [todasRotas, todosPedidos] = await Promise.all([
@@ -290,7 +337,7 @@ async function marcarEntregue(pedidoId, rotaId) {
 
   try {
     // 1. Marca pedido como entregue
-    await apiPut(`${API_BASE}/api/pedidos/${pedidoId}`, { status: "entregue" });
+    await apiPut(`${API_BASE}/api/pedidos/${pedidoId}`, { status: "entregue", data_entrega: new Date().toISOString() });
 
     // 2. Atualiza estado local
     const pedido = state.pedidos.find(p => p.id === pedidoId);
@@ -566,16 +613,18 @@ const PRIORIDADE_ORDEM = { urgente: 3, alta: 2, normal: 1, baixa: 0 };
 
 const moneyMural = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
-async function carregarMural() {
+async function carregarMural(silencioso = false) {
   const loading = document.getElementById("muralLoading");
   const vazio   = document.getElementById("muralVazio");
   const resumo  = document.getElementById("muralResumo");
   const list    = document.getElementById("muralList");
 
-  loading.style.display = "block";
-  list.innerHTML        = "";
-  vazio.classList.add("hidden");
-  resumo.style.display = "none";
+  if (!silencioso) {
+    loading.style.display = "block";
+    list.innerHTML        = "";
+    vazio.classList.add("hidden");
+    resumo.style.display = "none";
+  }
 
   try {
     const todos = await apiGet(`${API_BASE}/api/pedidos`);
@@ -726,7 +775,7 @@ async function pegarPedido(pedidoId) {
     carregarEntregasDoDia(state.motorista.id).catch(() => {});
   } catch (e) {
     console.error(e);
-    toast("Erro ao pegar pedido. Tente novamente.", "erro");
+    toast(e.message || "Erro ao pegar pedido. Tente novamente.", "erro");
     if (btn) { btn.disabled = false; btn.innerHTML = `${Icons.plus(16)} Pegar este pedido`; }
   }
 }
@@ -752,37 +801,57 @@ async function pegarPedidosSelecionados() {
     carregarEntregasDoDia(state.motorista.id).catch(() => {});
   } catch (e) {
     console.error(e);
-    toast("Erro ao criar rota. Tente novamente.", "erro");
+    toast(e.message || "Erro ao criar rota. Tente novamente.", "erro");
   } finally {
     if (btn) btn.style.opacity = "";
   }
 }
 
 async function _associarPedidosARota(pedidos) {
-  // Busca rotas do motorista para saber se já tem uma "em andamento"
+  // Re-verifica status atual no servidor para prevenir race condition entre motoristas
+  const todosPedidos = await apiGet(`${API_BASE}/api/pedidos`);
+  const disponiveis  = pedidos.filter(p => {
+    const atual = todosPedidos.find(s => s.id === p.id);
+    return atual && atual.status === "aguardando rota";
+  });
+
+  if (disponiveis.length === 0) {
+    throw new Error("Este pedido já foi atribuído a outro motorista.");
+  }
+  if (disponiveis.length < pedidos.length) {
+    const n = pedidos.length - disponiveis.length;
+    toast(`${n} pedido(s) já pego(s) por outro motorista foram ignorados.`, "erro");
+  }
+
+  // Busca rota ativa do motorista
   const todasRotas = await apiGet(`${API_BASE}/api/rotas`);
   const rotaAtiva  = todasRotas.find(r =>
     r.motorista_id === state.motorista.id &&
     r.status       === "em andamento"
   );
 
-  const pedidoIds   = pedidos.map(p => p.id);
-  const freteExtra  = pedidos.reduce((s, p) => s + Number(p.valor_frete || 0), 0);
-  const distExtra   = pedidos.reduce((s, p) => s + Number(p.distancia_km || 0), 0);
+  const pedidoIds  = disponiveis.map(p => p.id);
+  const freteExtra = disponiveis.reduce((s, p) => s + Number(p.valor_frete || 0), 0);
+  const distExtra  = disponiveis.reduce((s, p) => s + Number(p.distancia_km || 0), 0);
 
   if (rotaAtiva) {
-    // Adiciona à rota existente
-    const novasIds   = [...(rotaAtiva.cargas_ids || []), ...pedidoIds];
-    const novoFrete  = Number((Number(rotaAtiva.frete_total || 0) + freteExtra).toFixed(2));
-    const novaDist   = Number((Number(rotaAtiva.distancia || 0) + distExtra).toFixed(1));
+    // Dedup: não adiciona IDs que já estão na rota (previne duplicatas no array)
+    const idsExistentes = new Set(rotaAtiva.cargas_ids || []);
+    const idsFiltrados  = pedidoIds.filter(id => !idsExistentes.has(id));
+    if (!idsFiltrados.length) return;
+
+    const ped       = disponiveis.filter(p => idsFiltrados.includes(p.id));
+    const novasIds  = [...(rotaAtiva.cargas_ids || []), ...idsFiltrados];
+    const novoFrete = Number((Number(rotaAtiva.frete_total || 0) + ped.reduce((s, p) => s + Number(p.valor_frete || 0), 0)).toFixed(2));
+    const novaDist  = Number((Number(rotaAtiva.distancia  || 0) + ped.reduce((s, p) => s + Number(p.distancia_km || 0), 0)).toFixed(1));
+
     await apiPut(`${API_BASE}/api/rotas/${rotaAtiva.id}`, {
       cargas_ids:  novasIds,
       frete_total: novoFrete,
       distancia:   novaDist
     });
   } else {
-    // Cria nova rota
-    const primeiro = pedidos[0];
+    const primeiro = disponiveis[0];
     await apiPost(`${API_BASE}/api/rotas`, {
       nome:              `${primeiro.destino_municipio} · ${state.motorista.nome}`,
       tipo_rota:         "Rodoviária",
@@ -800,12 +869,10 @@ async function _associarPedidosARota(pedidos) {
     });
   }
 
-  // Atualiza status de cada pedido para "em rota"
-  for (const pedido of pedidos) {
+  for (const pedido of disponiveis) {
     await apiPut(`${API_BASE}/api/pedidos/${pedido.id}`, { status: "em rota" });
   }
 
-  // Atualiza status do motorista para "em entrega"
   await apiPut(`${API_BASE}/api/motoristas/${state.motorista.id}`, { status: "em entrega" });
 }
 
