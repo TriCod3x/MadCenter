@@ -1256,17 +1256,58 @@ tr:hover td {
   box-shadow: 0 4px 20px rgba(0, 92, 46, .14);
 }
 
+.map-legend.is-collapsed {
+  width: auto;
+  min-width: 132px;
+  padding: 9px 10px;
+}
+
 [data-theme="dark"] .map-legend {
   background: rgba(23, 33, 29, .96);
 }
 
-.map-legend > strong {
-  display: block;
-  margin-bottom: 10px;
+.legend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.legend-header strong {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: .04em;
   color: var(--primary);
+}
+
+.legend-toggle {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: var(--surface);
+  color: var(--primary);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0;
+  box-shadow: 0 1px 4px rgba(0, 92, 46, .08);
+}
+
+.legend-toggle:hover {
+  border-color: var(--primary-2);
+  background: var(--surface-soft);
+}
+
+.legend-content {
+  margin-top: 10px;
+}
+
+.map-legend.is-collapsed .legend-content {
+  display: none;
 }
 
 .legend-row {

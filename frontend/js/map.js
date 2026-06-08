@@ -4,6 +4,7 @@ const ROUTE_CACHE = {};
 const ROUTE_LAYERS = {};
 let selectedRouteId = null;
 const DELIVERY_MARKERS = {};
+let mapLegendCollapsed = false;
 
 function normalizeCityName(text) {
   return String(text || "")
@@ -489,13 +490,25 @@ function renderMapLegend() {
     { status: "concluída",     label: "Concluída",      desc: "Entrega realizada" },
     { status: "cancelada",     label: "Cancelada",      desc: "Cancelada ou bloqueada" }
   ];
+  legend.classList.toggle("is-collapsed", mapLegendCollapsed);
   legend.innerHTML = `
-    <strong>Legenda</strong>
-    ${items.map(({ status, label, desc }) => `
-      <div class="legend-row">
-        <span class="legend-color" style="background:${routeStatusColor(status)}"></span>
-        <div><b>${label}</b><small>${desc}</small></div>
-      </div>
-    `).join("")}
+    <div class="legend-header">
+      <strong>Legenda</strong>
+      <button class="legend-toggle" type="button" aria-expanded="${!mapLegendCollapsed}" aria-label="${mapLegendCollapsed ? "Expandir legenda" : "Minimizar legenda"}" title="${mapLegendCollapsed ? "Expandir legenda" : "Minimizar legenda"}">
+        ${mapLegendCollapsed ? "+" : "-"}
+      </button>
+    </div>
+    <div class="legend-content">
+      ${items.map(({ status, label, desc }) => `
+        <div class="legend-row">
+          <span class="legend-color" style="background:${routeStatusColor(status)}"></span>
+          <div><b>${label}</b><small>${desc}</small></div>
+        </div>
+      `).join("")}
+    </div>
   `;
+  legend.querySelector(".legend-toggle")?.addEventListener("click", () => {
+    mapLegendCollapsed = !mapLegendCollapsed;
+    renderMapLegend();
+  });
 }
