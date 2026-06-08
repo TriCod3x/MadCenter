@@ -308,6 +308,71 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+// ── Veículos ──────────────────────────────────────────────────────────────────
+app.get("/api/veiculos",        (req, res) => listar(req, res, "veiculos"));
+app.post("/api/veiculos",       (req, res) => criar(req, res, "veiculos"));
+app.put("/api/veiculos/:id",    (req, res) => atualizar(req, res, "veiculos"));
+app.delete("/api/veiculos/:id", async (req, res) => {
+  const { id } = req.params;
+  const { count, error: errCount } = await supabase
+    .from("pedidos")
+    .select("id", { count: "exact", head: true })
+    .eq("veiculo_tipo", id);
+  if (errCount) return res.status(400).json({ error: errCount.message });
+  if (count > 0) {
+    return res.status(400).json({
+      error: "Não é possível excluir: existem pedidos vinculados a este veículo."
+    });
+  }
+  return deletar(req, res, "veiculos");
+});
+
+// PUT /api/pedidos/:id/cancelar-motorista — motorista devolve pedido ao mural
+app.put("/api/pedidos/:id/cancelar-motorista", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { data: pedido, error: errPed } = await supabase
+      .from("pedidos")
+      .update({ status: "aguardando rota" })
+      .eq("id", id)
+      .select("id")
+      .single();
+    if (errPed) return res.status(400).json({ error: errPed.message });
+
+    // Remove o pedido de qualquer rota "em andamento" que o contenha
+    const { data: rotas } = await supabase
+      .from("rotas")
+      .select("id, cargas_ids")
+      .eq("status", "em andamento");
+
+    for (const rota of rotas || []) {
+      const ids = Array.isArray(rota.cargas_ids) ? rota.cargas_ids : [];
+      if (!ids.includes(id)) continue;
+      const novasIds = ids.filter(cid => cid !== id);
+      await supabase.from("rotas")
+        .update(novasIds.length ? { cargas_ids: novasIds } : { cargas_ids: [], status: "cancelada" })
+        .eq("id", rota.id);
+    }
+
+    res.json({ success: true, pedido });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/pedidos/:id/deixar-para-depois — mantém na rota, muda status p/ pendente
+app.put("/api/pedidos/:id/deixar-para-depois", async (req, res) => {
+  const { id } = req.params;
+  const { data, error } = await supabase
+    .from("pedidos")
+    .update({ status: "pendente" })
+    .eq("id", id)
+    .select("id, status")
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+  res.json(data);
+});
+
 // POST /api/auth/reset-admin — atualiza hash da senha do admin (temporário)
 app.post("/api/auth/reset-admin", async (req, res) => {
   const { usuario, senha, chave } = req.body;
