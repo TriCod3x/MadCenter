@@ -66,7 +66,8 @@ function pedidoFromDB(p) {
     status: p.status,
     observacoes: p.observacoes,
     lat: p.lat ? Number(p.lat) : null,
-    lng: p.lng ? Number(p.lng) : null
+    lng: p.lng ? Number(p.lng) : null,
+    dataEntrega: p.data_entrega || null
   };
 }
 
@@ -94,7 +95,8 @@ function pedidoToDB(p) {
     status: p.status,
     observacoes: p.observacoes,
     lat: p.lat || null,
-    lng: p.lng || null
+    lng: p.lng || null,
+    data_entrega: p.dataEntrega || null
   };
 }
 

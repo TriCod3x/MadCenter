@@ -19,6 +19,11 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
+const supabaseAdmin = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY
+);
+
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET não foi configurado. Defina JWT_SECRET no arquivo .env.");
@@ -258,8 +263,8 @@ app.post("/api/auth/login", async (req, res) => {
     return res.status(400).json({ error: "Dados incompletos." });
   }
   try {
-    // 1. Tenta autenticar como admin
-    const { data: admin } = await supabase
+    // 1. Tenta autenticar como admin (usa service_role para contornar RLS)
+    const { data: admin } = await supabaseAdmin
       .from("admin_auth")
       .select("*")
       .eq("usuario", nome.trim())
