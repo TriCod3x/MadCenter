@@ -3,6 +3,7 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const path = require("path");
 const bcrypt = require("bcryptjs");
+const jwt    = require("jsonwebtoken");
 const { createClient } = require("@supabase/supabase-js");
 
 dotenv.config();
@@ -17,6 +18,8 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
+
+const JWT_SECRET = process.env.JWT_SECRET || "fallback-inseguro-troque-no-env";
 
 async function listar(req, res, tabela) {
   const { data, error } = await supabase.from(tabela).select("*");
@@ -129,6 +132,28 @@ app.post("/api/usuarios", async (req, res) => {
       .select("id, nome, perfil, ativo")
       .single();
     if (error) return res.status(400).json({ error: error.message });
+
+    // Cria registro espelho na tabela motoristas (se ainda não existir)
+    if (perfil === "motorista") {
+      const { data: existente } = await supabase
+        .from("motoristas")
+        .select("id")
+        .ilike("nome", nome)
+        .maybeSingle();
+      if (!existente) {
+        await supabase.from("motoristas").insert({
+          nome,
+          telefone:    "",
+          categoria:   "D",
+          capacidade:  0,
+          cidade:      "",
+          estado:      "MA",
+          status:      "disponível",
+          observacoes: ""
+        });
+      }
+    }
+
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -138,6 +163,14 @@ app.post("/api/usuarios", async (req, res) => {
 // PUT /api/usuarios/:id — edita (refaz hash só se senha informada)
 app.put("/api/usuarios/:id", async (req, res) => {
   const { nome, perfil, senha } = req.body;
+
+  // Busca estado atual para sincronizar com motoristas se necessário
+  const { data: atual } = await supabase
+    .from("usuarios")
+    .select("nome, perfil")
+    .eq("id", req.params.id)
+    .single();
+
   const updates = {};
   if (nome !== undefined) updates.nome = nome;
   if (perfil !== undefined) updates.perfil = perfil;
@@ -150,7 +183,38 @@ app.put("/api/usuarios/:id", async (req, res) => {
     .select("id, nome, perfil, ativo")
     .single();
   if (error) return res.status(400).json({ error: error.message });
+
+  // Se é motorista e o nome foi alterado, sincroniza na tabela motoristas
+  const ehMotorista = (perfil ?? atual?.perfil) === "motorista";
+  if (ehMotorista && nome && atual?.nome && nome !== atual.nome) {
+    await supabase
+      .from("motoristas")
+      .update({ nome })
+      .eq("nome", atual.nome);
+  }
+
   res.json(data);
+});
+
+// DELETE /api/usuarios/:id — exclui permanentemente (cascata para motoristas)
+app.delete("/api/usuarios/:id", async (req, res) => {
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("nome, perfil")
+    .eq("id", req.params.id)
+    .single();
+
+  const { error } = await supabase
+    .from("usuarios")
+    .delete()
+    .eq("id", req.params.id);
+  if (error) return res.status(400).json({ error: error.message });
+
+  if (usuario?.perfil === "motorista") {
+    await supabase.from("motoristas").delete().eq("nome", usuario.nome);
+  }
+
+  res.json({ success: true });
 });
 
 // PATCH /api/usuarios/:id/toggle — ativa ou desativa
@@ -170,6 +234,119 @@ app.patch("/api/usuarios/:id/toggle", async (req, res) => {
     .single();
   if (error) return res.status(400).json({ error: error.message });
   res.json(data);
+});
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+// GET /api/auth/gerar-hash?senha=... — rota temporária para gerar hash bcrypt
+app.get("/api/auth/gerar-hash", async (req, res) => {
+  const senha = req.query.senha || "mad2026center";
+  const hash  = await bcrypt.hash(senha, 10);
+  res.json({ senha, hash });
+});
+
+// POST /api/auth/login — tenta admin_auth primeiro, depois usuarios
+app.post("/api/auth/login", async (req, res) => {
+  const { nome, senha } = req.body;
+  if (!nome || !senha) {
+    return res.status(400).json({ error: "Dados incompletos." });
+  }
+  try {
+    // 1. Tenta autenticar como admin
+    const { data: admin } = await supabase
+      .from("admin_auth")
+      .select("*")
+      .eq("usuario", nome.trim())
+      .eq("ativo", true)
+      .single();
+
+    if (admin) {
+      const ok = await bcrypt.compare(senha, admin.senha_hash);
+      if (!ok) return res.status(401).json({ error: "Senha incorreta." });
+      const token = jwt.sign(
+        { id: admin.id, nome: admin.usuario, perfil: "admin" },
+        JWT_SECRET,
+        { expiresIn: "8h" }
+      );
+      return res.json({ token, nome: admin.usuario, perfil: "admin" });
+    }
+
+    // 2. Tenta autenticar como motorista ou atendente
+    const { data: usuario } = await supabase
+      .from("usuarios")
+      .select("*")
+      .eq("nome", nome.trim())
+      .eq("ativo", true)
+      .single();
+
+    if (!usuario) {
+      return res.status(401).json({ error: "Usuário não encontrado." });
+    }
+
+    const ok = await bcrypt.compare(senha, usuario.senha_hash);
+    if (!ok) return res.status(401).json({ error: "Senha incorreta." });
+
+    const token = jwt.sign(
+      { id: usuario.id, nome: usuario.nome, perfil: usuario.perfil },
+      JWT_SECRET,
+      { expiresIn: "8h" }
+    );
+    return res.json({ token, nome: usuario.nome, perfil: usuario.perfil });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Setup utilitário ──────────────────────────────────────────────────────────
+
+// GET /api/auth/setup-motoristas — DESATIVADO
+// O fluxo correto é: criar usuário em /api/usuarios (perfil=motorista) → cria automaticamente em motoristas.
+app.get("/api/auth/setup-motoristas", async (req, res) => {
+  return res.status(410).json({
+    erro: "Rota desativada. Use a tela de Usuários para cadastrar motoristas.",
+    fluxo: "POST /api/usuarios com perfil='motorista' cria automaticamente na tabela motoristas."
+  });
+  // eslint-disable-next-line no-unreachable
+  try {
+    const { data: motoristas, error: errMoto } = await supabase
+      .from("motoristas")
+      .select("*");
+    if (errMoto) return res.status(400).json({ error: errMoto.message });
+
+    const { data: usuariosExistentes, error: errUsr } = await supabase
+      .from("usuarios")
+      .select("nome, perfil");
+    if (errUsr) return res.status(400).json({ error: errUsr.message });
+
+    const nomesExistentes = new Set(
+      usuariosExistentes
+        .filter(u => u.perfil === "motorista")
+        .map(u => u.nome.toLowerCase())
+    );
+
+    const novos = motoristas.filter(
+      m => m.nome && !nomesExistentes.has(m.nome.toLowerCase())
+    );
+
+    if (!novos.length) {
+      return res.json({ criados: 0, mensagem: "Nenhum motorista novo para importar." });
+    }
+
+    const senha_hash = await bcrypt.hash("motor123", 10);
+    const registros = novos.map(m => ({
+      nome: m.nome, perfil: "motorista", senha_hash, ativo: true
+    }));
+
+    const { data, error } = await supabase
+      .from("usuarios")
+      .insert(registros)
+      .select("id, nome, perfil");
+    if (error) return res.status(400).json({ error: error.message });
+
+    res.json({ criados: data.length, usuarios: data });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
