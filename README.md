@@ -3,7 +3,7 @@
 > Plataforma web completa para gerenciamento de pedidos, rotas e motoristas de uma loja de construção em Timon/MA.
 
 ![Madcenter](https://img.shields.io/badge/Madcenter-Entregas-1c6b30?style=for-the-badge)
-![Version](https://img.shields.io/badge/versão-1.0.0-green?style=for-the-badge)
+![Version](https://img.shields.io/badge/versão-1.1.0-green?style=for-the-badge)
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
 ![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white)
@@ -25,9 +25,9 @@ O **Madcenter Entregas** é um sistema de gestão operacional desenvolvido para 
 
 | Perfil | Tela | Função |
 |--------|------|--------|
-| **Admin** | Painel completo | Gerencia tudo — pedidos, rotas, motoristas, usuários e relatórios |
-| **Atendente** | Tela exclusiva | Cadastra pedidos no balcão da loja |
-| **Motorista** | Tela mobile | Visualiza e executa suas entregas do dia |
+| **Admin** | Painel completo | Gerencia tudo — pedidos, rotas, motoristas, veículos, usuários e relatórios |
+| **Atendente** | Tela exclusiva | Cadastra e edita pedidos no balcão da loja |
+| **Motorista** | Tela mobile | Visualiza, aceita e executa suas entregas do dia |
 
 ---
 
@@ -42,6 +42,7 @@ O **Madcenter Entregas** é um sistema de gestão operacional desenvolvido para 
 - Máscara de telefone e validação de campos
 - CEP obrigatório para garantir geolocalização correta
 - Controle de status: `aguardando rota` → `em rota` → `entregue`
+- **Edição de pedidos pelo atendente** (exceto pedidos em rota ou entregues)
 
 ### 🛣️ Rotas
 - **Criação automática** de rota ao salvar um pedido
@@ -49,7 +50,7 @@ O **Madcenter Entregas** é um sistema de gestão operacional desenvolvido para 
 - Associação de motorista diretamente na tabela de rotas
 - Atualização automática de status ao vincular motorista (`planejada` → `em andamento`)
 - Modal "Ver pedidos" com ações de entrega por pedido
-- Botão "Pendente para outro dia" para reagendamento
+- Proteção contra duplicação: pedido único por rota ativa
 
 ### 🗺️ Mapa de Entregas
 - Mapa interativo com **Leaflet.js** e **OpenStreetMap**
@@ -60,10 +61,16 @@ O **Madcenter Entregas** é um sistema de gestão operacional desenvolvido para 
 - Atualização em tempo real após cada ação
 
 ### 🧑‍✈️ Motoristas
-- Cadastro com categoria CNH e cidade de atuação
+- Cadastro com categoria CNH, cidade e estado de atuação
 - Controle de disponibilidade direto na tabela
 - Status atualizado automaticamente pelo fluxo de rotas
 - Link de acesso à página mobile gerado com um clique
+
+### 🚛 Veículos
+- Gerenciamento completo dos tipos de veículo da frota
+- Campos: nome, capacidade (kg), custo base (R$), custo por km e uso ideal
+- CRUD completo: adicionar, editar e excluir veículos
+- Proteção de exclusão: veículos vinculados a pedidos não podem ser removidos
 
 ### 👩‍💼 Tela do Atendente
 - Tela exclusiva e separada do painel admin
@@ -71,7 +78,7 @@ O **Madcenter Entregas** é um sistema de gestão operacional desenvolvido para 
 - Cards de resumo: pedidos do dia, aguardando rota, em rota
 - Formulário otimizado para cadastro rápido no balcão
 - Seleção de localização no mapa igual ao painel admin
-- Lista de pedidos cadastrados no dia
+- Lista de pedidos cadastrados no dia com **opção de edição**
 
 ### 📱 Tela do Motorista (Mobile)
 - Tela exclusiva e responsiva para uso no celular
@@ -82,6 +89,8 @@ O **Madcenter Entregas** é um sistema de gestão operacional desenvolvido para 
 - Barra de progresso das entregas
 - Mapa com rota real via OSRM e geolocalização própria em tempo real
 - Botão "Abrir no Google Maps" para navegação
+- **Botão "Cancelar pedido"**: devolve o pedido ao mural de disponíveis
+- **Botão "Deixar para depois"**: marca pedido como `pendente` sem desvinculá-lo
 - Layout 2 colunas no desktop (pedidos + mapa lado a lado)
 
 ### 📊 Dashboard
@@ -179,6 +188,7 @@ Edite o `.env` com suas credenciais:
 ```env
 SUPABASE_URL=https://SEU_PROJETO.supabase.co
 SUPABASE_ANON_KEY=sua-chave-publica-aqui
+SUPABASE_SERVICE_KEY=sua-chave-service-aqui
 JWT_SECRET=sua-chave-secreta-aqui
 PORT=3000
 ```
@@ -234,10 +244,13 @@ CREATE TABLE pedidos (
   coleta TIMESTAMP,
   entrega TIMESTAMP,
   prioridade TEXT,
-  veiculo_tipo TEXT,
+  veiculo_tipo TEXT REFERENCES veiculos(id),
   distancia_km NUMERIC,
   valor_frete NUMERIC,
-  status TEXT,
+  status TEXT CHECK (status = ANY (ARRAY[
+    'aguardando rota', 'em rota', 'entregue',
+    'cancelado', 'disponivel', 'pendente'
+  ])),
   observacoes TEXT,
   lat NUMERIC,
   lng NUMERIC,
@@ -275,6 +288,16 @@ CREATE TABLE rotas (
   observacoes TEXT,
   cargas_ids UUID[] DEFAULT '{}',
   criado_em TIMESTAMP DEFAULT now()
+);
+
+-- Veículos
+CREATE TABLE veiculos (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  capacidade NUMERIC,
+  custo_base NUMERIC,
+  custo_km NUMERIC,
+  uso TEXT
 );
 
 -- Configurações
@@ -317,9 +340,10 @@ Status: planejada → em andamento
 Motorista sai para entrega
 Mapa traça rota real pelas ruas (OSRM)
         ↓
-Pedido marcado como "Entregue"
-        ↓
-Mapa recalcula a partir do ponto entregue
+Pedido marcado como "Entregue"  ──ou──  "Deixar para depois" (pendente)
+        ↓                                        ↓
+Mapa recalcula a partir              Pedido permanece com o motorista
+do ponto entregue                    para ser retomado depois
         ↓
 Todos entregues → Rota "concluída" · Motorista "disponível"
         ↓
