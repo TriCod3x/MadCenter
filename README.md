@@ -3,7 +3,7 @@
 > Plataforma web completa para gerenciamento de pedidos, rotas e motoristas de uma loja de construção em Timon/MA.
 
 ![Madcenter](https://img.shields.io/badge/Madcenter-Entregas-1c6b30?style=for-the-badge)
-![Version](https://img.shields.io/badge/versão-1.1.0-green?style=for-the-badge)
+![Version](https://img.shields.io/badge/versão-2.0.0-green?style=for-the-badge)
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
 ![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white)
@@ -41,24 +41,28 @@ O **Madcenter Entregas** é um sistema de gestão operacional desenvolvido para 
 - Cálculo automático de frete por distância (**Haversine**)
 - Máscara de telefone e validação de campos
 - CEP obrigatório para garantir geolocalização correta
-- Controle de status: `aguardando rota` → `em rota` → `entregue`
+- Controle de status: `aguardando rota` → `disponivel` → `em rota` → `entregue`
 - **Edição de pedidos pelo atendente** (exceto pedidos em rota ou entregues)
+- Data de saída e entrega preenchidas automaticamente pelo sistema
 
 ### 🛣️ Rotas
 - **Criação automática** de rota ao salvar um pedido
 - **Agrupamento inteligente**: pedidos a menos de 3km são agrupados na mesma rota
 - Associação de motorista diretamente na tabela de rotas
 - Atualização automática de status ao vincular motorista (`planejada` → `em andamento`)
-- Modal "Ver pedidos" com ações de entrega por pedido
+- Modal "Ver pedidos" com ações de entrega por pedido e veículo utilizado
 - Proteção contra duplicação: pedido único por rota ativa
+- Rota cancelada automaticamente ao excluir ou cancelar todos os pedidos vinculados
+- Rota reutilizada ao cancelar e repegar o mesmo pedido (sem duplicação)
 
 ### 🗺️ Mapa de Entregas
 - Mapa interativo com **Leaflet.js** e **OpenStreetMap**
-- Traçado de rotas pelas **ruas reais** via **OSRM** (Open Source Routing Machine)
+- Traçado de rotas pelas **ruas reais** via **OSRM**
 - Ponto de partida recalculado a partir da última entrega realizada
-- Marcadores por status: planejada · em andamento · concluída · cancelada
+- Marcadores por status: planejada · em andamento · concluida · cancelada
 - Filtros por status, motorista e cidade
-- Atualização em tempo real após cada ação
+- Legenda recolhível
+- Zoom e posição preservados durante atualizações de dados
 
 ### 🧑‍✈️ Motoristas
 - Cadastro com categoria CNH, cidade e estado de atuação
@@ -75,41 +79,49 @@ O **Madcenter Entregas** é um sistema de gestão operacional desenvolvido para 
 ### 👩‍💼 Tela do Atendente
 - Tela exclusiva e separada do painel admin
 - Login com usuário e senha cadastrados no banco
-- Cards de resumo: pedidos do dia, aguardando rota, em rota
-- Formulário otimizado para cadastro rápido no balcão
+- Cards de resumo: pedidos do dia, aguardando rota, em rota, entregues hoje, total do mês
+- Formulário otimizado para cadastro rápido no balcão (sem campo de veículo ou data)
 - Seleção de localização no mapa igual ao painel admin
 - Lista de pedidos cadastrados no dia com **opção de edição**
+- **Tabela "Pedidos do Mês"** com busca e filtro por status
+- Mini resumo estatístico do mês
 
 ### 📱 Tela do Motorista (Mobile)
 - Tela exclusiva e responsiva para uso no celular
 - Login com usuário e senha do banco de dados
 - Abas: **Minhas Entregas** e **Mural de Pedidos disponíveis**
 - O motorista escolhe quais pedidos quer pegar
+- **Modal de seleção de veículo** ao aceitar pedido
 - Criação automática de rota ao aceitar pedidos
 - Barra de progresso das entregas
-- Mapa com rota real via OSRM e geolocalização própria em tempo real
+- Mapa com rota real via OSRM e geolocalização em tempo real
 - Botão "Abrir no Google Maps" para navegação
-- **Botão "Cancelar pedido"**: devolve o pedido ao mural de disponíveis
-- **Botão "Deixar para depois"**: marca pedido como `pendente` sem desvinculá-lo
-- Layout 2 colunas no desktop (pedidos + mapa lado a lado)
+- **Botão "Cancelar pedido"**: devolve ao mural sem criar nova rota
+- **Botão "Deixar para depois"**: marca como `pendente` sem desvinculá-lo
+- Layout 2 colunas no desktop
 
 ### 📊 Dashboard
-- Gráfico de entregas realizadas por **hoje / semana / mês** (Chart.js)
+- Gráfico de entregas realizadas por **hoje / semana / mês** (Chart.js) com fuso UTC-3
 - Cards de resumo: pedidos, motoristas, rotas e entregas
-- **Exportação de relatório CSV** com filtro de período
-- Relatório inclui: código, cliente, material, destino, motorista, data, peso e frete
+- Últimos pedidos e rotas em destaque
 
-### 🔐 Autenticação
-- Login com **JWT** (JSON Web Token) para todos os perfis
-- Senhas armazenadas com **bcrypt** (hash seguro)
-- Gerenciamento de usuários pelo admin (criar, editar, ativar/desativar)
-- Sem senhas hardcoded no código-fonte
+### 📈 Relatórios
+- Seção dedicada com histórico de todos os relatórios gerados
+- Geração por período customizado com nome identificador
+- Download CSV formatado para Excel brasileiro (separador `;`, BOM UTF-8)
+- Botão "Baixar novamente" para qualquer relatório do histórico
+- Dados nunca deletados — histórico permanente
+
+### 🔐 Autenticação e Segurança
+- Login com **JWT** para todos os perfis
+- **Middleware JWT** protegendo todas as rotas da API
+- Senhas armazenadas com **bcrypt**
 - Token expira em 8 horas
+- `supabaseAdmin` (service key) usado em todas as operações de servidor
 
 ### ⚙️ Configurações
-- Dados da empresa (nome, telefone, endereço)
-- Coordenadas da loja base
-- Parâmetros de cálculo de frete (custo por km, mínimo, fixo)
+- Dados da empresa, coordenadas da loja base
+- Parâmetros de cálculo de frete
 - Tema claro/escuro com persistência nas três telas
 
 ---
@@ -119,31 +131,31 @@ O **Madcenter Entregas** é um sistema de gestão operacional desenvolvido para 
 ```
 RotasMadCenter/
 ├── backend/
-│   ├── server.js              # API REST com Express + Supabase + JWT
-│   ├── .env                   # Variáveis de ambiente (não commitado)
-│   ├── .env.example           # Modelo de variáveis de ambiente
+│   ├── server.js
+│   ├── .env                   # Não commitado
+│   ├── .env.example
 │   └── package.json
 ├── frontend/
-│   ├── index.html             # Painel administrativo principal
-│   ├── login.html             # Tela de login (admin)
-│   ├── atendente.html         # Tela exclusiva do atendente
-│   ├── motorista.html         # Tela mobile do motorista
+│   ├── index.html             # Painel admin
+│   ├── login.html
+│   ├── atendente.html
+│   ├── motorista.html
 │   ├── assets/
-│   │   ├── favicon.svg               # Ícone da aba do navegador
-│   │   ├── logo_madcenter.svg        # Logo colorida
-│   │   └── logo_madcenter_white.svg  # Logo branca (sidebar)
 │   ├── css/
-│   │   ├── style.css          # Estilos do painel admin
-│   │   ├── atendente.css      # Estilos da tela do atendente
-│   │   └── motorista.css      # Estilos da tela do motorista
+│   │   ├── style.css
+│   │   ├── atendente.css
+│   │   └── motorista.css
 │   └── js/
-│       ├── app.js             # Lógica principal do painel admin
-│       ├── storage.js         # Camada de dados (API calls + cache local)
-│       ├── map.js             # Mapa de entregas (Leaflet + OSRM)
-│       ├── atendente.js       # Lógica da tela do atendente
-│       ├── motorista.js       # Lógica da tela do motorista
-│       ├── icons.js           # Biblioteca de ícones SVG próprios
-│       └── data.js            # Constantes, configs e dados base
+│       ├── app.js             # Lógica do painel admin
+│       ├── storage.js         # Camada de dados
+│       ├── map.js             # Mapa (Leaflet + OSRM)
+│       ├── atendente.js
+│       ├── motorista.js
+│       ├── utils.js           # Funções compartilhadas (toast, tema, API, CEP)
+│       ├── icons.js           # Ícones SVG próprios
+│       └── data.js            # Constantes e configs
+└── memoria/
+    └── HISTORICO.md           # Histórico de decisões e alterações
 ```
 
 ---
@@ -157,11 +169,11 @@ RotasMadCenter/
 | Banco de Dados | Supabase (PostgreSQL) |
 | Autenticação | JWT + bcrypt |
 | Mapas | Leaflet.js + OpenStreetMap |
-| Rotas reais | OSRM (Open Source Routing Machine) |
+| Rotas reais | OSRM |
 | Gráficos | Chart.js |
 | CEP | ViaCEP API |
 | Municípios | IBGE API |
-| Distância | Algoritmo de Haversine |
+| Distância | Haversine |
 | Ícones | SVG próprios (icons.js) |
 
 ---
@@ -184,30 +196,26 @@ cd backend
 cp .env.example .env
 ```
 
-Edite o `.env` com suas credenciais:
+Edite o `.env`:
 ```env
 SUPABASE_URL=https://SEU_PROJETO.supabase.co
-SUPABASE_ANON_KEY=sua-chave-publica-aqui
-SUPABASE_SERVICE_KEY=sua-chave-service-aqui
-JWT_SECRET=sua-chave-secreta-aqui
-PORT=3000
+SUPABASE_ANON_KEY=sua-chave-anonima-aqui
+SUPABASE_SERVICE_KEY=sua-chave-service-role-aqui
+JWT_SECRET=sua-chave-secreta-jwt-aqui
+PORT=3001
 ```
 
-### 3. Instale as dependências
+### 3. Instale e inicie
 ```bash
 npm install
+npm start
 ```
 
-### 4. Inicie o servidor
-```bash
-node server.js
+### 4. Acesse
 ```
-
-### 5. Acesse no navegador
-```
-http://localhost:3000                    # Painel Admin
-http://localhost:3000/atendente.html     # Tela Atendente
-http://localhost:3000/motorista.html     # Tela Motorista
+http://localhost:3001                    # Painel Admin
+http://localhost:3001/atendente.html     # Tela Atendente
+http://localhost:3001/motorista.html     # Tela Motorista
 ```
 
 ---
@@ -215,7 +223,14 @@ http://localhost:3000/motorista.html     # Tela Motorista
 ## 🗄️ Tabelas do Supabase
 
 ```sql
--- Usuários do sistema (autenticação)
+-- Admin
+CREATE TABLE admin_auth (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  usuario TEXT NOT NULL UNIQUE,
+  senha_hash TEXT NOT NULL
+);
+
+-- Usuários (atendentes e motoristas)
 CREATE TABLE usuarios (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nome TEXT NOT NULL,
@@ -225,6 +240,16 @@ CREATE TABLE usuarios (
   criado_em TIMESTAMP DEFAULT now()
 );
 
+-- Veículos
+CREATE TABLE veiculos (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  capacidade NUMERIC,
+  custo_base NUMERIC,
+  custo_km NUMERIC,
+  uso TEXT
+);
+
 -- Pedidos
 CREATE TABLE pedidos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -232,7 +257,6 @@ CREATE TABLE pedidos (
   descricao TEXT,
   tipo TEXT,
   peso NUMERIC,
-  volume TEXT,
   cep TEXT,
   destino_municipio TEXT,
   destino_estado TEXT,
@@ -248,8 +272,7 @@ CREATE TABLE pedidos (
   distancia_km NUMERIC,
   valor_frete NUMERIC,
   status TEXT CHECK (status = ANY (ARRAY[
-    'aguardando rota', 'em rota', 'entregue',
-    'cancelado', 'disponivel', 'pendente'
+    'aguardando rota','em rota','entregue','cancelado','disponivel','pendente'
   ])),
   observacoes TEXT,
   lat NUMERIC,
@@ -275,29 +298,33 @@ CREATE TABLE rotas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   codigo TEXT,
   nome TEXT,
-  tipo_rota TEXT,
   destino_municipio TEXT,
   destino_estado TEXT,
   motorista_id UUID REFERENCES motoristas(id),
-  saida TIMESTAMP,
-  chegada TIMESTAMP,
   distancia NUMERIC,
   frete_total NUMERIC,
-  tempo TEXT,
-  status TEXT DEFAULT 'planejada',
+  status TEXT DEFAULT 'planejada' CHECK (status = ANY (ARRAY[
+    'planejada','em andamento','concluida','cancelada'
+  ])),
   observacoes TEXT,
   cargas_ids UUID[] DEFAULT '{}',
   criado_em TIMESTAMP DEFAULT now()
 );
 
--- Veículos
-CREATE TABLE veiculos (
-  id TEXT PRIMARY KEY,
-  nome TEXT NOT NULL,
-  capacidade NUMERIC,
-  custo_base NUMERIC,
-  custo_km NUMERIC,
-  uso TEXT
+-- Junção rota-pedidos
+CREATE TABLE rota_pedidos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  rota_id UUID REFERENCES rotas(id),
+  pedido_id UUID REFERENCES pedidos(id) UNIQUE
+);
+
+-- Municípios
+CREATE TABLE municipios (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nome TEXT,
+  estado TEXT,
+  lat NUMERIC,
+  lng NUMERIC
 );
 
 -- Configurações
@@ -313,9 +340,20 @@ CREATE TABLE configuracoes (
   custo_km NUMERIC,
   custo_adicional_fixo NUMERIC,
   frete_minimo NUMERIC,
-  entrega_moto TEXT,
-  horario TEXT,
   tema TEXT
+);
+
+-- Relatórios
+CREATE TABLE relatorios (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nome TEXT,
+  periodo_inicio DATE NOT NULL,
+  periodo_fim DATE NOT NULL,
+  total_pedidos INT,
+  total_entregas INT,
+  total_frete NUMERIC,
+  gerado_por TEXT,
+  gerado_em TIMESTAMP DEFAULT now()
 );
 ```
 
@@ -324,30 +362,21 @@ CREATE TABLE configuracoes (
 ## 🔄 Fluxo Operacional
 
 ```
-Atendente cadastra pedido no balcão
+Atendente cadastra pedido
         ↓
-Pedido fica com status "aguardando rota"
+Status: "aguardando rota" → sistema cria rota → "disponivel"
         ↓
-Aparece no Mural de Pedidos para os motoristas
+Aparece no Mural de Pedidos
         ↓
-Motorista escolhe o pedido e aceita
+Motorista escolhe pedido → seleciona veículo → aceita
         ↓
-Sistema cria rota automaticamente
-(agrupa pedidos a menos de 3km na mesma rota)
+Data de saída registrada · Rota: planejada → em andamento
         ↓
-Status: planejada → em andamento
+Motorista realiza entrega com mapa OSRM
         ↓
-Motorista sai para entrega
-Mapa traça rota real pelas ruas (OSRM)
+"Entregue" → data registrada · Rota: concluida
         ↓
-Pedido marcado como "Entregue"  ──ou──  "Deixar para depois" (pendente)
-        ↓                                        ↓
-Mapa recalcula a partir              Pedido permanece com o motorista
-do ponto entregue                    para ser retomado depois
-        ↓
-Todos entregues → Rota "concluída" · Motorista "disponível"
-        ↓
-Admin acompanha tudo em tempo real no painel
+Admin acompanha em tempo real · Gera relatório CSV
 ```
 
 ---
