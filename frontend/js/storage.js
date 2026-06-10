@@ -5,41 +5,6 @@ let DB = {
   settings: {}
 };
 
-async function apiGet(url) {
-  const response = await fetch(url);
-  const json = await response.json();
-  if (!response.ok) throw new Error(json.error || `HTTP ${response.status}`);
-  return json;
-}
-
-async function apiPost(url, data) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  });
-  const json = await response.json();
-  if (!response.ok) throw new Error(json.error || `HTTP ${response.status}`);
-  return json;
-}
-
-async function apiPut(url, data) {
-  const response = await fetch(url, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  });
-  const json = await response.json();
-  if (!response.ok) throw new Error(json.error || `HTTP ${response.status}`);
-  return json;
-}
-
-async function apiDelete(url) {
-  const response = await fetch(url, { method: "DELETE" });
-  const json = await response.json();
-  if (!response.ok) throw new Error(json.error || `HTTP ${response.status}`);
-  return json;
-}
 
 function pedidoFromDB(p) {
   return {

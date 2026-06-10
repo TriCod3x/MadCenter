@@ -40,7 +40,7 @@ function routeStyle(route) {
     opacity = 1;
   }
 
-  if (route.status === "concluída") {
+  if (route.status === "concluida") {
     dashArray = null;
     opacity = 0.95;
   }
@@ -320,7 +320,7 @@ function routeStatusColor(status) {
   return {
     planejada: "#f2c94c",
     "em andamento": "#2374c6",
-    concluída: "#0fa958",
+    concluida: "#0fa958",
     cancelada: "#d93025"
   }[status] || "#6b7280";
 }
@@ -341,7 +341,7 @@ async function drawRouteLine(origin, destination, route) {
 }
 
 function destinationMarkerIcon(status) {
-  return L.divIcon({ className: "delivery-div-icon", html: `<div class="delivery-pin ${status === 'concluída' ? 'completed' : status === 'em andamento' ? 'active' : 'pending'}"></div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
+  return L.divIcon({ className: "delivery-div-icon", html: `<div class="delivery-pin ${status === 'concluida' ? 'completed' : status === 'em andamento' ? 'active' : 'pending'}"></div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
 }
 
 function drawDestinationMarker(destination, route) {
@@ -368,7 +368,7 @@ function renderMapSummary(routes) {
     todas: routes.length,
     planejadas: routes.filter((route) => route.status === "planejada").length,
     andamento: routes.filter((route) => route.status === "em andamento").length,
-    concluida: routes.filter((route) => route.status === "concluída").length
+    concluida: routes.filter((route) => route.status === "concluida").length
   };
   summary.innerHTML = `
     <div class="map-summary-card"><strong>${totals.todas}</strong><span>Rotas visíveis</span></div>
@@ -397,7 +397,7 @@ function renderRouteCards(routes) {
         <div>
           <span>${driver?.nome || "Sem motorista"}</span>
           <small>${route.cargasIds?.length || 0} pedido(s)</small>
-          <span class="badge badge-${route.status === 'concluída' ? 'green' : route.status === 'em andamento' ? 'blue' : route.status === 'planejada' ? 'yellow' : 'red'}">${route.status}</span>
+          <span class="badge badge-${route.status === 'concluida' ? 'green' : route.status === 'em andamento' ? 'blue' : route.status === 'planejada' ? 'yellow' : 'red'}">${route.status}</span>
         </div>
       </div>
     `;
@@ -487,7 +487,7 @@ function renderMapLegend() {
   const items = [
     { status: "planejada",     label: "Planejada",      desc: "Entrega agendada" },
     { status: "em andamento",  label: "Em andamento",   desc: "Em trânsito" },
-    { status: "concluída",     label: "Concluída",      desc: "Entrega realizada" },
+    { status: "concluida",     label: "Concluída",      desc: "Entrega realizada" },
     { status: "cancelada",     label: "Cancelada",      desc: "Cancelada ou bloqueada" }
   ];
   legend.classList.toggle("is-collapsed", mapLegendCollapsed);

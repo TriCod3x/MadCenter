@@ -12,10 +12,11 @@ const pageNames = {
   mapa: "Mapa de Entregas",
   configuracoes: "Configurações",
   usuarios: "Usuários",
-  veiculos: "Veículos"
+  veiculos: "Veículos",
+  relatorios: "Relatórios"
 };
 
-const API_BASE = window.location.port === "3000" ? "" : "http://localhost:3000";
+const API_BASE = window.location.port === "3001" ? "" : "http://localhost:3001";
 
 const statusColors = {
   "aguardando rota": "yellow",
@@ -28,7 +29,7 @@ const statusColors = {
   "inativo": "gray",
   "planejada": "sky",
   "em andamento": "blue",
-  "concluída": "green",
+  "concluida": "green",
   "cancelada": "red"
 };
 
@@ -69,7 +70,7 @@ const fields = {
     ["destinoEstado", "Estado de destino", "text", true],
     ["saida", "Previsão de saída", "datetime-local", true],
     ["chegada", "Previsão de chegada", "datetime-local", true],
-    ["status", "Status", "select:planejada,em andamento,concluída,cancelada", true],
+    ["status", "Status", "select:planejada,em andamento,concluida,cancelada", true],
     ["observacoes", "Observações", "textarea", false]
   ]
 };
@@ -161,6 +162,7 @@ function bindLayoutEvents() {
   document.getElementById("motoristasSearch").addEventListener("input", renderTables);
   document.getElementById("rotasSearch").addEventListener("input", renderTables);
   document.getElementById("generateRoutesBtn").addEventListener("click", generateRoutesByMunicipality);
+  document.getElementById("newRelatorioBtn")?.addEventListener("click", openRelatorioForm);
   bindUsuariosEvents();
   bindChartEvents();
   document.getElementById("mapReloadRoutes").addEventListener("click", renderMapPanel);
@@ -191,6 +193,7 @@ function showPage(page) {
   if (page === "mapa") renderMapPanel();
   if (page === "usuarios") renderUsuarios();
   else if (page === "veiculos") renderVeiculos();
+  else if (page === "relatorios") renderRelatorios();
   else renderAll();
 }
 
@@ -256,8 +259,8 @@ function renderDashboard() {
     </div>
   `).join("") || emptyText("Nenhum pedido cadastrado.");
 
-  const rotaBorder = { "planejada": "#f2c94c", "em andamento": "#2374c6", "concluída": "#0fa958", "cancelada": "#d93025" };
-  document.getElementById("nextRotas").innerHTML = rotas.filter((r) => r.status !== "concluída").slice(0, 5).map((r) => `
+  const rotaBorder = { "planejada": "#f2c94c", "em andamento": "#2374c6", "concluida": "#0fa958", "cancelada": "#d93025" };
+  document.getElementById("nextRotas").innerHTML = rotas.filter((r) => r.status !== "concluida").slice(0, 5).map((r) => `
     <div class="list-item" style="border-left-color:${rotaBorder[r.status] || "var(--line)"}">
       <div class="list-item-body">
         <strong>${r.codigo} — ${r.nome}</strong>
@@ -464,45 +467,6 @@ function bindChartEvents() {
     btn.addEventListener("click", () => renderEntregasChart(btn.dataset.period));
   });
 
-  document.getElementById("exportRelatorio")?.addEventListener("click", () => {
-    const pedidos = getEntregasFiltradas(_chartPeriodo);
-    const rotas = getRotas();
-    const motoristas = getMotoristas();
-
-    const hoje = new Date();
-    const dd = String(hoje.getDate()).padStart(2, "0");
-    const mm = String(hoje.getMonth() + 1).padStart(2, "0");
-    const aaaa = hoje.getFullYear();
-
-    const nomes = { hoje: "hoje", semana: "semana", mes: "mes" };
-    const sufixos = {
-      hoje: `${dd}-${mm}-${aaaa}`,
-      semana: `${dd}-${mm}-${aaaa}`,
-      mes: `${mm}-${aaaa}`
-    };
-    const filename = `relatorio-entregas-${nomes[_chartPeriodo]}-${sufixos[_chartPeriodo]}.csv`;
-
-    const header = ["Código", "Cliente", "Material", "Destino", "Motorista", "Data de Entrega", "Peso (kg)", "Frete (R$)", "Status"];
-    const rows = pedidos.map((p) => {
-      const rota = rotas.find((r) => (r.cargasIds || []).includes(p.id));
-      const motorista = rota ? (motoristas.find((m) => m.id === rota.motoristaId)?.nome || "") : "";
-      const destino = [p.destinoMunicipio, p.destinoEstado].filter(Boolean).join("/");
-      const dataEntrega = p.entrega ? new Date(p.entrega).toLocaleDateString("pt-BR") : "";
-      return [
-        p.codigo || "",
-        p.cliente || "",
-        p.descricao || "",
-        destino,
-        motorista,
-        dataEntrega,
-        p.peso || 0,
-        (Number(p.valorFrete || 0)).toFixed(2).replace(".", ","),
-        p.status || ""
-      ];
-    });
-
-    downloadCSV(filename, [header, ...rows]);
-  });
 }
 
 function downloadCSV(filename, rows) {
@@ -1204,7 +1168,7 @@ function carregarMapaHistoricoMotorista(motoristaId) {
 
   // Rotas concluídas deste motorista
   const rotas = getRotas().filter(r =>
-    r.status === "concluída" && r.motoristaId === motoristaId
+    r.status === "concluida" && r.motoristaId === motoristaId
   );
 
   // IDs de pedidos dessas rotas
@@ -1836,7 +1800,7 @@ async function syncRouteStatus(routeId) {
 
   if (pedidos.every((pedido) => pedido.status === "entregue")) {
     // Todos entregues: conclui rota e libera motorista
-    await updateRota(routeId, { status: "concluída" });
+    await updateRota(routeId, { status: "concluida" });
     await syncDriverStatus(route.motoristaId);
     return;
   }
@@ -1930,7 +1894,7 @@ function submitSettingsForm(event) {
 let _mapPanelListenersSetup = false;
 
 function renderMapPanel() {
-  const statusOptions = [["", "Todos os status"], ["planejada", "planejada"], ["em andamento", "em andamento"], ["concluída", "concluída"], ["cancelada", "cancelada"]];
+  const statusOptions = [["", "Todos os status"], ["planejada", "planejada"], ["em andamento", "em andamento"], ["concluida", "Concluída"], ["cancelada", "cancelada"]];
   const drivers = getMotoristas();
   const cities = [...new Set(getRotas().map((route) => coordKey(route.destinoMunicipio, route.destinoEstado)))].sort();
 
@@ -1980,9 +1944,7 @@ function applyTheme(theme) {
 let _usuarios = [];
 
 async function fetchUsuarios() {
-  const res = await fetch(`${API_BASE}/api/usuarios`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  _usuarios = await res.json();
+  _usuarios = await apiGet(`${API_BASE}/api/usuarios`);
   return _usuarios;
 }
 
@@ -2111,23 +2073,11 @@ async function submitUserForm(event) {
   submitBtn.disabled = true;
 
   try {
-    let res;
     if (isEdit) {
-      res = await fetch(`${API_BASE}/api/usuarios/${data.userId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      await apiPut(`${API_BASE}/api/usuarios/${data.userId}`, payload);
     } else {
-      res = await fetch(`${API_BASE}/api/usuarios`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      await apiPost(`${API_BASE}/api/usuarios`, payload);
     }
-
-    const result = await res.json();
-    if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
 
     closeModal();
     toast(`Usuário ${isEdit ? "atualizado" : "criado"} com sucesso.`);
@@ -2142,12 +2092,7 @@ async function submitUserForm(event) {
 
 async function toggleUsuario(id) {
   try {
-    const res = await fetch(`${API_BASE}/api/usuarios/${id}/toggle`, { method: "PATCH" });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || `HTTP ${res.status}`);
-    }
-    const updated = await res.json();
+    const updated = await apiPatch(`${API_BASE}/api/usuarios/${id}/toggle`);
     toast(`Usuário ${updated.ativo ? "reativado" : "desativado"}.`);
     await renderUsuarios();
   } catch (e) {
@@ -2159,11 +2104,7 @@ async function toggleUsuario(id) {
 async function excluirUsuario(id, nome) {
   if (!confirm(`Tem certeza que deseja excluir o usuário "${nome}"?\nEsta ação é permanente e não pode ser desfeita.`)) return;
   try {
-    const res = await fetch(`${API_BASE}/api/usuarios/${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || `HTTP ${res.status}`);
-    }
+    await apiDelete(`${API_BASE}/api/usuarios/${id}`);
     _usuarios = _usuarios.filter((u) => u.id !== id);
     toast(`Usuário "${nome}" excluído.`);
     await renderUsuarios();
@@ -2178,9 +2119,7 @@ async function excluirUsuario(id, nome) {
 let _veiculos = [];
 
 async function fetchVeiculos() {
-  const res = await fetch(`${API_BASE}/api/veiculos`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  _veiculos = await res.json();
+  _veiculos = await apiGet(`${API_BASE}/api/veiculos`);
   return _veiculos;
 }
 
@@ -2276,23 +2215,11 @@ async function submitVeiculoForm(event, isEdit, veiculoId) {
   submitBtn.disabled = true;
 
   try {
-    let res;
     if (isEdit) {
-      res = await fetch(`${API_BASE}/api/veiculos/${veiculoId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-      });
+      await apiPut(`${API_BASE}/api/veiculos/${veiculoId}`, data);
     } else {
-      res = await fetch(`${API_BASE}/api/veiculos`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-      });
+      await apiPost(`${API_BASE}/api/veiculos`, data);
     }
-
-    const result = await res.json();
-    if (!res.ok) throw new Error(result.error || `HTTP ${res.status}`);
 
     closeModal();
     toast(`Veículo ${isEdit ? "atualizado" : "criado"} com sucesso.`);
@@ -2308,15 +2235,164 @@ async function submitVeiculoForm(event, isEdit, veiculoId) {
 async function excluirVeiculo(id, nome) {
   if (!confirm(`Excluir o veículo "${nome}"? Esta ação não pode ser desfeita.`)) return;
   try {
-    const res = await fetch(`${API_BASE}/api/veiculos/${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || `HTTP ${res.status}`);
-    }
+    await apiDelete(`${API_BASE}/api/veiculos/${id}`);
     toast(`Veículo "${nome}" excluído.`);
     await renderVeiculos();
   } catch (e) {
     console.error(e);
     toast(`Erro ao excluir veículo: ${e.message}`);
+  }
+}
+
+// ── Relatórios ────────────────────────────────────────────────────────────────
+
+let _relatorios = [];
+
+async function fetchRelatorios() {
+  _relatorios = await apiGet(`${API_BASE}/api/relatorios`);
+  return _relatorios;
+}
+
+async function renderRelatorios() {
+  const tbl = document.getElementById("relatoriosTable");
+  if (!tbl) return;
+
+  try {
+    await fetchRelatorios();
+  } catch (e) {
+    tbl.innerHTML = `<tbody><tr><td colspan="7" class="empty-table-cell">Erro ao carregar relatórios. Verifique a conexão.</td></tr></tbody>`;
+    return;
+  }
+
+  const moneyFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+  const headers = ["Nome", "Período", "Total pedidos", "Entregas", "Frete total", "Gerado em", "Ações"];
+  const rows = _relatorios.map((r) => {
+    const inicio = r.periodo_inicio ? _formatDataBR(r.periodo_inicio) : "—";
+    const fim = r.periodo_fim ? _formatDataBR(r.periodo_fim) : "—";
+    const geradoEm = r.gerado_em ? _formatDatetimeBR(r.gerado_em) : "—";
+    return [
+      r.nome || "—",
+      `${inicio} – ${fim}`,
+      r.total_pedidos ?? "—",
+      r.total_entregas ?? "—",
+      r.total_frete != null ? moneyFmt.format(Number(r.total_frete)) : "—",
+      geradoEm,
+      `<div class="actions-cell">
+        <button class="table-action" onclick="baixarRelatorio('${r.id}')">${Icons.download(14)} Baixar CSV</button>
+        <button class="table-action" onclick="excluirRelatorio('${r.id}')">${Icons.trash(14)}</button>
+      </div>`
+    ];
+  });
+
+  table("relatoriosTable", headers, rows);
+}
+
+function _formatDataBR(dateStr) {
+  const [y, m, d] = dateStr.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function _formatDatetimeBR(isoStr) {
+  const d = new Date(isoStr);
+  const brasilia = new Date(d.getTime() + (-3 * 60) * 60000);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(brasilia.getUTCDate())}/${pad(brasilia.getUTCMonth() + 1)}/${brasilia.getUTCFullYear()} ${pad(brasilia.getUTCHours())}:${pad(brasilia.getUTCMinutes())}`;
+}
+
+function openRelatorioForm() {
+  const hoje = new Date().toISOString().split("T")[0];
+  const d = new Date();
+  const inicioMes = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split("T")[0];
+
+  document.getElementById("modalTitle").innerHTML = `${Icons.file(18)} Gerar novo relatório`;
+  document.getElementById("modalBody").innerHTML = `
+    <form id="relatorioForm" class="form-grid">
+      <label class="form-field full">
+        <span>Nome do relatório *</span>
+        <input type="text" name="nomeRelatorio" required placeholder="ex: Junho 2026, Semana 1 - Junho">
+      </label>
+      <label class="form-field">
+        <span>Data início *</span>
+        <input type="date" name="inicio" value="${inicioMes}" required>
+      </label>
+      <label class="form-field">
+        <span>Data fim *</span>
+        <input type="date" name="fim" value="${hoje}" required>
+      </label>
+      <div class="modal-actions form-field full">
+        <button class="secondary-button" type="button" onclick="closeModal()">Cancelar</button>
+        <button class="primary-button" type="submit">${Icons.checkCircle(16)} Gerar</button>
+      </div>
+    </form>
+  `;
+  document.getElementById("relatorioForm").addEventListener("submit", submitRelatorioForm);
+  openModal();
+}
+
+async function submitRelatorioForm(e) {
+  e.preventDefault();
+  const form = e.target;
+  const nomeRelatorio = form.nomeRelatorio.value.trim();
+  const inicio = form.inicio.value;
+  const fim = form.fim.value;
+
+  if (inicio > fim) {
+    toast("A data de início não pode ser maior que a data de fim.");
+    return;
+  }
+
+  const submitBtn = form.querySelector("[type='submit']");
+  submitBtn.disabled = true;
+
+  try {
+    const cargas = getCargas();
+
+    const pedidosDoPeriodo = cargas.filter((p) => {
+      if (!p.entrega) return false;
+      const dataEntrega = p.entrega.split("T")[0];
+      return dataEntrega >= inicio && dataEntrega <= fim;
+    });
+
+    const totalPedidos = pedidosDoPeriodo.length;
+    const totalEntregas = pedidosDoPeriodo.filter((p) => p.status === "entregue").length;
+    const totalFrete = pedidosDoPeriodo.reduce((s, p) => s + Number(p.valorFrete || 0), 0);
+
+    const nome = sessionStorage.getItem("madcenter_nome") || "admin";
+    await apiPost(`${API_BASE}/api/relatorios`, {
+      nome: nomeRelatorio,
+      periodo_inicio: inicio,
+      periodo_fim: fim,
+      total_pedidos: totalPedidos,
+      total_entregas: totalEntregas,
+      total_frete: totalFrete,
+      gerado_por: nome
+    });
+
+    closeModal();
+    toast("Relatório gerado e salvo com sucesso!");
+    renderRelatorios();
+  } catch (err) {
+    toast(`Erro ao gerar relatório: ${err.message}`);
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+function baixarRelatorio(id) {
+  const token = sessionStorage.getItem("madcenter_token");
+  const a = document.createElement("a");
+  a.href = `${API_BASE}/api/relatorios/${id}/csv?token=${token}`;
+  a.click();
+}
+
+async function excluirRelatorio(id) {
+  if (!confirm("Excluir este registro do histórico? Os pedidos não serão afetados.")) return;
+  try {
+    await apiDelete(`${API_BASE}/api/relatorios/${id}`);
+    toast("Registro removido do histórico.");
+    renderRelatorios();
+  } catch (e) {
+    toast(`Erro ao excluir: ${e.message}`);
   }
 }

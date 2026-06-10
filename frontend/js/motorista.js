@@ -2,7 +2,7 @@
 
 // ── Configuração ─────────────────────────────────────────────────────────────
 
-const API_BASE = window.location.port === "3000" ? "" : "http://localhost:3000";
+const API_BASE = window.location.port === "3001" ? "" : "http://localhost:3001";
 
 // Coordenadas fixas da loja (ponto de partida de todas as rotas)
 const LOJA_LAT = -4.760287;
@@ -47,38 +47,6 @@ let _modalVeiculoSelecionado = null;
 
 // ── Utilitários ──────────────────────────────────────────────────────────────
 
-async function apiGet(url) {
-  const res = await fetch(url);
-  if (res.status === 401) { sair(); return; }
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
-  return json;
-}
-
-async function apiPost(url, data) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  });
-  if (res.status === 401) { sair(); return; }
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
-  return json;
-}
-
-async function apiPut(url, data) {
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  });
-  if (res.status === 401) { sair(); return; }
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
-  return json;
-}
-
 const moneyFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 function show(id) {
@@ -96,15 +64,6 @@ function showEl(id, flex = false) {
   if (!el) return;
   el.classList.remove("hidden");
   if (flex) el.style.display = "flex";
-}
-
-function toast(msg, tipo = "ok") {
-  const el = document.getElementById("motoToast");
-  if (!el) return;
-  el.textContent = msg;
-  el.className = `moto-toast moto-toast-${tipo} moto-toast-show`;
-  clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.remove("moto-toast-show"), 3200);
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -162,7 +121,7 @@ async function carregarEntregasDoDia(motoristaId, silencioso = false) {
   } catch (e) {
     console.error(e);
     document.getElementById("pedidosList").innerHTML = "";
-    toast("Erro ao carregar entregas. Verifique a conexão.", "erro");
+    showToast("Erro ao carregar entregas. Verifique a conexão.", "erro");
   }
 }
 
@@ -325,16 +284,16 @@ async function marcarEntregue(pedidoId, rotaId) {
         const todosEntregues = pedidosDaRota.every(p => p.status === "entregue");
 
         if (todosEntregues) {
-          await apiPut(`${API_BASE}/api/rotas/${rotaId}`, { status: "concluída" });
+          await apiPut(`${API_BASE}/api/rotas/${rotaId}`, { status: "concluida" });
           if (state.motorista?.id) {
             await apiPut(`${API_BASE}/api/motoristas/${state.motorista.id}`, { status: "disponível" });
           }
-          rota.status = "concluída";
+          rota.status = "concluida";
           // Remove rota das ativas
           state.rotas = state.rotas.filter(r => r.id !== rotaId);
-          toast("Todas as entregas concluídas! Rota finalizada.");
+          showToast("Todas as entregas concluídas! Rota finalizada.");
         } else {
-          toast("Pedido entregue com sucesso.");
+          showToast("Pedido entregue com sucesso.");
         }
       }
     }
@@ -346,7 +305,7 @@ async function marcarEntregue(pedidoId, rotaId) {
   } catch (e) {
     console.error(e);
     if (card) card.style.opacity = "";
-    toast("Erro ao registrar entrega. Tente novamente.", "erro");
+    showToast("Erro ao registrar entrega. Tente novamente.", "erro");
   }
 }
 
@@ -363,7 +322,7 @@ async function deixarParaDepois(pedidoId) {
     const pedido = state.pedidos.find(p => p.id === pedidoId);
     if (pedido) pedido.status = "pendente";
 
-    toast("Pedido marcado como pendente.");
+    showToast("Pedido marcado como pendente.");
     renderPedidos();
     atualizarProgresso();
     desenharRota();
@@ -371,7 +330,7 @@ async function deixarParaDepois(pedidoId) {
   } catch (e) {
     console.error(e);
     if (card) card.style.opacity = "";
-    toast("Erro ao adiar pedido. Tente novamente.", "erro");
+    showToast("Erro ao adiar pedido. Tente novamente.", "erro");
   }
 }
 
@@ -400,7 +359,7 @@ async function cancelarPedido(pedidoId, rotaId) {
 
     state.pedidos = state.pedidos.filter(p => p.id !== pedidoId);
 
-    toast("Pedido devolvido ao mural de pedidos.");
+    showToast("Pedido devolvido ao mural de pedidos.");
     renderPedidos();
     atualizarProgresso();
     desenharRota();
@@ -408,7 +367,7 @@ async function cancelarPedido(pedidoId, rotaId) {
   } catch (e) {
     console.error(e);
     if (card) card.style.opacity = "";
-    toast("Erro ao cancelar pedido. Tente novamente.", "erro");
+    showToast("Erro ao cancelar pedido. Tente novamente.", "erro");
   }
 }
 
@@ -823,7 +782,7 @@ async function _executarPegarPedido(pedidoId, veiculoId) {
 
     await _associarPedidosARota([pedido]);
 
-    toast("Pedido adicionado à sua rota!");
+    showToast("Pedido adicionado à sua rota!");
 
     muralState.pedidos = muralState.pedidos.filter(p => p.id !== pedidoId);
     muralState.selecionados.delete(pedidoId);
@@ -833,7 +792,7 @@ async function _executarPegarPedido(pedidoId, veiculoId) {
     carregarEntregasDoDia(state.motorista.id).catch(() => {});
   } catch (e) {
     console.error(e);
-    toast(e.message || "Erro ao pegar pedido. Tente novamente.", "erro");
+    showToast(e.message || "Erro ao pegar pedido. Tente novamente.", "erro");
     if (btn) { btn.disabled = false; btn.innerHTML = `${Icons.plus(16)} Pegar este pedido`; }
   }
 }
@@ -849,7 +808,7 @@ async function pegarPedidosSelecionados() {
   try {
     await _associarPedidosARota(pedidos);
 
-    toast(`${pedidos.length} pedidos adicionados à sua rota!`);
+    showToast(`${pedidos.length} pedidos adicionados à sua rota!`);
 
     muralState.pedidos     = muralState.pedidos.filter(p => !ids.includes(p.id));
     muralState.selecionados.clear();
@@ -859,7 +818,7 @@ async function pegarPedidosSelecionados() {
     carregarEntregasDoDia(state.motorista.id).catch(() => {});
   } catch (e) {
     console.error(e);
-    toast(e.message || "Erro ao criar rota. Tente novamente.", "erro");
+    showToast(e.message || "Erro ao criar rota. Tente novamente.", "erro");
   } finally {
     if (btn) btn.style.opacity = "";
   }
@@ -878,7 +837,7 @@ async function _associarPedidosARota(pedidos) {
   }
   if (disponiveis.length < pedidos.length) {
     const n = pedidos.length - disponiveis.length;
-    toast(`${n} pedido(s) já pego(s) por outro motorista foram ignorados.`, "erro");
+    showToast(`${n} pedido(s) já pego(s) por outro motorista foram ignorados.`, "erro");
   }
 
   // Busca rota ativa do motorista
@@ -970,7 +929,7 @@ async function _associarPedidosARota(pedidos) {
 function abrirNoMaps() {
   const proximo = state.pedidos.find(p => p.status !== "entregue" && p.lat && p.lng);
   if (!proximo) {
-    toast("Nenhum pedido pendente com localização disponível.", "erro");
+    showToast("Nenhum pedido pendente com localização disponível.", "erro");
     return;
   }
   const url = `https://www.google.com/maps/dir/?api=1&destination=${proximo.lat},${proximo.lng}`;
@@ -978,12 +937,6 @@ function abrirNoMaps() {
 }
 
 // ── Tema claro/escuro ─────────────────────────────────────────────────────────
-
-function aplicarTema(tema) {
-  document.documentElement.setAttribute("data-theme", tema);
-  const btn = document.getElementById("themeToggle");
-  if (btn) btn.innerHTML = tema === "dark" ? Icons.sun(16) : Icons.moon(16);
-}
 
 function alternarTema() {
   const atual = document.documentElement.getAttribute("data-theme") || "dark";
@@ -1018,14 +971,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       m => (m.nome || "").toLowerCase() === (nomeLogado || "").toLowerCase()
     );
     if (!moto) {
-      toast("Motorista não encontrado. Entre em contato com o administrador.", "erro");
+      showToast("Motorista não encontrado. Entre em contato com o administrador.", "erro");
       setTimeout(sair, 3000);
       return;
     }
     state.motorista = { id: moto.id, nome: moto.nome };
   } catch (e) {
     console.error(e);
-    toast("Erro ao carregar dados. Tente novamente.", "erro");
+    showToast("Erro ao carregar dados. Tente novamente.", "erro");
     return;
   }
 

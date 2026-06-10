@@ -10,7 +10,16 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    "http://localhost:5500",
+    "http://localhost:5501",
+    "http://127.0.0.1:5500",
+    "http://127.0.0.1:5501",
+    "http://localhost:3000",
+  ],
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../frontend")));
 
@@ -29,8 +38,30 @@ if (!JWT_SECRET) {
   throw new Error("JWT_SECRET não foi configurado. Defina JWT_SECRET no arquivo .env.");
 }
 
-async function listar(req, res, tabela) {
-  const { data, error } = await supabase.from(tabela).select("*");
+function autenticar(req, res, next) {
+  const auth  = req.headers.authorization;
+  const token = (auth && auth.startsWith("Bearer ")) ? auth.split(" ")[1] : req.query.token;
+  if (!token) return res.status(401).json({ error: "Token não fornecido" });
+  try {
+    req.usuario = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ error: "Token inválido ou expirado" });
+  }
+}
+
+// Protege todas as rotas /api/* exceto o login
+app.use("/api", (req, res, next) => {
+  if (req.path === "/auth/login") return next();
+  autenticar(req, res, next);
+});
+
+const PEDIDOS_COLS    = "id,codigo,descricao,tipo,peso,volume,cep,destino_municipio,destino_estado,endereco_entrega,numero,complemento,cliente,telefone,coleta,entrega,prioridade,veiculo_tipo,distancia_km,valor_frete,status,observacoes,lat,lng,data_entrega,created_at";
+const MOTORISTAS_COLS = "id,nome,telefone,categoria,capacidade,cidade,estado,status,observacoes";
+const ROTAS_COLS      = "id,codigo,nome,tipo_rota,destino_municipio,destino_estado,motorista_id,saida,chegada,distancia,frete_total,tempo,status,observacoes,cargas_ids";
+
+async function listar(req, res, tabela, colunas = "*") {
+  const { data, error } = await supabase.from(tabela).select(colunas);
 
   if (error) return res.status(400).json({ error: error.message });
 
@@ -74,7 +105,7 @@ async function deletar(req, res, tabela) {
 }
 
 // ── Pedidos ───────────────────────────────────────────────────────────────────
-app.get("/api/pedidos", (req, res) => listar(req, res, "pedidos"));
+app.get("/api/pedidos", (req, res) => listar(req, res, "pedidos", PEDIDOS_COLS));
 app.post("/api/pedidos", async (req, res) => {
   try {
     const { data: pedido, error: errIns } = await supabase
@@ -203,13 +234,13 @@ app.delete("/api/pedidos/:id", async (req, res) => {
 });
 
 // ── Motoristas ────────────────────────────────────────────────────────────────
-app.get("/api/motoristas", (req, res) => listar(req, res, "motoristas"));
+app.get("/api/motoristas", (req, res) => listar(req, res, "motoristas", MOTORISTAS_COLS));
 app.post("/api/motoristas", (req, res) => criar(req, res, "motoristas"));
 app.put("/api/motoristas/:id", (req, res) => atualizar(req, res, "motoristas"));
 app.delete("/api/motoristas/:id", (req, res) => deletar(req, res, "motoristas"));
 
 // ── Rotas ─────────────────────────────────────────────────────────────────────
-app.get("/api/rotas", (req, res) => listar(req, res, "rotas"));
+app.get("/api/rotas", (req, res) => listar(req, res, "rotas", ROTAS_COLS));
 app.post("/api/rotas", (req, res) => criar(req, res, "rotas"));
 app.put("/api/rotas/:id", (req, res) => atualizar(req, res, "rotas"));
 app.delete("/api/rotas/:id", (req, res) => deletar(req, res, "rotas"));
@@ -496,6 +527,93 @@ app.put("/api/pedidos/:id/deixar-para-depois", async (req, res) => {
     .single();
   if (error) return res.status(400).json({ error: error.message });
   res.json(data);
+});
+
+// ── Relatórios ────────────────────────────────────────────────────────────────
+app.get("/api/relatorios", async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from("relatorios")
+    .select("*")
+    .order("gerado_em", { ascending: false });
+  if (error) return res.status(400).json({ error: error.message });
+  res.json(data);
+});
+
+app.post("/api/relatorios", async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from("relatorios")
+    .insert(req.body)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+  res.json(data);
+});
+
+app.delete("/api/relatorios/:id", async (req, res) => {
+  const { error } = await supabaseAdmin.from("relatorios").delete().eq("id", req.params.id);
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ success: true });
+});
+
+app.get("/api/relatorios/:id/csv", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { data: rel, error: errRel } = await supabaseAdmin
+      .from("relatorios")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (errRel || !rel) return res.status(404).json({ error: "Relatório não encontrado." });
+
+    const { data: pedidos, error: errPed } = await supabaseAdmin
+      .from("pedidos")
+      .select("*")
+      .gte("entrega", rel.periodo_inicio)
+      .lte("entrega", rel.periodo_fim + "T23:59:59");
+    if (errPed) return res.status(400).json({ error: errPed.message });
+
+    const { data: rotas } = await supabaseAdmin.from("rotas").select("id, cargas_ids, motorista_id");
+    const { data: motoristas } = await supabaseAdmin.from("motoristas").select("id, nome");
+
+    const motMap = {};
+    (motoristas || []).forEach((m) => { motMap[m.id] = m.nome; });
+
+    const toBrasilia = (isoStr) => {
+      if (!isoStr) return "";
+      const d = new Date(isoStr);
+      const b = new Date(d.getTime() + (-3 * 60) * 60000);
+      const p = (n) => String(n).padStart(2, "0");
+      return `${p(b.getUTCDate())}/${p(b.getUTCMonth() + 1)}/${b.getUTCFullYear()} ${p(b.getUTCHours())}:${p(b.getUTCMinutes())}`;
+    };
+
+    const header = ["Código", "Cliente", "Material", "Destino", "Motorista", "Coleta", "Entrega", "Peso (kg)", "Frete (R$)", "Status"];
+    const rows = (pedidos || []).map((p) => {
+      const rota = (rotas || []).find((r) => Array.isArray(r.cargas_ids) && r.cargas_ids.some((i) => String(i) === String(p.id)));
+      const motorista = rota ? (motMap[rota.motorista_id] || "") : "";
+      const destino = [p.destino_municipio, p.destino_estado].filter(Boolean).join("/");
+      return [
+        p.codigo || "",
+        p.cliente || "",
+        p.descricao || "",
+        destino,
+        motorista,
+        toBrasilia(p.coleta),
+        toBrasilia(p.entrega),
+        p.peso || 0,
+        Number(p.valor_frete || 0).toFixed(2).replace(".", ","),
+        p.status || ""
+      ];
+    });
+
+    const BOM = "﻿";
+    const csv = BOM + [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\n");
+
+    res.setHeader("Content-Type", "text/csv;charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="relatorio-${rel.periodo_inicio}-${rel.periodo_fim}.csv"`);
+    res.send(csv);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

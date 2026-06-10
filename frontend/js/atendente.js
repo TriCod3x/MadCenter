@@ -2,7 +2,7 @@
 
 // ── Configuração ─────────────────────────────────────────────────────────────
 
-const API_BASE = window.location.port === "3000" ? "" : "http://localhost:3000";
+const API_BASE = window.location.port === "3001" ? "" : "http://localhost:3001";
 
 // Coordenadas da loja (Timon/MA)
 const STORE_LAT = -4.760287;
@@ -23,51 +23,6 @@ let todayStr = new Date().toISOString().slice(0, 10);
 
 // Cache dos pedidos exibidos (para edição)
 let _pedidosCache = [];
-
-// ── API ───────────────────────────────────────────────────────────────────────
-
-async function apiGet(url) {
-  const res = await fetch(url);
-  if (res.status === 401) { sair(); return; }
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
-  return json;
-}
-
-async function apiPut(url, data) {
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  });
-  if (res.status === 401) { sair(); return; }
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
-  return json;
-}
-
-async function apiPost(url, data) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
-  });
-  if (res.status === 401) { sair(); return; }
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
-  return json;
-}
-
-// ── Toast ─────────────────────────────────────────────────────────────────────
-
-function toast(msg) {
-  const el = document.getElementById("atendToast");
-  if (!el) return;
-  el.textContent = msg;
-  el.classList.add("show");
-  clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.remove("show"), 3400);
-}
 
 // ── Máscaras ──────────────────────────────────────────────────────────────────
 
@@ -145,12 +100,16 @@ async function carregarPedidos(silencioso = false) {
   try {
     const todos = await apiGet(`${API_BASE}/api/pedidos`);
     const hoje  = filtrarHoje(todos);
-    atualizarResumo(hoje);
+    const mes   = filtrarMes(todos);
+    atualizarResumo(hoje, mes);
     renderLista(hoje);
+    renderPedidosMes(mes);
   } catch {
     if (!silencioso) {
       document.getElementById("pedidosList").innerHTML =
         `<div class="atend-empty">Erro ao carregar pedidos. Verifique a conexão.</div>`;
+      const sec = document.getElementById("pedidosMesSection");
+      if (sec) sec.innerHTML = `<div class="atend-empty">Erro ao carregar pedidos do mês.</div>`;
     }
   }
 }
@@ -167,10 +126,24 @@ function filtrarHoje(pedidos) {
   });
 }
 
-function atualizarResumo(hoje) {
-  const total      = hoje.length;
-  const aguardando = hoje.filter(p => p.status === "aguardando rota").length;
-  const emRota     = hoje.filter(p => p.status === "em rota").length;
+function filtrarMes(pedidos) {
+  const agora  = new Date();
+  const inicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+  const fim    = new Date(agora.getFullYear(), agora.getMonth() + 1, 1);
+  return pedidos.filter(p => {
+    const dtStr = p.created_at || p.criado_em || "";
+    if (!dtStr) return false;
+    const d = new Date(dtStr);
+    return d >= inicio && d < fim;
+  });
+}
+
+function atualizarResumo(hoje, mes) {
+  const total        = hoje.length;
+  const aguardando   = hoje.filter(p => p.status === "aguardando rota").length;
+  const emRota       = hoje.filter(p => p.status === "em rota").length;
+  const entregueHoje = hoje.filter(p => p.status === "entregue").length;
+  const totalMes     = (mes || []).length;
   document.getElementById("resumoCards").innerHTML = `
     <div class="atend-resumo-card">
       <div class="atend-resumo-icon">${Icons.package(22)}</div>
@@ -183,6 +156,14 @@ function atualizarResumo(hoje) {
     <div class="atend-resumo-card blue">
       <div class="atend-resumo-icon">${Icons.truck(22)}</div>
       <strong>${emRota}</strong><span>Em rota</span>
+    </div>
+    <div class="atend-resumo-card green">
+      <div class="atend-resumo-icon">${Icons.checkCircle(22)}</div>
+      <strong>${entregueHoje}</strong><span>Entregues hoje</span>
+    </div>
+    <div class="atend-resumo-card teal">
+      <div class="atend-resumo-icon">${Icons.calendar(22)}</div>
+      <strong>${totalMes}</strong><span>Total do mês</span>
     </div>
   `;
 }
@@ -238,6 +219,111 @@ function renderLista(pedidos) {
   }).join("");
 }
 
+let _mesPedidosCache = [];
+
+function renderPedidosMes(mes) {
+  const sec = document.getElementById("pedidosMesSection");
+  if (!sec) return;
+
+  const totalMes   = mes.length;
+  const entregues  = mes.filter(p => p.status === "entregue").length;
+  const aguardando = mes.filter(p => ["aguardando rota", "próximo dia"].includes(p.status)).length;
+  const frete      = mes.reduce((s, p) => s + Number(p.valor_frete || 0), 0);
+
+  _mesPedidosCache = [...mes].sort((a, b) =>
+    (b.created_at || "").localeCompare(a.created_at || "")
+  ).slice(0, 50);
+
+  sec.innerHTML = `
+    <div class="atend-mes-stats">
+      <span>Este mês: <strong>${totalMes}</strong> pedidos</span>
+      <span class="atend-dot">·</span>
+      <span><strong>${entregues}</strong> entregues</span>
+      <span class="atend-dot">·</span>
+      <span><strong>${aguardando}</strong> aguardando</span>
+      <span class="atend-dot">·</span>
+      <span><strong>${moneyFmt.format(frete)}</strong> em fretes</span>
+    </div>
+    <div class="atend-mes-filtros">
+      <input
+        id="mesBusca"
+        class="atend-mes-busca"
+        type="search"
+        placeholder="Buscar por código, cliente, material ou destino…"
+      >
+      <select id="mesStatus" class="atend-mes-select">
+        <option value="">Todos os status</option>
+        <option value="aguardando rota">Aguardando rota</option>
+        <option value="disponivel">Disponível</option>
+        <option value="em rota">Em rota</option>
+        <option value="entregue">Entregue</option>
+        <option value="pendente">Pendente</option>
+        <option value="cancelado">Cancelado</option>
+      </select>
+    </div>
+    <p class="atend-mes-counter" id="mesCounter"></p>
+    <div class="atend-table-wrap">
+      <table class="atend-mes-table">
+        <thead><tr>
+          <th>Código</th><th>Cliente</th><th>Material</th>
+          <th>Destino</th><th>Peso</th><th>Status</th><th>Data</th>
+        </tr></thead>
+        <tbody id="mesTbody"></tbody>
+      </table>
+    </div>
+  `;
+
+  _aplicarFiltrosMes();
+
+  document.getElementById("mesBusca").addEventListener("input", _aplicarFiltrosMes);
+  document.getElementById("mesStatus").addEventListener("change", _aplicarFiltrosMes);
+}
+
+function _aplicarFiltrosMes() {
+  const busca  = (document.getElementById("mesBusca")?.value  || "").toLowerCase();
+  const status = (document.getElementById("mesStatus")?.value || "");
+  const tbody  = document.getElementById("mesTbody");
+  const counter = document.getElementById("mesCounter");
+  if (!tbody) return;
+
+  const filtrados = _mesPedidosCache.filter(p => {
+    if (status && p.status !== status) return false;
+    if (!busca) return true;
+    const dest = [p.destino_municipio, p.destino_estado].filter(Boolean).join("/");
+    return (
+      (p.codigo      || "").toLowerCase().includes(busca) ||
+      (p.cliente     || "").toLowerCase().includes(busca) ||
+      (p.descricao   || "").toLowerCase().includes(busca) ||
+      dest.toLowerCase().includes(busca)
+    );
+  });
+
+  if (counter) {
+    counter.textContent = `Exibindo ${filtrados.length} de ${_mesPedidosCache.length} pedidos`;
+  }
+
+  if (!filtrados.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="atend-mes-vazio">Nenhum pedido encontrado com os filtros aplicados.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtrados.map(p => {
+    const st    = STATUS_MAP[p.status] || { cls: "gray", label: p.status || "—" };
+    const dest  = [p.destino_municipio, p.destino_estado].filter(Boolean).join("/");
+    const dtStr = p.created_at || p.criado_em || "";
+    const data  = dtStr ? new Date(dtStr).toLocaleDateString("pt-BR") : "—";
+    return `<tr>
+      <td><strong class="atend-code-cell">${p.codigo || "—"}</strong></td>
+      <td>${p.cliente || "—"}</td>
+      <td>${p.descricao || "—"}</td>
+      <td>${dest || "—"}</td>
+      <td>${p.peso || 0} kg</td>
+      <td><span class="atend-badge atend-badge-${st.cls}">${st.label}</span></td>
+      <td>${data}</td>
+    </tr>`;
+  }).join("");
+}
+
 // ── Salvar Pedido ─────────────────────────────────────────────────────────────
 
 async function salvarPedido() {
@@ -262,12 +348,12 @@ async function salvarPedido() {
   const observacoes      = document.getElementById("fObs").value.trim();
 
   // Validações
-  if (!cliente)                { toast("Preencha o nome do cliente."); return; }
-  if (!telefone)               { toast("Preencha o telefone / WhatsApp."); return; }
-  if (!descricao)              { toast("Preencha o produto / material."); return; }
-  if (!peso || peso <= 0)      { toast("Preencha o peso em kg."); return; }
-  if (cepDigits.length !== 8)  { toast("CEP inválido. Use 8 dígitos."); return; }
-  if (!destinoMunicipio)       { toast("Preencha o município de destino."); return; }
+  if (!cliente)                { showToast("Preencha o nome do cliente."); return; }
+  if (!telefone)               { showToast("Preencha o telefone / WhatsApp."); return; }
+  if (!descricao)              { showToast("Preencha o produto / material."); return; }
+  if (!peso || peso <= 0)      { showToast("Preencha o peso em kg."); return; }
+  if (cepDigits.length !== 8)  { showToast("CEP inválido. Use 8 dígitos."); return; }
+  if (!destinoMunicipio)       { showToast("Preencha o município de destino."); return; }
 
   const distKm = (formState.lat && formState.lng)
     ? calcularDistanciaKm(STORE_LAT, STORE_LNG, formState.lat, formState.lng)
@@ -306,12 +392,12 @@ async function salvarPedido() {
 
   try {
     await apiPost(`${API_BASE}/api/pedidos`, payload);
-    toast("Pedido cadastrado com sucesso!");
+    showToast("Pedido cadastrado com sucesso!");
     limparFormulario();
     fecharFormulario();
     await carregarPedidos();
   } catch (e) {
-    toast(`Erro ao salvar: ${e.message}`);
+    showToast(`Erro ao salvar: ${e.message}`);
   } finally {
     btn.disabled  = false;
     btn.innerHTML = `${Icons.checkCircle(16)} Salvar Pedido`;
@@ -348,15 +434,6 @@ function abrirFormulario() {
 function fecharFormulario() {
   document.getElementById("formSection").classList.add("hidden");
   document.getElementById("toggleFormBtn").classList.remove("hidden");
-}
-
-// ── Auth ──────────────────────────────────────────────────────────────────────
-
-function sair() {
-  sessionStorage.removeItem("madcenter_token");
-  sessionStorage.removeItem("madcenter_nome");
-  sessionStorage.removeItem("madcenter_perfil");
-  window.location.href = "login.html";
 }
 
 function mostrarTelaPrincipal() {
@@ -430,7 +507,7 @@ function closeMapPickerAtendente() {
 
 async function confirmMapLocationAtendente() {
   if (!_mapPickerCoords) {
-    toast("Clique no mapa para marcar uma localização antes de confirmar.");
+    showToast("Clique no mapa para marcar uma localização antes de confirmar.");
     return;
   }
 
@@ -514,7 +591,7 @@ function editarPedido(id) {
   if (!p) return;
 
   if (p.status === "entregue" || p.status === "em rota") {
-    toast("Pedido em andamento, não pode ser editado.");
+    showToast("Pedido em andamento, não pode ser editado.");
     return;
   }
 
@@ -643,10 +720,10 @@ async function salvarEdicaoPedido(id) {
   const descricao = document.getElementById("eProduto").value.trim();
   const peso      = Number(document.getElementById("ePeso").value || 0);
 
-  if (!cliente)   { toast("Preencha o nome do cliente.");        return; }
-  if (!descricao) { toast("Preencha o produto / material.");     return; }
-  if (!peso || peso <= 0) { toast("Preencha o peso em kg.");    return; }
-  if (!municipio) { toast("Preencha o município de destino."); return; }
+  if (!cliente)   { showToast("Preencha o nome do cliente.");        return; }
+  if (!descricao) { showToast("Preencha o produto / material.");     return; }
+  if (!peso || peso <= 0) { showToast("Preencha o peso em kg.");    return; }
+  if (!municipio) { showToast("Preencha o município de destino."); return; }
 
   const cepDigits = document.getElementById("eCep").value.replace(/\D/g, "");
   const payload = {
@@ -676,31 +753,15 @@ async function salvarEdicaoPedido(id) {
 
   try {
     await apiPut(`${API_BASE}/api/pedidos/${id}`, payload);
-    toast("Pedido atualizado com sucesso!");
+    showToast("Pedido atualizado com sucesso!");
     fecharModalEdicao();
     await carregarPedidos();
   } catch (e) {
-    toast(`Erro ao salvar: ${e.message}`);
+    showToast(`Erro ao salvar: ${e.message}`);
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = `${Icons.checkCircle(16)} Salvar alterações`; }
   }
 }
-
-// ── Tema claro/escuro ─────────────────────────────────────────────────────────
-
-function aplicarTema(tema) {
-  document.documentElement.setAttribute("data-theme", tema);
-  const btn = document.getElementById("themeToggle");
-  if (btn) btn.innerHTML = tema === "dark" ? Icons.sun(16) : Icons.moon(16);
-}
-
-function alternarTema() {
-  const atual = document.documentElement.getAttribute("data-theme") || "dark";
-  const novo  = atual === "dark" ? "light" : "dark";
-  localStorage.setItem("madcenter_tema", novo);
-  aplicarTema(novo);
-}
-
 
 // ── Inicialização ─────────────────────────────────────────────────────────────
 
