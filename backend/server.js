@@ -56,7 +56,7 @@ app.use("/api", (req, res, next) => {
   autenticar(req, res, next);
 });
 
-const PEDIDOS_COLS    = "id,codigo,descricao,tipo,peso,volume,cep,destino_municipio,destino_estado,endereco_entrega,numero,complemento,cliente,telefone,coleta,entrega,prioridade,veiculo_tipo,distancia_km,valor_frete,status,observacoes,lat,lng,data_entrega,created_at";
+const PEDIDOS_COLS    = "id,codigo,descricao,tipo,peso,volume,cep,destino_municipio,destino_estado,endereco_entrega,numero,complemento,cliente,telefone,coleta,entrega,prioridade,veiculo_tipo,distancia_km,valor_frete,status,observacoes,lat,lng,data_entrega,criado_em";
 const MOTORISTAS_COLS = "id,nome,telefone,categoria,capacidade,cidade,estado,status,observacoes";
 const ROTAS_COLS      = "id,codigo,nome,tipo_rota,destino_municipio,destino_estado,motorista_id,saida,chegada,distancia,frete_total,tempo,status,observacoes,cargas_ids";
 
@@ -256,6 +256,29 @@ app.get("/api/configuracoes", async (req, res) => {
   if (error) return res.status(400).json({ error: error.message });
 
   res.json(data);
+});
+
+app.put("/api/configuracoes", async (req, res) => {
+  try {
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from("configuracoes")
+      .select("id")
+      .limit(1)
+      .single();
+    if (fetchError) throw fetchError;
+
+    const { data, error } = await supabaseAdmin
+      .from("configuracoes")
+      .update(req.body)
+      .eq("id", existing.id)
+      .select()
+      .single();
+    if (error) throw error;
+
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Usuários ──────────────────────────────────────────────────────────────────

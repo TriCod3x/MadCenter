@@ -236,8 +236,24 @@ function getSettings() {
   };
 }
 
-function saveSettings(data) {
-  DB.settings = { ...DB.settings, ...data };
+async function saveSettings(data) {
+  const payload = {
+    empresa:              data.empresa,
+    telefone:             data.telefone,
+    endereco:             data.endereco,
+    cidade_base:          data.cidadeBase,
+    estado:               data.estado,
+    latitude_loja:        data.latitudeLoja,
+    longitude_loja:       data.longitudeLoja,
+    custo_km:             data.custoKm,
+    custo_adicional_fixo: data.custoAdicionalFixo,
+    frete_minimo:         data.freteMinimo,
+    entrega_moto:         data.entregaMoto,
+    horario:              data.horario,
+    tema:                 data.tema
+  };
+  await apiPut(`${API_BASE}/api/configuracoes`, payload);
+  DB.settings = { ...DB.settings, ...payload };
 }
 
 function clearAllData() {

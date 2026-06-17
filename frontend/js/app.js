@@ -1870,25 +1870,29 @@ function renderSettings() {
   document.getElementById("settingsForm").addEventListener("submit", submitSettingsForm);
 }
 
-function submitSettingsForm(event) {
+async function submitSettingsForm(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.target).entries());
-  saveSettings({
-    empresa: data.empresa,
-    telefone: data.telefone,
-    endereco: data.endereco,
-    cidadeBase: data.cidadeBase,
-    estado: data.estado,
-    latitudeLoja: Number(data.latitudeLoja),
-    longitudeLoja: Number(data.longitudeLoja),
-    freteMinimo: Number(data.freteMinimo),
-    entregaMoto: data.entregaMoto,
-    horario: data.horario,
-    tema: data.tema
-  });
-  localStorage.setItem("madcenter_tema", data.tema);
-  applyTheme(data.tema);
-  toast("Configurações salvas.");
+  try {
+    await saveSettings({
+      empresa:       data.empresa,
+      telefone:      data.telefone,
+      endereco:      data.endereco,
+      cidadeBase:    data.cidadeBase,
+      estado:        data.estado,
+      latitudeLoja:  Number(data.latitudeLoja),
+      longitudeLoja: Number(data.longitudeLoja),
+      freteMinimo:   Number(data.freteMinimo),
+      entregaMoto:   data.entregaMoto,
+      horario:       data.horario,
+      tema:          data.tema
+    });
+    localStorage.setItem("madcenter_tema", data.tema);
+    applyTheme(data.tema);
+    toast("Configurações salvas.");
+  } catch (e) {
+    toast(`Erro ao salvar configurações: ${e.message}`);
+  }
 }
 
 let _mapPanelListenersSetup = false;
