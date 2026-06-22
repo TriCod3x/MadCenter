@@ -2,7 +2,7 @@
 
 // ── Configuração ─────────────────────────────────────────────────────────────
 
-const API_BASE = window.location.port === "3001" ? "" : "http://localhost:3001";
+const API_BASE = window.location.hostname === "localhost" ? "http://localhost:3001" : "";
 
 // Coordenadas fixas da loja (ponto de partida de todas as rotas)
 const LOJA_LAT = -4.760287;
@@ -26,6 +26,26 @@ function obterCoordsMunicipio(municipio, estado) {
   return MUNICIPIOS_COORDS_MOTO[key] || { lat: LOJA_LAT, lng: LOJA_LNG };
 }
 
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function distLoja(p) {
+  if (!p.lat || !p.lng) return Infinity;
+  return haversineKm(state.lojaLat, state.lojaLng, Number(p.lat), Number(p.lng));
+}
+
+function distLojaLabel(p) {
+  if (!p.lat || !p.lng) return "📍 Distância não disponível";
+  return `📍 ${distLoja(p).toFixed(1)} km da loja`;
+}
+
 // ── Estado global ────────────────────────────────────────────────────────────
 
 const state = {
@@ -38,7 +58,9 @@ const state = {
   routeLine:       null,
   rotaLayer:       null,
   geoWatchId:      null,
-  currentPos:      null    // { lat, lng }
+  currentPos:      null,   // { lat, lng }
+  lojaLat:         LOJA_LAT,
+  lojaLng:         LOJA_LNG
 };
 
 // Estado do modal de seleção de veículo
@@ -128,10 +150,11 @@ async function carregarEntregasDoDia(motoristaId, silencioso = false) {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function getPedidosOrdenados() {
-  const emRota   = state.pedidos.filter(p => p.status === "em rota");
-  const pendente = state.pedidos.filter(p => p.status === "pendente");
-  const entregue = state.pedidos.filter(p => p.status === "entregue");
-  const outros   = state.pedidos.filter(p => !["em rota","pendente","entregue"].includes(p.status));
+  const byDist = (a, b) => distLoja(a) - distLoja(b);
+  const emRota   = state.pedidos.filter(p => p.status === "em rota").sort(byDist);
+  const pendente = state.pedidos.filter(p => p.status === "pendente").sort(byDist);
+  const entregue = state.pedidos.filter(p => p.status === "entregue").sort(byDist);
+  const outros   = state.pedidos.filter(p => !["em rota","pendente","entregue"].includes(p.status)).sort(byDist);
   return [...emRota, ...outros, ...pendente, ...entregue];
 }
 
@@ -229,6 +252,10 @@ function renderPedidos() {
               <span>${Icons.weight(14)} ${p.peso || 0} kg</span>
               <span>${Icons.money(14)} ${moneyFmt.format(Number(p.valor_frete || 0))}</span>
             </div>
+          </div>
+          <div class="moto-card-row">
+            <span class="moto-card-label">Distância</span>
+            <span class="moto-card-value">${distLojaLabel(p)}</span>
           </div>
         </div>
         ${botoes}
@@ -455,9 +482,11 @@ async function desenharRota() {
     lng: p.lng ? Number(p.lng) : obterCoordsMunicipio(p.destino_municipio, p.destino_estado).lng
   });
 
-  const ultimoEntregue = entregues.length ? entregues[entregues.length - 1] : null;
-  const pontoPartida   = ultimoEntregue ? getCoordsP(ultimoEntregue) : { lat: LOJA_LAT, lng: LOJA_LNG };
-  const pontos         = [pontoPartida, ...pendentes.map(getCoordsP)];
+  // Origem = posição atual do motorista (geolocalização) ou loja como fallback
+  const pontoPartida = state.currentPos
+    ? { lat: state.currentPos.lat, lng: state.currentPos.lng }
+    : { lat: LOJA_LAT, lng: LOJA_LNG };
+  const pontos = [pontoPartida, ...pendentes.map(getCoordsP)];
 
   if (pontos.length >= 2) {
     const geojson = await buscarRotaOSRM(pontos);
@@ -605,13 +634,8 @@ function renderMural() {
   document.getElementById("muralCount").textContent   = muralState.pedidos.length;
   document.getElementById("muralUrgente").textContent = urgentes;
 
-  // Ordena: prioridade desc, depois data prevista de entrega asc
-  const ordenados = [...muralState.pedidos].sort((a, b) => {
-    const pa = PRIORIDADE_ORDEM[a.prioridade] ?? 1;
-    const pb = PRIORIDADE_ORDEM[b.prioridade] ?? 1;
-    if (pb !== pa) return pb - pa;
-    return (a.entrega || "").localeCompare(b.entrega || "");
-  });
+  // Ordena: mais próximo da loja primeiro
+  const ordenados = [...muralState.pedidos].sort((a, b) => distLoja(a) - distLoja(b));
 
   list.innerHTML = ordenados.map(p => {
     const endereco = [p.endereco_entrega, p.numero, p.complemento]
@@ -666,6 +690,7 @@ function renderMural() {
             <span>${Icons.weight(14)} ${p.peso || 0} kg</span>
             <span>${Icons.money(14)} ${moneyMural.format(Number(p.valor_frete || 0))}</span>
             <span>${Icons.calendar(14)} ${dataEntrega}</span>
+            <span>${distLojaLabel(p)}</span>
           </div>
         </div>
 
@@ -718,9 +743,11 @@ async function abrirModalVeiculo(pedidoId) {
       apiGet(`${API_BASE}/api/pedidos`)
     ]);
 
+    // Exclui pedidos do próprio motorista: veículo só é "Em uso" se for de OUTRO motorista
+    const meusPedidoIds = new Set(state.pedidos.map(p => p.id));
     const emUso = new Set(
       pedidos
-        .filter(p => p.status === "em rota" && p.veiculo_tipo)
+        .filter(p => p.status === "em rota" && p.veiculo_tipo && !meusPedidoIds.has(p.id))
         .map(p => p.veiculo_tipo)
     );
 
@@ -963,6 +990,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.location.replace("login.html");
     return;
   }
+
+  // Carrega coordenadas reais da loja (latitude_loja / longitude_loja)
+  try {
+    const cfg = await apiGet(`${API_BASE}/api/configuracoes`);
+    if (cfg?.latitude_loja)  state.lojaLat = Number(cfg.latitude_loja);
+    if (cfg?.longitude_loja) state.lojaLng = Number(cfg.longitude_loja);
+  } catch {}
 
   // Busca o registro do motorista pelo nome na tabela motoristas
   try {

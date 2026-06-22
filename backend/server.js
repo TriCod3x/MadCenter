@@ -11,13 +11,21 @@ dotenv.config();
 const app = express();
 
 app.use(cors({
-  origin: [
-    "http://localhost:5500",
-    "http://localhost:5501",
-    "http://127.0.0.1:5500",
-    "http://127.0.0.1:5501",
-    "http://localhost:3000",
-  ],
+  origin: (origin, callback) => {
+    const allowed = [
+      "http://localhost:5500",
+      "http://localhost:5501",
+      "http://127.0.0.1:5500",
+      "http://127.0.0.1:5501",
+      "http://localhost:3000",
+    ];
+    // Permite origens sem origin (ex: chamadas server-side) e domínios Vercel
+    if (!origin || allowed.includes(origin) || /\.vercel\.app$/.test(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS bloqueado"));
+    }
+  },
   credentials: true,
 }));
 app.use(express.json());
@@ -643,6 +651,10 @@ app.get("/api/relatorios/:id/csv", async (req, res) => {
 
 const PORT = Number(process.env.PORT) || 3000;
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Servidor rodando em http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;

@@ -2,7 +2,7 @@
 
 // ── Configuração ─────────────────────────────────────────────────────────────
 
-const API_BASE = window.location.port === "3001" ? "" : "http://localhost:3001";
+const API_BASE = window.location.hostname === "localhost" ? "http://localhost:3001" : "";
 
 // Coordenadas da loja (Timon/MA)
 const STORE_LAT = -4.760287;
@@ -119,7 +119,7 @@ function filtrarHoje(pedidos) {
   const inicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
   const fim    = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() + 1);
   return pedidos.filter(p => {
-    const dtStr = p.created_at || p.criado_em || "";
+    const dtStr = p.criado_em || "";
     if (!dtStr) return false;
     const d = new Date(dtStr);
     return d >= inicio && d < fim;
@@ -131,7 +131,7 @@ function filtrarMes(pedidos) {
   const inicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
   const fim    = new Date(agora.getFullYear(), agora.getMonth() + 1, 1);
   return pedidos.filter(p => {
-    const dtStr = p.created_at || p.criado_em || "";
+    const dtStr = p.criado_em || "";
     if (!dtStr) return false;
     const d = new Date(dtStr);
     return d >= inicio && d < fim;
@@ -184,7 +184,7 @@ function renderLista(pedidos) {
     return;
   }
   const sorted = [...pedidos].sort((a, b) =>
-    (b.created_at || "").localeCompare(a.created_at || "")
+    (b.criado_em || "").localeCompare(a.criado_em || "")
   );
   const editavel = s => s !== "entregue" && s !== "em rota";
   list.innerHTML = sorted.map(p => {
@@ -231,7 +231,7 @@ function renderPedidosMes(mes) {
   const frete      = mes.reduce((s, p) => s + Number(p.valor_frete || 0), 0);
 
   _mesPedidosCache = [...mes].sort((a, b) =>
-    (b.created_at || "").localeCompare(a.created_at || "")
+    (b.criado_em || "").localeCompare(a.criado_em || "")
   ).slice(0, 50);
 
   sec.innerHTML = `
@@ -310,7 +310,7 @@ function _aplicarFiltrosMes() {
   tbody.innerHTML = filtrados.map(p => {
     const st    = STATUS_MAP[p.status] || { cls: "gray", label: p.status || "—" };
     const dest  = [p.destino_municipio, p.destino_estado].filter(Boolean).join("/");
-    const dtStr = p.created_at || p.criado_em || "";
+    const dtStr = p.criado_em || "";
     const data  = dtStr ? new Date(dtStr).toLocaleDateString("pt-BR") : "—";
     return `<tr>
       <td><strong class="atend-code-cell">${p.codigo || "—"}</strong></td>
