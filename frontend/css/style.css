@@ -622,22 +622,22 @@ tr:hover td {
 }
 
 .badge-yellow { background: #fff4c7; color: #775900; }
-.badge-blue { background: #dff3ea; color: #006336; }
-.badge-green { background: #dcfce7; color: #12643b; }
-.badge-red { background: #fee2e2; color: #991b1b; }
-.badge-gray { background: #e5e7eb; color: #374151; }
-.badge-orange { background: #ffedd5; color: #9a4b00; }
- .badge-purple { background: #f5e8ff; color: #5f2d82; }
-.badge-sky    { background: #dbeafe; color: #1d4ed8; }
+.badge-blue   { background: #dbeafe; color: #1e40af; }
+.badge-sky    { background: #e0f2fe; color: #0369a1; }
+.badge-green  { background: #dcfce7; color: #15803d; }
+.badge-red    { background: #fee2e2; color: #b91c1c; }
+.badge-gray   { background: #f3f4f6; color: #4b5563; }
+.badge-orange { background: #ffedd5; color: #c2410c; }
+.badge-purple { background: #f5f3ff; color: #6d28d9; }
 
- [data-theme="dark"] .badge-yellow { background: #5b4b18; color: #ffeaa0; }
- [data-theme="dark"] .badge-blue { background: #193f31; color: #b7f2d5; }
- [data-theme="dark"] .badge-green { background: #174b34; color: #b6f2cf; }
- [data-theme="dark"] .badge-red { background: #5b2525; color: #ffd0d0; }
- [data-theme="dark"] .badge-gray { background: #374151; color: #e5e7eb; }
- [data-theme="dark"] .badge-orange { background: #5b351b; color: #ffd0a0; }
- [data-theme="dark"] .badge-purple { background: #4d3166; color: #f9d7ff; }
-[data-theme="dark"] .badge-sky    { background: #1e3a5f; color: #93c5fd; }
+[data-theme="dark"] .badge-yellow { background: #5b4b18; color: #ffeaa0; }
+[data-theme="dark"] .badge-blue   { background: #1e3a5f; color: #93c5fd; }
+[data-theme="dark"] .badge-sky    { background: #0c3556; color: #7dd3fc; }
+[data-theme="dark"] .badge-green  { background: #14532d; color: #86efac; }
+[data-theme="dark"] .badge-red    { background: #7f1d1d; color: #fca5a5; }
+[data-theme="dark"] .badge-gray   { background: #374151; color: #d1d5db; }
+[data-theme="dark"] .badge-orange { background: #7c2d12; color: #fdba74; }
+[data-theme="dark"] .badge-purple { background: #3b0764; color: #d8b4fe; }
 
 .modal-backdrop {
   position: fixed;
@@ -974,22 +974,36 @@ tr:hover td {
 }
 
 .delivery-pin.active {
-  background: var(--primary-2, #008c45);
+  background: #3b82f6;
   border-color: #fff;
-  box-shadow: 0 4px 14px rgba(0, 140, 69, .4);
+  box-shadow: 0 4px 14px rgba(59, 130, 246, .4);
 }
 
 .delivery-pin.completed {
-  background: #557166;
-  opacity: .8;
+  background: #22c55e;
+  opacity: .85;
 }
 
 .delivery-pin.pending {
-  background: var(--accent, #f2c94c);
+  background: #6b7280;
+}
+
+.delivery-pin.waiting {
+  background: #6b7280;
+}
+
+.delivery-pin.em-rota {
+  background: #3b82f6;
+  border-color: #fff;
+}
+
+.delivery-pin.planned {
+  background: #f97316;
+  border-color: #fff;
 }
 
 .delivery-pin.cancelled {
-  background: #d93025;
+  background: #ef4444;
   border-color: #fff;
 }
 
@@ -1013,9 +1027,9 @@ tr:hover td {
 
 /* Próximo pedido a ser entregue: azul pulsante */
 .delivery-pin.next-delivery {
-  background: #2374c6;
+  background: #3b82f6;
   border-color: #fff;
-  box-shadow: 0 0 0 0 rgba(35, 116, 198, 0.5);
+  box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
   animation: pulse-delivery 1.6s ease-out infinite;
   width: 22px;
   height: 22px;

@@ -280,10 +280,12 @@ function renderDeliveryMarkers(visibleRoutes = []) {
         pinClass = "cancelled";
       } else if (nextPedidoIds.has(carga.id)) {
         pinClass = "next-delivery";
+      } else if (carga.status === "planejado") {
+        pinClass = "planned";
       } else if (carga.status === "em rota") {
-        pinClass = "pending";
+        pinClass = "em-rota";
       } else {
-        pinClass = "pending";
+        pinClass = "waiting";
       }
 
       const size = pinClass === "next-delivery" ? [22, 22] : [18, 18];
@@ -297,11 +299,13 @@ function renderDeliveryMarkers(visibleRoutes = []) {
 
       const enderecoCompleto = [carga.enderecoEntrega, carga.numero, carga.complemento].filter(Boolean).join(", ");
       const statusLabel = {
-        "entregue": "✅ Entregue",
-        "em rota": "🚚 Em rota",
+        "entregue":             "✅ Entregue",
+        "em rota":              "🚚 Em rota",
+        "planejado":            "🗓 Planejado",
         "aguardando motorista": "⏳ Aguardando",
-        "próximo dia": "📅 Próximo dia",
-        "cancelado": "❌ Cancelado"
+        "disponivel":           "📦 Disponível",
+        "próximo dia":          "📅 Próximo dia",
+        "cancelado":            "❌ Cancelado"
       }[carga.status] || carga.status;
 
       const marker = L.marker([lat, lng], { icon });
@@ -336,10 +340,10 @@ function storeMarkerIcon() {
 
 function routeStatusColor(status) {
   return {
-    planejada: "#f2c94c",
-    "em andamento": "#2374c6",
-    concluida: "#0fa958",
-    cancelada: "#d93025"
+    planejada:      "#f97316",
+    "em andamento": "#3b82f6",
+    concluida:      "#22c55e",
+    cancelada:      "#ef4444"
   }[status] || "#6b7280";
 }
 
@@ -415,7 +419,7 @@ function renderRouteCards(routes) {
         <div>
           <span>${driver?.nome || "Sem motorista"}</span>
           <small>${route.cargasIds?.length || 0} pedido(s)</small>
-          <span class="badge badge-${route.status === 'concluida' ? 'green' : route.status === 'em andamento' ? 'blue' : route.status === 'planejada' ? 'yellow' : 'red'}">${route.status}</span>
+          <span class="badge badge-${route.status === 'concluida' ? 'green' : route.status === 'em andamento' ? 'sky' : route.status === 'planejada' ? 'orange' : 'red'}">${route.status}</span>
         </div>
       </div>
     `;

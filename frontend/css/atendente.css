@@ -641,11 +641,13 @@ img { max-width: 100%; }
 }
 .atend-pedido-card:hover { transform: translateY(-2px); }
 
-.atend-pedido-card[data-status="aguardando motorista"] { border-left-color: var(--accent); }
-.atend-pedido-card[data-status="em rota"]         { border-left-color: var(--blue); }
-.atend-pedido-card[data-status="entregue"]        { border-left-color: var(--success); opacity: .7; }
-.atend-pedido-card[data-status="cancelado"]       { border-left-color: var(--danger); opacity: .6; }
-.atend-pedido-card[data-status="próximo dia"]     { border-left-color: var(--muted); }
+.atend-pedido-card[data-status="aguardando motorista"] { border-left-color: #6b7280; }
+.atend-pedido-card[data-status="planejado"]            { border-left-color: #f97316; }
+.atend-pedido-card[data-status="em rota"]              { border-left-color: #3b82f6; }
+.atend-pedido-card[data-status="entregue"]             { border-left-color: #22c55e; opacity: .7; }
+.atend-pedido-card[data-status="cancelado"]            { border-left-color: #ef4444; opacity: .6; }
+.atend-pedido-card[data-status="próximo dia"]          { border-left-color: #a855f7; }
+.atend-pedido-card[data-status="disponivel"]           { border-left-color: #8b5cf6; }
 
 .atend-pedido-header {
   display: flex;
@@ -676,19 +678,21 @@ img { max-width: 100%; }
   white-space: nowrap;
 }
 
-.atend-badge-yellow { background: #fff4c7;  color: #775900; }
-.atend-badge-blue   { background: #dff3ea;  color: #006336; }
-.atend-badge-green  { background: #dcfce7;  color: #12643b; }
-.atend-badge-red    { background: #fee2e2;  color: #991b1b; }
-.atend-badge-orange { background: #ffedd5;  color: #9a4b00; }
-.atend-badge-gray   { background: #e5e7eb;  color: #374151; }
+.atend-badge-yellow { background: #fff4c7; color: #775900; }
+.atend-badge-blue   { background: #dbeafe; color: #1e40af; }
+.atend-badge-green  { background: #dcfce7; color: #15803d; }
+.atend-badge-red    { background: #fee2e2; color: #b91c1c; }
+.atend-badge-orange { background: #ffedd5; color: #c2410c; }
+.atend-badge-gray   { background: #f3f4f6; color: #4b5563; }
+.atend-badge-purple { background: #f5f3ff; color: #6d28d9; }
 
 [data-theme="dark"] .atend-badge-yellow { background: #5b4b18; color: #ffeaa0; }
-[data-theme="dark"] .atend-badge-blue   { background: #193f31; color: #b7f2d5; }
-[data-theme="dark"] .atend-badge-green  { background: #174b34; color: #b6f2cf; }
-[data-theme="dark"] .atend-badge-red    { background: #5b2525; color: #ffd0d0; }
-[data-theme="dark"] .atend-badge-orange { background: #5b351b; color: #ffd0a0; }
-[data-theme="dark"] .atend-badge-gray   { background: #374151; color: #e5e7eb; }
+[data-theme="dark"] .atend-badge-blue   { background: #1e3a5f; color: #93c5fd; }
+[data-theme="dark"] .atend-badge-green  { background: #14532d; color: #86efac; }
+[data-theme="dark"] .atend-badge-red    { background: #7f1d1d; color: #fca5a5; }
+[data-theme="dark"] .atend-badge-orange { background: #7c2d12; color: #fdba74; }
+[data-theme="dark"] .atend-badge-gray   { background: #374151; color: #d1d5db; }
+[data-theme="dark"] .atend-badge-purple { background: #3b0764; color: #d8b4fe; }
 
 /* Labels e valores dos cards */
 .atend-pedido-row    { display: flex; gap: 10px; align-items: baseline; }

@@ -153,9 +153,9 @@ async function carregarEntregasDoDia(motoristaId, silencioso = false) {
 function getPedidosOrdenados() {
   const byDist = (a, b) => distLoja(a) - distLoja(b);
   const emRota   = state.pedidos.filter(p => p.status === "em rota").sort(byDist);
-  const pendente = state.pedidos.filter(p => p.status === "pendente").sort(byDist);
+  const pendente = state.pedidos.filter(p => p.status === "planejado").sort(byDist);
   const entregue = state.pedidos.filter(p => p.status === "entregue").sort(byDist);
-  const outros   = state.pedidos.filter(p => !["em rota","pendente","entregue"].includes(p.status)).sort(byDist);
+  const outros   = state.pedidos.filter(p => !["em rota","planejado","entregue"].includes(p.status)).sort(byDist);
   return [...emRota, ...outros, ...pendente, ...entregue];
 }
 
@@ -186,7 +186,7 @@ function renderPedidos() {
 
   list.innerHTML = ordenados.map(p => {
     const isEntregue = p.status === "entregue";
-    const isPendente = p.status === "pendente";
+    const isPlanejado = p.status === "planejado";
     const isProximo  = p.id === primeiroPendenteId;
     const rota = getRotaDoPedido(p.id);
 
@@ -197,13 +197,13 @@ function renderPedidos() {
 
     const cardClass = [
       "moto-pedido-card",
-      isEntregue ? "is-entregue" : isPendente ? "is-pendente" : isProximo ? "is-proximo" : ""
+      isEntregue ? "is-entregue" : isPlanejado ? "is-pendente" : isProximo ? "is-proximo" : ""
     ].join(" ").trim();
 
     const statusBadge = isEntregue
       ? `<span class="moto-badge moto-badge-green">Entregue</span>`
-      : isPendente
-        ? `<span class="moto-badge moto-badge-purple">Pendente</span>`
+      : isPlanejado
+        ? `<span class="moto-badge moto-badge-orange">Planejado</span>`
         : `<span class="moto-badge moto-badge-blue">Em rota</span>`;
 
     const botoes = !isEntregue ? `
@@ -344,13 +344,13 @@ async function deixarParaDepois(pedidoId) {
   if (card) card.style.opacity = "0.35";
 
   try {
-    // Muda status para "pendente" mantendo o pedido vinculado à rota
+    // Muda status para "planejado" mantendo o pedido vinculado à rota
     await apiPut(`${API_BASE}/api/pedidos/${pedidoId}/deixar-para-depois`, {});
 
     const pedido = state.pedidos.find(p => p.id === pedidoId);
-    if (pedido) pedido.status = "pendente";
+    if (pedido) pedido.status = "planejado";
 
-    showToast("Pedido marcado como pendente.");
+    showToast("Pedido marcado como planejado.");
     renderPedidos();
     atualizarProgresso();
     desenharRota();
@@ -525,11 +525,11 @@ async function desenharRota() {
     const { lat, lng } = getCoordsP(p);
     const isEntregue = p.status === "entregue";
     const isProximo  = !isEntregue && i === entregues.length;
-    const cor = isEntregue ? "#4caf50" : isProximo ? "#2196f3" : "#ff9800";
+    const cor = isEntregue ? "#22c55e" : isProximo ? "#3b82f6" : p.status === "planejado" ? "#f97316" : "#6b7280";
     const marker = L.circleMarker([lat, lng], {
       radius: 10, color: "#fff", weight: 2, fillColor: cor, fillOpacity: 1
     });
-    const label = isEntregue ? "✅ Entregue" : isProximo ? "📍 Próxima entrega" : "⏳ Pendente";
+    const label = isEntregue ? "✅ Entregue" : isProximo ? "📍 Próxima entrega" : p.status === "planejado" ? "🗓 Planejado" : "⏳ Aguardando";
     marker.bindPopup(`<b>${p.codigo || "—"}</b><br>${p.cliente || "—"}<br>${label}`);
     marker.addTo(state.map);
     state.deliveryMarkers[p.id] = marker;

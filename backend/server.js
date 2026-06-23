@@ -568,12 +568,12 @@ app.put("/api/pedidos/:id/cancelar-motorista", async (req, res) => {
   }
 });
 
-// PUT /api/pedidos/:id/deixar-para-depois — mantém na rota, muda status p/ pendente
+// PUT /api/pedidos/:id/deixar-para-depois — mantém na rota, muda status p/ planejado
 app.put("/api/pedidos/:id/deixar-para-depois", async (req, res) => {
   const { id } = req.params;
   const { data, error } = await supabase
     .from("pedidos")
-    .update({ status: "pendente" })
+    .update({ status: "planejado" })
     .eq("id", id)
     .select("id, status")
     .single();

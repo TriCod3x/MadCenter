@@ -169,11 +169,13 @@ function atualizarResumo(hoje, mes) {
 }
 
 const STATUS_MAP = {
-  "aguardando motorista": { cls: "yellow", label: "Aguardando motorista" },
-  "em rota":         { cls: "blue",   label: "Em rota" },
-  "entregue":        { cls: "green",  label: "Entregue" },
-  "próximo dia":     { cls: "orange", label: "Próximo dia" },
-  "cancelado":       { cls: "red",    label: "Cancelado" }
+  "aguardando motorista": { cls: "gray",   label: "Aguardando motorista" },
+  "planejado":            { cls: "orange", label: "Planejado" },
+  "em rota":              { cls: "blue",   label: "Em rota" },
+  "entregue":             { cls: "green",  label: "Entregue" },
+  "próximo dia":          { cls: "purple", label: "Próximo dia" },
+  "cancelado":            { cls: "red",    label: "Cancelado" },
+  "disponivel":           { cls: "purple", label: "Disponível" }
 };
 
 function renderLista(pedidos) {
@@ -257,7 +259,7 @@ function renderPedidosMes(mes) {
         <option value="disponivel">Disponível</option>
         <option value="em rota">Em rota</option>
         <option value="entregue">Entregue</option>
-        <option value="pendente">Pendente</option>
+        <option value="planejado">Planejado</option>
         <option value="cancelado">Cancelado</option>
       </select>
     </div>
