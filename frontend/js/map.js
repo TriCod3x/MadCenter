@@ -199,19 +199,20 @@ async function renderLogisticsMap(filters = {}) {
     let line = null;
     let marker = null;
 
-    if (route.status === "em andamento" && route.cargasIds?.length) {
-      // Traçado sequencial a partir da última entrega (ou loja se nenhuma ainda)
+    const pedidos = (route.cargasIds || [])
+      .map((id) => getCargas().find((c) => c.id === id))
+      .filter(Boolean);
+    const pedidoCoords = pedidos
+      .map((p) => ({ p, coord: getCoordForPedido(p) }))
+      .filter(({ coord }) => coord);
+
+    if (route.status === "em andamento") {
       line = await drawSequentialRoute(route);
 
-      // Determina o "destino" para o popup de seleção: primeiro pedido pendente
-      const pedidos = (route.cargasIds || [])
-        .map((id) => getCargas().find((c) => c.id === id))
-        .filter(Boolean);
       const primeiroPendente = pedidos.find((c) => c.status !== "entregue");
       destination = primeiroPendente ? getCoordForPedido(primeiroPendente) : null;
       if (!destination) destination = getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
 
-      // Marcador invisível apenas para usar em selectRoute / popup
       if (destination) {
         marker = L.marker([destination.lat, destination.lng], {
           icon: destinationMarkerIcon(route.status),
@@ -227,22 +228,83 @@ async function renderLogisticsMap(filters = {}) {
         `);
         marker.addTo(logisticsMap);
       }
-    } else {
-      // Rota planejada / concluída / cancelada — comportamento original
-      if (route.cargasIds?.length) {
-        const pedidos = getCargas().filter((c) => route.cargasIds.includes(c.id));
-        for (const pedido of pedidos) {
-          const coord = getCoordForPedido(pedido);
-          if (coord) { destination = coord; break; }
-        }
-      }
-      if (!destination) destination = getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
+
+    } else if (route.status === "planejada") {
+      // Linha tracejada amarela simples (sem OSRM) + marcador amarelo em cada pedido
+      destination = pedidoCoords[0]?.coord
+        || getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
       if (!destination) return;
-      line = await drawRouteLine(store, destination, route);
-      marker = drawDestinationMarker(destination, route);
+
+      const waypoints = [store, ...pedidoCoords.map(({ coord }) => coord)];
+      if (waypoints.length >= 2) {
+        line = L.polyline(waypoints.map((w) => [w.lat, w.lng]), {
+          color: "#eab308", weight: 3, opacity: 0.85, dashArray: "8, 8"
+        });
+        line.addTo(logisticsMap);
+        waypoints.forEach((w) => extendBounds([w.lat, w.lng]));
+      } else {
+        // Sem coords individuais dos pedidos — linha até a cidade
+        line = L.polyline([[store.lat, store.lng], [destination.lat, destination.lng]], {
+          color: "#eab308", weight: 3, opacity: 0.85, dashArray: "8, 8"
+        });
+        line.addTo(logisticsMap);
+        extendBounds([store.lat, store.lng]);
+        extendBounds([destination.lat, destination.lng]);
+      }
+
+      pedidoCoords.forEach(({ p, coord }) => {
+        const m = L.marker([coord.lat, coord.lng], { icon: makeSimplePin("#eab308") });
+        m.bindPopup(`
+          <strong>${p.codigo}</strong> — ${p.descricao || ""}<br>
+          👤 ${p.cliente}<br>
+          🗓 Planejado · ${route.codigo}
+        `);
+        m.addTo(logisticsMap);
+        DELIVERY_MARKERS[p.id] = m;
+        if (!marker) marker = m;
+      });
+      if (!marker) {
+        marker = L.marker([destination.lat, destination.lng], { icon: makeSimplePin("#eab308") });
+        marker.bindPopup(`<strong>${route.codigo} · ${route.nome}</strong><br>${route.destinoMunicipio}/${route.destinoEstado}`);
+        marker.addTo(logisticsMap);
+      }
+
+    } else if (route.status === "concluida") {
+      // Apenas marcadores verdes, sem linha
+      pedidoCoords.forEach(({ p, coord }) => {
+        if (!destination) destination = coord;
+        const m = L.marker([coord.lat, coord.lng], { icon: makeSimplePin("#22c55e") });
+        m.bindPopup(`
+          <strong>${p.codigo}</strong> — ${p.descricao || ""}<br>
+          👤 ${p.cliente}<br>
+          ✅ Entregue · ${route.codigo}
+        `);
+        m.addTo(logisticsMap);
+        extendBounds([coord.lat, coord.lng]);
+        DELIVERY_MARKERS[p.id] = m;
+        if (!marker) marker = m;
+      });
+      if (!destination) destination = getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
+
+    } else if (route.status === "cancelada") {
+      // Apenas marcadores vermelhos, sem linha
+      pedidoCoords.forEach(({ p, coord }) => {
+        if (!destination) destination = coord;
+        const m = L.marker([coord.lat, coord.lng], { icon: makeSimplePin("#ef4444") });
+        m.bindPopup(`
+          <strong>${p.codigo}</strong> — ${p.descricao || ""}<br>
+          👤 ${p.cliente}<br>
+          ❌ Cancelado · ${route.codigo}
+        `);
+        m.addTo(logisticsMap);
+        extendBounds([coord.lat, coord.lng]);
+        DELIVERY_MARKERS[p.id] = m;
+        if (!marker) marker = m;
+      });
+      if (!destination) destination = getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
     }
 
-    if (!destination || !line) return;
+    if (!destination) return;
     ROUTE_LAYERS[route.id] = { line, marker, destination, route };
     routeCards.push(route);
   }));
@@ -254,7 +316,9 @@ async function renderLogisticsMap(filters = {}) {
 }
 
 function renderDeliveryMarkers(visibleRoutes = []) {
-  const visibleCargaIds = new Set(visibleRoutes.flatMap((r) => r.cargasIds || []));
+  // planejada/concluida/cancelada já adicionam seus próprios marcadores em renderLogisticsMap
+  const emAndamentoRoutes = visibleRoutes.filter((r) => r.status === "em andamento");
+  const visibleCargaIds = new Set(emAndamentoRoutes.flatMap((r) => r.cargasIds || []));
 
   // Identifica o primeiro pedido não entregue de cada rota "em andamento" visível
   const nextPedidoIds = new Set();
@@ -338,6 +402,15 @@ function storeMarkerIcon() {
   return L.divIcon({ className: "store-div-icon", html: '<div class="store-pin"></div>', iconSize: [40, 40], iconAnchor: [20, 20] });
 }
 
+function makeSimplePin(color, size = 16) {
+  return L.divIcon({
+    className: "delivery-div-icon",
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3);"></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2]
+  });
+}
+
 function routeStatusColor(status) {
   return {
     planejada:      "#eab308",
@@ -419,7 +492,7 @@ function renderRouteCards(routes) {
         <div>
           <span>${driver?.nome || "Sem motorista"}</span>
           <small>${route.cargasIds?.length || 0} pedido(s)</small>
-          <span class="badge badge-${route.status === 'concluida' ? 'green' : route.status === 'em andamento' ? 'sky' : route.status === 'planejada' ? 'orange' : 'red'}">${route.status}</span>
+          <span class="badge badge-${route.status === 'concluida' ? 'green' : route.status === 'em andamento' ? 'sky' : route.status === 'planejada' ? 'yellow' : 'red'}">${route.status}</span>
         </div>
       </div>
     `;
