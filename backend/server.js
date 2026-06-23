@@ -127,23 +127,38 @@ app.post("/api/pedidos", async (req, res) => {
     const destMun = req.body.destino_municipio || "";
     const destEst = req.body.destino_estado || "";
     if (destMun) {
-      const { data: rota } = await supabaseAdmin
-        .from("rotas")
-        .insert({
-          nome: `Auto - ${destMun}/${destEst}`,
-          destino_municipio: destMun,
-          destino_estado: destEst,
-          status: "planejada",
-          cargas_ids: [pedido.id],
-        })
-        .select("id")
-        .single();
+      try {
+        console.log(`[POST /pedidos] Criando rota automática: pedido=${pedido.id} destino=${destMun}/${destEst}`);
+        const { data: rota, error: errRota } = await supabaseAdmin
+          .from("rotas")
+          .insert({
+            nome: `Auto - ${destMun}/${destEst}`,
+            destino_municipio: destMun,
+            destino_estado: destEst,
+            status: "planejada",
+            cargas_ids: [pedido.id],
+          })
+          .select("id")
+          .single();
 
-      if (rota?.id) {
-        await supabaseAdmin
-          .from("rota_pedidos")
-          .insert({ rota_id: rota.id, pedido_id: pedido.id });
+        if (errRota) {
+          console.error(`[POST /pedidos] Erro ao inserir rota:`, errRota);
+        } else if (rota?.id) {
+          console.log(`[POST /pedidos] Rota criada: id=${rota.id}. Vinculando em rota_pedidos...`);
+          const { error: errVinculo } = await supabaseAdmin
+            .from("rota_pedidos")
+            .insert({ rota_id: rota.id, pedido_id: pedido.id });
+          if (errVinculo) {
+            console.error(`[POST /pedidos] Erro ao criar vínculo rota_pedidos:`, errVinculo);
+          } else {
+            console.log(`[POST /pedidos] Vínculo rota_pedidos criado com sucesso.`);
+          }
+        }
+      } catch (errAutoRota) {
+        console.error(`[POST /pedidos] Exceção ao criar rota automática:`, errAutoRota);
       }
+    } else {
+      console.warn(`[POST /pedidos] destino_municipio ausente — rota automática não criada. body=`, JSON.stringify(req.body));
     }
 
     res.json(pedido);

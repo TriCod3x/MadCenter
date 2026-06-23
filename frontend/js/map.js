@@ -48,6 +48,25 @@ function routeStyle(route) {
   return { color, weight, opacity, dashArray };
 }
 
+async function getMultiWaypointGeometry(waypoints) {
+  if (waypoints.length < 2) return null;
+  const coords = waypoints.map((w) => `${w.lng},${w.lat}`).join(";");
+  const key = `multi:${coords}`;
+  if (ROUTE_CACHE[key]) return ROUTE_CACHE[key];
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+    const response = await fetch(url);
+    const data = await response.json();
+    if (data?.routes?.[0]?.geometry) {
+      ROUTE_CACHE[key] = data.routes[0].geometry;
+      return data.routes[0].geometry;
+    }
+  } catch (error) {
+    console.warn("OSRM multi-waypoint falhou", error);
+  }
+  return null;
+}
+
 async function getRouteGeometry(origin, destination) {
   const key = `${origin.lat},${origin.lng}:${destination.lat},${destination.lng}`;
   if (ROUTE_CACHE[key]) return ROUTE_CACHE[key];
@@ -108,17 +127,11 @@ async function drawSequentialRoute(route) {
   const style = routeStyle(route);
   let line;
 
-  if (waypoints.length === 2) {
-    // Apenas um destino pendente — tenta OSRM para rota real
-    const geometry = await getRouteGeometry(waypoints[0], waypoints[1]);
-    if (geometry) {
-      line = L.geoJSON(geometry, { style });
-    } else {
-      line = L.polyline([[waypoints[0].lat, waypoints[0].lng], [waypoints[1].lat, waypoints[1].lng]], style);
-    }
+  const geometry = await getMultiWaypointGeometry(waypoints);
+  if (geometry) {
+    line = L.geoJSON(geometry, { style });
   } else {
-    // Múltiplos destinos — polyline direta por todos os pontos
-    line = L.polyline(waypoints.map((w) => [w.lat, w.lng]), { ...style, dashArray: null });
+    line = L.polyline(waypoints.map((w) => [w.lat, w.lng]), style);
   }
 
   line.addTo(logisticsMap);

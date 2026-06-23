@@ -57,6 +57,7 @@ const state = {
   deliveryMarkers: {},
   routeLine:       null,
   rotaLayer:       null,
+  rotaAbortCtrl:   null,
   geoWatchId:      null,
   currentPos:      null,   // { lat, lng }
   lojaLat:         LOJA_LAT,
@@ -450,11 +451,11 @@ function iniciarMapa() {
   iniciarGeolocalizacao();
 }
 
-async function buscarRotaOSRM(pontos) {
+async function buscarRotaOSRM(pontos, signal) {
   try {
     const coords = pontos.map(p => `${p.lng},${p.lat}`).join(";");
     const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url, { signal: signal ?? AbortSignal.timeout(8000) });
     if (!res.ok) return null;
     const data = await res.json();
     if (data.code !== "Ok" || !data.routes?.length) return null;
@@ -465,6 +466,12 @@ async function buscarRotaOSRM(pontos) {
 }
 
 async function desenharRota() {
+  // Cancela qualquer chamada OSRM anterior ainda em andamento
+  if (state.rotaAbortCtrl) {
+    state.rotaAbortCtrl.abort();
+    state.rotaAbortCtrl = null;
+  }
+
   if (!state.map) return;
 
   // Remove marcadores e camada de rota anteriores
@@ -489,7 +496,15 @@ async function desenharRota() {
   const pontos = [pontoPartida, ...pendentes.map(getCoordsP)];
 
   if (pontos.length >= 2) {
-    const geojson = await buscarRotaOSRM(pontos);
+    const ctrl = new AbortController();
+    state.rotaAbortCtrl = ctrl;
+
+    const geojson = await buscarRotaOSRM(pontos, ctrl.signal);
+
+    // Se uma chamada mais recente já abortou esta, descarta o resultado
+    if (ctrl.signal.aborted) return;
+    state.rotaAbortCtrl = null;
+
     if (geojson) {
       state.rotaLayer = L.geoJSON(geojson, {
         style: { color: "#2196f3", weight: 5, opacity: 0.85 }
