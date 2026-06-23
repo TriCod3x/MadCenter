@@ -217,9 +217,10 @@ async function renderLogisticsMap(filters = {}) {
     } else {
       // Rota planejada / concluída / cancelada — comportamento original
       if (route.cargasIds?.length) {
-        const pedidosComCoords = getCargas().filter((c) => route.cargasIds.includes(c.id) && c.lat && c.lng);
-        if (pedidosComCoords.length) {
-          destination = { lat: Number(pedidosComCoords[0].lat), lng: Number(pedidosComCoords[0].lng) };
+        const pedidos = getCargas().filter((c) => route.cargasIds.includes(c.id));
+        for (const pedido of pedidos) {
+          const coord = getCoordForPedido(pedido);
+          if (coord) { destination = coord; break; }
         }
       }
       if (!destination) destination = getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
@@ -234,15 +235,17 @@ async function renderLogisticsMap(filters = {}) {
   }));
   renderMapSummary(routeCards);
   renderRouteCards(routeCards);
-  renderDeliveryMarkers();
+  renderDeliveryMarkers(routes);
   if (mapBounds.isValid()) logisticsMap.fitBounds(mapBounds, { padding: [22, 22], maxZoom: 13 });
   return routeCards;
 }
 
-function renderDeliveryMarkers() {
-  // Identifica o primeiro pedido não entregue de cada rota "em andamento"
+function renderDeliveryMarkers(visibleRoutes = []) {
+  const visibleCargaIds = new Set(visibleRoutes.flatMap((r) => r.cargasIds || []));
+
+  // Identifica o primeiro pedido não entregue de cada rota "em andamento" visível
   const nextPedidoIds = new Set();
-  getRotas().forEach((rota) => {
+  visibleRoutes.forEach((rota) => {
     if (rota.status !== "em andamento") return;
     const primeiro = (rota.cargasIds || [])
       .map((id) => getCargas().find((c) => c.id === id))
@@ -251,7 +254,7 @@ function renderDeliveryMarkers() {
   });
 
   getCargas()
-    .filter((c) => c.lat && c.lng)
+    .filter((c) => c.lat && c.lng && visibleCargaIds.has(c.id))
     .forEach((carga) => {
       const lat = Number(carga.lat);
       const lng = Number(carga.lng);
