@@ -190,199 +190,110 @@ async function renderLogisticsMap(filters = {}) {
   if (!map) return [];
   renderMapLegend();
   clearMapLayers();
-  const store = { lat: STORE_LOCATION.lat, lng: STORE_LOCATION.lng };
+
+  const settings = getSettings();
+  const store = {
+    lat: Number(settings?.latitudeLoja) || STORE_LOCATION.lat,
+    lng: Number(settings?.longitudeLoja) || STORE_LOCATION.lng
+  };
+
   const routeCards = [];
   drawStoreMarker(store);
   const routes = getRotas().filter((route) => routeVisibleByFilters(route, filters));
-  await Promise.all(routes.map(async (route) => {
-    let destination = null;
-    let line = null;
-    let marker = null;
 
+  await Promise.all(routes.map(async (route) => {
     const pedidos = (route.cargasIds || [])
       .map((id) => getCargas().find((c) => c.id === id))
       .filter(Boolean);
-    const pedidoCoords = pedidos
-      .map((p) => ({ p, coord: getCoordForPedido(p) }))
-      .filter(({ coord }) => coord);
 
-    if (route.status === "em andamento") {
-      line = await drawSequentialRoute(route);
+    if (!pedidos.length) return;
 
-      const primeiroPendente = pedidos.find((c) => c.status !== "entregue");
-      destination = primeiroPendente ? getCoordForPedido(primeiroPendente) : null;
-      if (!destination) destination = getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
+    const lineEntries = [];
+    const markers = [];
+    let firstCoord = null;
 
-      if (destination) {
-        marker = L.marker([destination.lat, destination.lng], {
-          icon: destinationMarkerIcon(route.status),
-          opacity: 0
-        });
-        const driver = driverName(route.motoristaId);
-        marker.bindPopup(`
-          <strong>${route.codigo} · ${route.nome}</strong><br>
-          ${route.destinoMunicipio}/${route.destinoEstado}<br>
-          <strong>Motorista:</strong> ${driver}<br>
-          ${route.cargasIds?.length || 0} pedido(s) · ${route.status}<br>
-          ${route.freteTotal ? `Frete: ${money.format(Number(route.freteTotal || 0))}` : ""}
-        `);
-        marker.addTo(logisticsMap);
-      }
+    await Promise.all(pedidos.map(async (pedido) => {
+      const coord = getCoordForPedido(pedido);
+      if (!coord) return;
+      if (!firstCoord) firstCoord = coord;
 
-    } else if (route.status === "planejada") {
-      // Linha tracejada amarela simples (sem OSRM) + marcador amarelo em cada pedido
-      destination = pedidoCoords[0]?.coord
-        || getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
-      if (!destination) return;
+      const popup = `<strong>${pedido.codigo}</strong>${pedido.descricao ? ` — ${pedido.descricao}` : ""}<br>👤 ${pedido.cliente}`;
 
-      const waypoints = [store, ...pedidoCoords.map(({ coord }) => coord)];
-      if (waypoints.length >= 2) {
-        line = L.polyline(waypoints.map((w) => [w.lat, w.lng]), {
-          color: "#eab308", weight: 3, opacity: 0.85, dashArray: "8, 8"
-        });
+      if (pedido.status === "em rota") {
+        const geometry = await getRouteGeometry(store, coord);
+        let line;
+        const style = { color: "#3b82f6", weight: 4, opacity: 1 };
+        if (geometry) {
+          line = L.geoJSON(geometry, { style });
+        } else {
+          line = L.polyline([[store.lat, store.lng], [coord.lat, coord.lng]], style);
+        }
         line.addTo(logisticsMap);
-        waypoints.forEach((w) => extendBounds([w.lat, w.lng]));
-      } else {
-        // Sem coords individuais dos pedidos — linha até a cidade
-        line = L.polyline([[store.lat, store.lng], [destination.lat, destination.lng]], {
+        extendBounds([coord.lat, coord.lng]);
+        lineEntries.push({ line, pedidoStatus: pedido.status });
+
+        const m = L.marker([coord.lat, coord.lng], { icon: makeSimplePin("#3b82f6") });
+        m.bindPopup(`${popup}<br>🚚 Em rota · ${route.codigo}`);
+        m.addTo(logisticsMap);
+        DELIVERY_MARKERS[pedido.id] = m;
+        markers.push(m);
+
+      } else if (pedido.status === "planejado") {
+        const line = L.polyline([[store.lat, store.lng], [coord.lat, coord.lng]], {
           color: "#eab308", weight: 3, opacity: 0.85, dashArray: "8, 8"
         });
         line.addTo(logisticsMap);
         extendBounds([store.lat, store.lng]);
-        extendBounds([destination.lat, destination.lng]);
-      }
+        extendBounds([coord.lat, coord.lng]);
+        lineEntries.push({ line, pedidoStatus: pedido.status });
 
-      pedidoCoords.forEach(({ p, coord }) => {
         const m = L.marker([coord.lat, coord.lng], { icon: makeSimplePin("#eab308") });
-        m.bindPopup(`
-          <strong>${p.codigo}</strong> — ${p.descricao || ""}<br>
-          👤 ${p.cliente}<br>
-          🗓 Planejado · ${route.codigo}
-        `);
+        m.bindPopup(`${popup}<br>🗓 Planejado · ${route.codigo}`);
         m.addTo(logisticsMap);
-        DELIVERY_MARKERS[p.id] = m;
-        if (!marker) marker = m;
-      });
-      if (!marker) {
-        marker = L.marker([destination.lat, destination.lng], { icon: makeSimplePin("#eab308") });
-        marker.bindPopup(`<strong>${route.codigo} · ${route.nome}</strong><br>${route.destinoMunicipio}/${route.destinoEstado}`);
-        marker.addTo(logisticsMap);
-      }
+        DELIVERY_MARKERS[pedido.id] = m;
+        markers.push(m);
 
-    } else if (route.status === "concluida") {
-      // Apenas marcadores verdes, sem linha
-      pedidoCoords.forEach(({ p, coord }) => {
-        if (!destination) destination = coord;
+      } else if (pedido.status === "entregue") {
         const m = L.marker([coord.lat, coord.lng], { icon: makeSimplePin("#22c55e") });
-        m.bindPopup(`
-          <strong>${p.codigo}</strong> — ${p.descricao || ""}<br>
-          👤 ${p.cliente}<br>
-          ✅ Entregue · ${route.codigo}
-        `);
+        m.bindPopup(`${popup}<br>✅ Entregue · ${route.codigo}`);
         m.addTo(logisticsMap);
         extendBounds([coord.lat, coord.lng]);
-        DELIVERY_MARKERS[p.id] = m;
-        if (!marker) marker = m;
-      });
-      if (!destination) destination = getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
+        DELIVERY_MARKERS[pedido.id] = m;
+        markers.push(m);
 
-    } else if (route.status === "cancelada") {
-      // Apenas marcadores vermelhos, sem linha
-      pedidoCoords.forEach(({ p, coord }) => {
-        if (!destination) destination = coord;
+      } else if (pedido.status === "cancelado") {
         const m = L.marker([coord.lat, coord.lng], { icon: makeSimplePin("#ef4444") });
-        m.bindPopup(`
-          <strong>${p.codigo}</strong> — ${p.descricao || ""}<br>
-          👤 ${p.cliente}<br>
-          ❌ Cancelado · ${route.codigo}
-        `);
+        m.bindPopup(`${popup}<br>❌ Cancelado · ${route.codigo}`);
         m.addTo(logisticsMap);
         extendBounds([coord.lat, coord.lng]);
-        DELIVERY_MARKERS[p.id] = m;
-        if (!marker) marker = m;
-      });
-      if (!destination) destination = getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
-    }
+        DELIVERY_MARKERS[pedido.id] = m;
+        markers.push(m);
 
-    if (!destination) return;
-    ROUTE_LAYERS[route.id] = { line, marker, destination, route };
+      } else if (pedido.status === "aguardando motorista") {
+        const m = L.marker([coord.lat, coord.lng], { icon: makeSimplePin("#6b7280") });
+        m.bindPopup(`${popup}<br>⏳ Aguardando motorista · ${route.codigo}`);
+        m.addTo(logisticsMap);
+        extendBounds([coord.lat, coord.lng]);
+        DELIVERY_MARKERS[pedido.id] = m;
+        markers.push(m);
+      }
+    }));
+
+    if (!firstCoord) firstCoord = getCityCoordinates(route.destinoMunicipio, route.destinoEstado);
+    if (!firstCoord && !markers.length) return;
+
+    ROUTE_LAYERS[route.id] = { lineEntries, markers, destination: firstCoord, route };
     routeCards.push(route);
   }));
+
   renderMapSummary(routeCards);
   renderRouteCards(routeCards);
-  renderDeliveryMarkers(routes);
   if (mapBounds.isValid()) logisticsMap.fitBounds(mapBounds, { padding: [22, 22], maxZoom: 13 });
   return routeCards;
 }
 
-function renderDeliveryMarkers(visibleRoutes = []) {
-  // planejada/concluida/cancelada já adicionam seus próprios marcadores em renderLogisticsMap
-  const emAndamentoRoutes = visibleRoutes.filter((r) => r.status === "em andamento");
-  const visibleCargaIds = new Set(emAndamentoRoutes.flatMap((r) => r.cargasIds || []));
-
-  // Identifica o primeiro pedido não entregue de cada rota "em andamento" visível
-  const nextPedidoIds = new Set();
-  visibleRoutes.forEach((rota) => {
-    if (rota.status !== "em andamento") return;
-    const primeiro = (rota.cargasIds || [])
-      .map((id) => getCargas().find((c) => c.id === id))
-      .find((c) => c && c.status !== "entregue");
-    if (primeiro) nextPedidoIds.add(primeiro.id);
-  });
-
-  getCargas()
-    .filter((c) => c.lat && c.lng && visibleCargaIds.has(c.id))
-    .forEach((carga) => {
-      const lat = Number(carga.lat);
-      const lng = Number(carga.lng);
-      if (!lat || !lng) return;
-
-      let pinClass;
-      if (carga.status === "entregue") {
-        pinClass = "completed";
-      } else if (carga.status === "cancelado") {
-        pinClass = "cancelled";
-      } else if (nextPedidoIds.has(carga.id)) {
-        pinClass = "next-delivery";
-      } else if (carga.status === "planejado") {
-        pinClass = "planned";
-      } else if (carga.status === "em rota") {
-        pinClass = "em-rota";
-      } else {
-        pinClass = "waiting";
-      }
-
-      const size = pinClass === "next-delivery" ? [22, 22] : [18, 18];
-      const anchor = pinClass === "next-delivery" ? [11, 11] : [9, 9];
-      const icon = L.divIcon({
-        className: "delivery-div-icon",
-        html: `<div class="delivery-pin ${pinClass}"></div>`,
-        iconSize: size,
-        iconAnchor: anchor
-      });
-
-      const enderecoCompleto = [carga.enderecoEntrega, carga.numero, carga.complemento].filter(Boolean).join(", ");
-      const statusLabel = {
-        "entregue":             "✅ Entregue",
-        "em rota":              "🚚 Em rota",
-        "planejado":            "🗓 Planejado",
-        "aguardando motorista": "⏳ Aguardando",
-        "disponivel":           "📦 Disponível",
-        "próximo dia":          "📅 Próximo dia",
-        "cancelado":            "❌ Cancelado"
-      }[carga.status] || carga.status;
-
-      const marker = L.marker([lat, lng], { icon });
-      marker.bindPopup(`
-        <b>${carga.codigo} — ${carga.descricao}</b><br>
-        ${enderecoCompleto ? enderecoCompleto + "<br>" : ""}
-        👤 ${carga.cliente}<br>
-        ${statusLabel}
-      `);
-      marker.addTo(logisticsMap);
-      DELIVERY_MARKERS[carga.id] = marker;
-    });
-}
+// Marcadores de entrega são adicionados diretamente em renderLogisticsMap por pedido.status.
+// Esta função é mantida para compatibilidade mas não é mais chamada.
 
 function routeVisibleByFilters(route, filters = {}) {
   if (filters.status && filters.status !== "todos" && route.status !== filters.status) return false;
@@ -418,6 +329,12 @@ function routeStatusColor(status) {
     concluida:      "#22c55e",
     cancelada:      "#ef4444"
   }[status] || "#6b7280";
+}
+
+function pedidoLineStyle(status) {
+  if (status === "em rota")   return { color: "#3b82f6", weight: 4, opacity: 1,    dashArray: null };
+  if (status === "planejado") return { color: "#eab308", weight: 3, opacity: 0.85, dashArray: "8, 8" };
+  return null;
 }
 
 async function drawRouteLine(origin, destination, route) {
@@ -517,29 +434,29 @@ function selectRoute(routeId) {
   const entry = ROUTE_LAYERS[routeId];
   if (!entry || !logisticsMap) return;
 
-  // Destaca a linha selecionada e esmaece as demais
+  // Destaca linhas da rota selecionada e esmaece as demais
   Object.entries(ROUTE_LAYERS).forEach(([id, layer]) => {
-    if (!layer.line) return;
-    if (id === routeId) {
-      layer.line.setStyle({ color: "#F59E0B", weight: 5, opacity: 1, dashArray: null });
-    } else {
-      layer.line.setStyle({ color: "#9ca3af", weight: 2, opacity: 0.35, dashArray: null });
-    }
+    (layer.lineEntries || []).forEach(({ line }) => {
+      if (id === routeId) {
+        line.setStyle({ color: "#F59E0B", weight: 5, opacity: 1, dashArray: null });
+      } else {
+        line.setStyle({ color: "#9ca3af", weight: 2, opacity: 0.35, dashArray: null });
+      }
+    });
   });
 
   // Centraliza o mapa na rota selecionada
-  const store = { lat: STORE_LOCATION.lat, lng: STORE_LOCATION.lng };
-  const bounds = L.latLngBounds(
-    [store.lat, store.lng],
-    [entry.destination.lat, entry.destination.lng]
-  );
-  logisticsMap.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
-
-  // Abre o popup no marcador de destino (se existir e estiver visível)
-  if (entry.marker) {
-    entry.marker.setOpacity(1);
-    entry.marker.openPopup();
+  if (entry.destination) {
+    const settings = getSettings();
+    const storeLat = Number(settings?.latitudeLoja) || STORE_LOCATION.lat;
+    const storeLng = Number(settings?.longitudeLoja) || STORE_LOCATION.lng;
+    const bounds = L.latLngBounds([storeLat, storeLng], [entry.destination.lat, entry.destination.lng]);
+    logisticsMap.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
   }
+
+  // Abre popup no primeiro marcador da rota
+  const firstMarker = entry.markers?.[0];
+  if (firstMarker) firstMarker.openPopup();
 
   // Destaca marcadores dos pedidos da rota; esmaece os demais
   const rotaCargoIds = new Set(entry.route.cargasIds || []);
@@ -559,11 +476,12 @@ function deselectRoute() {
   // Restaura opacidade dos marcadores de pedidos
   Object.values(DELIVERY_MARKERS).forEach((m) => m.setOpacity(1));
 
-  // Restaura o estilo original de cada linha
+  // Restaura o estilo original de cada linha por pedido.status
   Object.entries(ROUTE_LAYERS).forEach(([, entry]) => {
-    if (!entry.line) return;
-    const style = routeStyle(entry.route);
-    entry.line.setStyle(style);
+    (entry.lineEntries || []).forEach(({ line, pedidoStatus }) => {
+      const style = pedidoLineStyle(pedidoStatus);
+      if (style) line.setStyle(style);
+    });
   });
 
   // Remove destaque dos cards
