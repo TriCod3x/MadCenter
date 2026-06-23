@@ -174,8 +174,7 @@ const STATUS_MAP = {
   "em rota":              { cls: "blue",   label: "Em rota" },
   "entregue":             { cls: "green",  label: "Entregue" },
   "próximo dia":          { cls: "purple", label: "Próximo dia" },
-  "cancelado":            { cls: "red",    label: "Cancelado" },
-  "disponivel":           { cls: "purple", label: "Disponível" }
+  "cancelado":            { cls: "red",    label: "Cancelado" }
 };
 
 function renderLista(pedidos) {
@@ -256,7 +255,6 @@ function renderPedidosMes(mes) {
       <select id="mesStatus" class="atend-mes-select">
         <option value="">Todos os status</option>
         <option value="aguardando motorista">Aguardando motorista</option>
-        <option value="disponivel">Disponível</option>
         <option value="em rota">Em rota</option>
         <option value="entregue">Entregue</option>
         <option value="planejado">Planejado</option>

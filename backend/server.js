@@ -46,6 +46,129 @@ if (!JWT_SECRET) {
   throw new Error("JWT_SECRET não foi configurado. Defina JWT_SECRET no arquivo .env.");
 }
 
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function ordenarVizinhoMaisProximo(pedidos, lojaLat, lojaLng) {
+  const restantes = [...pedidos];
+  const ordenados = [];
+  let lat = lojaLat, lng = lojaLng;
+  while (restantes.length) {
+    let iMin = 0, dMin = Infinity;
+    restantes.forEach((p, i) => {
+      const d = haversineKm(lat, lng, Number(p.lat||0), Number(p.lng||0));
+      if (d < dMin) { dMin = d; iMin = i; }
+    });
+    const proximo = restantes.splice(iMin, 1)[0];
+    ordenados.push(proximo);
+    lat = Number(proximo.lat||0);
+    lng = Number(proximo.lng||0);
+  }
+  return ordenados;
+}
+
+async function agruparPedidosEmRotas(novoPedido) {
+  try {
+    const { data: cfg } = await supabaseAdmin.from("configuracoes").select("latitude_loja,longitude_loja").limit(1).single();
+    const lojaLat = Number(cfg?.latitude_loja || -4.760287);
+    const lojaLng = Number(cfg?.longitude_loja || -42.573777);
+
+    // Busca pedidos aguardando motorista com coords
+    const { data: pedidosAguardando } = await supabaseAdmin
+      .from("pedidos")
+      .select("id,lat,lng,destino_municipio,destino_estado,valor_frete,distancia_km")
+      .eq("status", "aguardando motorista");
+    if (!pedidosAguardando?.length) return;
+
+    // Pedidos já vinculados a alguma rota planejada
+    const { data: vinculos } = await supabaseAdmin.from("rota_pedidos").select("pedido_id,rota_id");
+    const pedidosComRota = new Set((vinculos||[]).map(v => v.pedido_id));
+
+    // Pedidos sem nenhuma rota
+    const semRota = pedidosAguardando.filter(p => !pedidosComRota.has(p.id));
+    if (!semRota.length) return;
+
+    // Se o novo pedido tem coords, tenta adicioná-lo a rota existente com < 5 pedidos
+    if (novoPedido?.lat && novoPedido?.lng) {
+      const { data: rotasPlanejadas } = await supabaseAdmin
+        .from("rotas")
+        .select("id,cargas_ids")
+        .eq("status", "planejada")
+        .is("motorista_id", null);
+
+      for (const rota of rotasPlanejadas || []) {
+        const idsRota = rota.cargas_ids || [];
+        if (idsRota.length >= 5) continue;
+        // Usa cargas_ids para calcular centro
+        const pedDaRota = idsRota
+          .map(id => pedidosAguardando.find(p => p.id === id))
+          .filter(p => p?.lat && p?.lng);
+        if (!pedDaRota.length) continue;
+        const centroLat = pedDaRota.reduce((s,p) => s + Number(p.lat), 0) / pedDaRota.length;
+        const centroLng = pedDaRota.reduce((s,p) => s + Number(p.lng), 0) / pedDaRota.length;
+        const dist = haversineKm(Number(novoPedido.lat), Number(novoPedido.lng), centroLat, centroLng);
+        if (dist <= 2.5) {
+          const novasIds = [...idsRota, novoPedido.id];
+          await supabaseAdmin.from("rotas").update({ cargas_ids: novasIds }).eq("id", rota.id);
+          const jaVinculado = (vinculos||[]).some(v => v.pedido_id === novoPedido.id);
+          if (!jaVinculado) {
+            await supabaseAdmin.from("rota_pedidos").insert({ rota_id: rota.id, pedido_id: novoPedido.id });
+          }
+          console.log(`[agrupar] Pedido ${novoPedido.id} adicionado à rota existente ${rota.id}`);
+          return;
+        }
+      }
+    }
+
+    // Agrupa pedidos sem rota por proximidade (raio 2.5km, máx 5 por grupo)
+    const alocados = new Set();
+    const grupos = [];
+    for (const pedido of semRota) {
+      if (alocados.has(pedido.id) || !pedido.lat || !pedido.lng) continue;
+      const grupo = [pedido];
+      alocados.add(pedido.id);
+      for (const outro of semRota) {
+        if (alocados.has(outro.id) || !outro.lat || !outro.lng || grupo.length >= 5) continue;
+        if (haversineKm(Number(pedido.lat), Number(pedido.lng), Number(outro.lat), Number(outro.lng)) <= 2.5) {
+          grupo.push(outro);
+          alocados.add(outro.id);
+        }
+      }
+      grupos.push(grupo);
+    }
+
+    for (const grupo of grupos) {
+      const ordenados = ordenarVizinhoMaisProximo(grupo, lojaLat, lojaLng);
+      const ids = ordenados.map(p => p.id);
+      const primeiro = ordenados[0];
+      const { data: rota, error: errRota } = await supabaseAdmin
+        .from("rotas")
+        .insert({
+          nome: `Auto - ${primeiro.destino_municipio || "Sem destino"}`,
+          destino_municipio: primeiro.destino_municipio,
+          destino_estado: primeiro.destino_estado,
+          status: "planejada",
+          cargas_ids: ids,
+          frete_total: ordenados.reduce((s,p) => s + Number(p.valor_frete||0), 0),
+          distancia: ordenados.reduce((s,p) => s + Number(p.distancia_km||0), 0),
+        })
+        .select("id").single();
+      if (errRota || !rota?.id) { console.error("[agrupar] Erro ao criar rota:", errRota); continue; }
+      for (const id of ids) {
+        await supabaseAdmin.from("rota_pedidos").insert({ rota_id: rota.id, pedido_id: id });
+      }
+      console.log(`[agrupar] Rota ${rota.id} criada com ${ids.length} pedidos`);
+    }
+  } catch (err) {
+    console.error("[agruparPedidosEmRotas] Exceção:", err);
+  }
+}
+
 function autenticar(req, res, next) {
   const auth  = req.headers.authorization;
   const token = (auth && auth.startsWith("Bearer ")) ? auth.split(" ")[1] : req.query.token;
@@ -123,43 +246,8 @@ app.post("/api/pedidos", async (req, res) => {
       .single();
     if (errIns) return res.status(400).json({ error: errIns.message });
 
-    // Cria rota planejada automaticamente e vincula ao pedido via rota_pedidos
-    const destMun = req.body.destino_municipio || "";
-    const destEst = req.body.destino_estado || "";
-    if (destMun) {
-      try {
-        console.log(`[POST /pedidos] Criando rota automática: pedido=${pedido.id} destino=${destMun}/${destEst}`);
-        const { data: rota, error: errRota } = await supabaseAdmin
-          .from("rotas")
-          .insert({
-            nome: `Auto - ${destMun}/${destEst}`,
-            destino_municipio: destMun,
-            destino_estado: destEst,
-            status: "planejada",
-            cargas_ids: [pedido.id],
-          })
-          .select("id")
-          .single();
-
-        if (errRota) {
-          console.error(`[POST /pedidos] Erro ao inserir rota:`, errRota);
-        } else if (rota?.id) {
-          console.log(`[POST /pedidos] Rota criada: id=${rota.id}. Vinculando em rota_pedidos...`);
-          const { error: errVinculo } = await supabaseAdmin
-            .from("rota_pedidos")
-            .insert({ rota_id: rota.id, pedido_id: pedido.id });
-          if (errVinculo) {
-            console.error(`[POST /pedidos] Erro ao criar vínculo rota_pedidos:`, errVinculo);
-          } else {
-            console.log(`[POST /pedidos] Vínculo rota_pedidos criado com sucesso.`);
-          }
-        }
-      } catch (errAutoRota) {
-        console.error(`[POST /pedidos] Exceção ao criar rota automática:`, errAutoRota);
-      }
-    } else {
-      console.warn(`[POST /pedidos] destino_municipio ausente — rota automática não criada. body=`, JSON.stringify(req.body));
-    }
+    // Agrupamento automático em background — não bloqueia o retorno
+    setImmediate(() => agruparPedidosEmRotas(pedido));
 
     res.json(pedido);
   } catch (e) {
@@ -263,15 +351,71 @@ app.post("/api/rotas", (req, res) => criar(req, res, "rotas"));
 app.put("/api/rotas/:id", (req, res) => atualizar(req, res, "rotas"));
 app.delete("/api/rotas/:id", (req, res) => deletar(req, res, "rotas"));
 
+app.post("/api/rotas/:id/pegar", autenticar, async (req, res) => {
+  const { id } = req.params;
+  const motoristaId = req.body.motorista_id || req.usuario.id;
+  try {
+    // Busca a rota
+    const { data: rota, error: errRota } = await supabaseAdmin
+      .from("rotas").select("id,status,cargas_ids,motorista_id").eq("id", id).single();
+    if (errRota || !rota) return res.status(404).json({ error: "Rota não encontrada." });
+    if (rota.status !== "planejada") return res.status(400).json({ error: "Rota não está disponível." });
+    if (rota.motorista_id) return res.status(409).json({ error: "Rota já foi pega por outro motorista." });
+
+    // Atualiza rota: em andamento + motorista
+    const { error: errUpRota } = await supabaseAdmin
+      .from("rotas")
+      .update({ status: "em andamento", motorista_id: motoristaId, saida: new Date().toISOString() })
+      .eq("id", id);
+    if (errUpRota) return res.status(400).json({ error: errUpRota.message });
+
+    // Atualiza pedidos: em rota
+    const ids = rota.cargas_ids || [];
+    if (ids.length) {
+      const { error: errPed } = await supabaseAdmin
+        .from("pedidos")
+        .update({ status: "em rota" })
+        .in("id", ids);
+      if (errPed) console.error("[pegar rota] Erro ao atualizar pedidos:", errPed);
+    }
+
+    res.json({ ok: true, rota_id: id, pedidos_atualizados: ids.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.delete("/api/rotas/:rotaId/pedidos/:pedidoId", autenticar, async (req, res) => {
   const { rotaId, pedidoId } = req.params;
-  const { error } = await supabaseAdmin
-    .from("rota_pedidos")
-    .delete()
-    .eq("rota_id", rotaId)
-    .eq("pedido_id", pedidoId);
-  if (error) return res.status(400).json({ error: error.message });
-  res.json({ ok: true });
+  try {
+    // Remove vínculo
+    await supabaseAdmin.from("rota_pedidos").delete().eq("rota_id", rotaId).eq("pedido_id", pedidoId);
+
+    // Remove de cargas_ids da rota
+    const { data: rota } = await supabaseAdmin.from("rotas").select("cargas_ids").eq("id", rotaId).single();
+    if (rota) {
+      const novasIds = (rota.cargas_ids || []).filter(id => String(id) !== String(pedidoId));
+      await supabaseAdmin.from("rotas").update({
+        cargas_ids: novasIds,
+        ...(novasIds.length === 0 ? { status: "cancelada" } : {})
+      }).eq("id", rotaId);
+    }
+
+    // Volta pedido para aguardando motorista
+    const { data: pedido } = await supabaseAdmin
+      .from("pedidos")
+      .update({ status: "aguardando motorista" })
+      .eq("id", pedidoId)
+      .select("id,lat,lng,destino_municipio,destino_estado,valor_frete,distancia_km")
+      .single();
+
+    // Tenta reagrupar em background
+    if (pedido) setImmediate(() => agruparPedidosEmRotas(pedido));
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Configurações ─────────────────────────────────────────────────────────────
@@ -527,40 +671,27 @@ app.delete("/api/veiculos/:id", async (req, res) => {
 app.put("/api/pedidos/:id/cancelar-motorista", async (req, res) => {
   const { id } = req.params;
   try {
-    // 1. Encontra rota ativa que contém este pedido
-    const { data: todasRotas } = await supabase
-      .from("rotas")
-      .select("id, cargas_ids")
-      .not("status", "in", '("cancelada","concluida")');
+    const { data: pedido, error: errPed } = await supabase
+      .from("pedidos")
+      .update({ status: "aguardando motorista" })
+      .eq("id", id)
+      .select("id,lat,lng,destino_municipio,destino_estado,valor_frete,distancia_km")
+      .single();
+    if (errPed) return res.status(400).json({ error: errPed.message });
 
-    const idStr = String(id);
-    let rotaVinculada = null;
+    // Encontra e reseta rota vinculada para planejada sem motorista
+    const { data: todasRotas } = await supabase
+      .from("rotas").select("id,cargas_ids").not("status","in",'("cancelada","concluida")');
     for (const rota of todasRotas || []) {
       const ids = Array.isArray(rota.cargas_ids) ? rota.cargas_ids : [];
-      if (ids.some((i) => String(i) === idStr)) {
-        rotaVinculada = rota;
+      if (ids.some(i => String(i) === String(id))) {
+        await supabase.from("rotas").update({ status: "planejada", motorista_id: null }).eq("id", rota.id);
         break;
       }
     }
 
-    // 2. Status do pedido depende de existir rota planejada vinculada
-    //    'disponivel'    → pedido está em rota planejada, sem motorista
-    //    'aguardando motorista' → pedido sem nenhuma rota
-    const novoPedidoStatus = rotaVinculada ? "disponivel" : "aguardando motorista";
-    const { data: pedido, error: errPed } = await supabase
-      .from("pedidos")
-      .update({ status: novoPedidoStatus })
-      .eq("id", id)
-      .select("id")
-      .single();
-    if (errPed) return res.status(400).json({ error: errPed.message });
-
-    // 3. Rota volta para "planejada" sem motorista (pedido permanece em cargas_ids)
-    if (rotaVinculada) {
-      await supabase.from("rotas")
-        .update({ status: "planejada", motorista_id: null })
-        .eq("id", rotaVinculada.id);
-    }
+    // Tenta reagrupar em background
+    if (pedido) setImmediate(() => agruparPedidosEmRotas(pedido));
 
     res.json({ success: true, pedido });
   } catch (e) {

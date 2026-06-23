@@ -64,10 +64,6 @@ const state = {
   lojaLng:         LOJA_LNG
 };
 
-// Estado do modal de seleção de veículo
-let _modalVeiculoPedidoId  = null;
-let _modalVeiculoSelecionado = null;
-
 // ── Utilitários ──────────────────────────────────────────────────────────────
 
 const moneyFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -489,10 +485,14 @@ async function desenharRota() {
     lng: p.lng ? Number(p.lng) : obterCoordsMunicipio(p.destino_municipio, p.destino_estado).lng
   });
 
-  // Origem = posição atual do motorista (geolocalização) ou loja como fallback
-  const pontoPartida = state.currentPos
-    ? { lat: state.currentPos.lat, lng: state.currentPos.lng }
-    : { lat: LOJA_LAT, lng: LOJA_LNG };
+  // Origem = último pedido entregue com coords, senão loja
+  const entreguesComCoord = state.pedidos
+    .filter(p => p.status === "entregue" && p.lat && p.lng)
+    .sort((a, b) => (b.data_entrega || b.entrega || "").localeCompare(a.data_entrega || a.entrega || ""));
+  const ultimoEntregue = entreguesComCoord[0];
+  const pontoPartida = ultimoEntregue
+    ? { lat: Number(ultimoEntregue.lat), lng: Number(ultimoEntregue.lng) }
+    : { lat: state.lojaLat, lng: state.lojaLng };
   const pontos = [pontoPartida, ...pendentes.map(getCoordsP)];
 
   if (pontos.length >= 2) {
@@ -568,26 +568,17 @@ function iniciarGeolocalizacao() {
 
 function switchTab(tab) {
   const isEntregas = tab === "entregas";
-
   document.getElementById("tabEntregas").classList.toggle("hidden", !isEntregas);
   document.getElementById("tabMural").classList.toggle("hidden", isEntregas);
-
   document.getElementById("tabBtnEntregas").classList.toggle("active", isEntregas);
   document.getElementById("tabBtnMural").classList.toggle("active", !isEntregas);
 
-  // Botões flutuantes
   if (isEntregas) {
-    const proximoComCoord = state.pedidos.find(
-      p => p.status !== "entregue" && p.lat && p.lng
-    );
+    const proximoComCoord = state.pedidos.find(p => p.status !== "entregue" && p.lat && p.lng);
     if (proximoComCoord) show("floatingBtn"); else hide("floatingBtn");
-    hide("floatingBtnMural");
-    // O container do mapa ficou oculto enquanto a aba estava escondida;
-    // força recálculo de tamanho para eliminar a área cinza do Leaflet
     setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 100);
   } else {
     hide("floatingBtn");
-    atualizarBotaoMural();
     carregarMural();
   }
 }
@@ -595,38 +586,35 @@ function switchTab(tab) {
 // ── Mural de Pedidos ──────────────────────────────────────────────────────────
 
 const muralState = {
-  pedidos:     [],
-  selecionados: new Set()
+  rotas:    [],
+  pedidos:  [],
+  expanded: new Set()
 };
-
-const PRIORIDADE_ORDEM = { urgente: 3, alta: 2, normal: 1, baixa: 0 };
 
 const moneyMural = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 async function carregarMural(silencioso = false) {
   const loading = document.getElementById("muralLoading");
-  const vazio   = document.getElementById("muralVazio");
-  const resumo  = document.getElementById("muralResumo");
   const list    = document.getElementById("muralList");
-
   if (!silencioso) {
-    loading.style.display = "block";
-    list.innerHTML        = "";
-    vazio.classList.add("hidden");
-    resumo.style.display = "none";
+    if (loading) loading.style.display = "block";
+    list.innerHTML = "";
+    document.getElementById("muralVazio").classList.add("hidden");
+    document.getElementById("muralResumo").style.display = "none";
   }
-
   try {
-    const todos = await apiGet(`${API_BASE}/api/pedidos`);
-    muralState.pedidos     = todos.filter(p => p.status === "aguardando motorista");
-    muralState.selecionados.clear();
-    atualizarBotaoMural();
+    const [todasRotas, todosPedidos] = await Promise.all([
+      apiGet(`${API_BASE}/api/rotas`),
+      apiGet(`${API_BASE}/api/pedidos`)
+    ]);
+    muralState.rotas   = todasRotas.filter(r => r.status === "planejada" && !r.motorista_id);
+    muralState.pedidos = todosPedidos;
     renderMural();
   } catch (e) {
-    list.innerHTML = `<div class="moto-mural-loading">Erro ao carregar pedidos. Tente novamente.</div>`;
+    list.innerHTML = `<div class="moto-mural-loading">Erro ao carregar rotas. Tente novamente.</div>`;
     console.error(e);
   } finally {
-    loading.style.display = "none";
+    if (loading) loading.style.display = "none";
   }
 }
 
@@ -635,335 +623,117 @@ function renderMural() {
   const resumo = document.getElementById("muralResumo");
   const list   = document.getElementById("muralList");
 
-  if (!muralState.pedidos.length) {
+  if (!muralState.rotas.length) {
     vazio.classList.remove("hidden");
     resumo.style.display = "none";
-    list.innerHTML       = "";
+    list.innerHTML = "";
     return;
   }
 
   vazio.classList.add("hidden");
   resumo.style.display = "grid";
 
-  const urgentes = muralState.pedidos.filter(p => p.prioridade === "urgente").length;
-  document.getElementById("muralCount").textContent   = muralState.pedidos.length;
+  document.getElementById("muralCount").textContent = muralState.rotas.length;
+  const urgentes = muralState.rotas.filter(r =>
+    (r.cargas_ids || []).some(id => {
+      const p = muralState.pedidos.find(p => p.id === id);
+      return p?.prioridade === "urgente";
+    })
+  ).length;
   document.getElementById("muralUrgente").textContent = urgentes;
 
-  // Ordena: mais próximo da loja primeiro
-  const ordenados = [...muralState.pedidos].sort((a, b) => distLoja(a) - distLoja(b));
+  list.innerHTML = muralState.rotas.map(rota => {
+    const pedidos = (rota.cargas_ids || [])
+      .map(id => muralState.pedidos.find(p => p.id === id))
+      .filter(Boolean);
+    const isExpanded = muralState.expanded.has(rota.id);
+    const temUrgente = pedidos.some(p => p.prioridade === "urgente");
+    const distTotal  = pedidos.reduce((s, p) => {
+      if (!p.lat || !p.lng) return s;
+      return s + haversineKm(state.lojaLat, state.lojaLng, Number(p.lat), Number(p.lng));
+    }, 0);
 
-  list.innerHTML = ordenados.map(p => {
-    const endereco = [p.endereco_entrega, p.numero, p.complemento]
-      .filter(Boolean).join(", ");
-    const destino  = [p.destino_municipio, p.destino_estado]
-      .filter(Boolean).join("/");
-    const prio     = p.prioridade || "normal";
-    const prioLabel = {
-      urgente: "Urgente", alta: "Alta",
-      normal:  "Normal",  baixa: "Baixa"
-    }[prio] || prio;
-
-    const dataEntrega = p.entrega
-      ? new Date(p.entrega + "T00:00").toLocaleDateString("pt-BR")
-      : "—";
-
-    const selecionado = muralState.selecionados.has(p.id);
+    const pedidosHtml = isExpanded ? pedidos.map(p => {
+      const dest = [p.destino_municipio, p.destino_estado].filter(Boolean).join("/");
+      const prio = p.prioridade === "urgente" ? `<span class="moto-badge moto-badge-urgente">Urgente</span>` : "";
+      return `
+        <div class="moto-rota-pedido-item">
+          <div class="moto-rota-pedido-info">
+            <span><strong>${p.codigo || "—"}</strong> · ${p.cliente || "—"} ${prio}</span>
+            <small>${dest || "—"} · ${p.descricao || "—"} · ${p.peso || 0} kg</small>
+          </div>
+          <button class="moto-btn-remover-pedido" title="Remover da rota"
+                  onclick="removerPedidoDaRotaDisponivel('${rota.id}','${p.id}',event)">✕</button>
+        </div>`;
+    }).join("") : "";
 
     return `
-      <div class="moto-mural-card${selecionado ? " is-selected" : ""}"
-           data-prioridade="${prio}" id="mural-card-${p.id}">
-        <div class="moto-mural-header">
-          <div class="moto-mural-header-left">
-            <input type="checkbox" class="moto-mural-checkbox"
-                   id="chk-${p.id}"
-                   ${selecionado ? "checked" : ""}
-                   onchange="toggleSelecionado('${p.id}', this.checked)">
-            <span class="moto-mural-codigo">${p.codigo || "—"}</span>
-            <span class="moto-badge moto-badge-${prio}">${prioLabel}</span>
+      <div class="moto-rota-card${temUrgente ? " has-urgente" : ""}" id="rota-mural-${rota.id}">
+        <div class="moto-rota-card-header" onclick="toggleRotaExpand('${rota.id}')">
+          <div class="moto-rota-card-info">
+            <div class="moto-rota-card-titulo">
+              <strong>${rota.codigo || rota.nome || "—"}</strong>
+              <span class="moto-badge moto-badge-yellow">Planejada</span>
+            </div>
+            <div class="moto-rota-card-meta">
+              <span>${pedidos.length} pedido${pedidos.length !== 1 ? "s" : ""}</span>
+              <span>·</span>
+              <span>${rota.destino_municipio || "—"}/${rota.destino_estado || "—"}</span>
+              ${distTotal > 0 ? `<span>· ~${distTotal.toFixed(1)} km</span>` : ""}
+            </div>
           </div>
+          <span class="moto-rota-chevron">${isExpanded ? "▲" : "▼"}</span>
         </div>
-
-        <div class="moto-mural-info">
-          <div class="moto-mural-row">
-            <span class="moto-mural-label">Cliente</span>
-            <span class="moto-mural-value">${p.cliente || "—"}${p.telefone ? ` · ${p.telefone}` : ""}</span>
-          </div>
-          <div class="moto-mural-row">
-            <span class="moto-mural-label">Material</span>
-            <span class="moto-mural-value">${p.descricao || "—"}</span>
-          </div>
-          ${endereco ? `
-          <div class="moto-mural-row">
-            <span class="moto-mural-label">Endereço</span>
-            <span class="moto-mural-value">${endereco}</span>
-          </div>` : ""}
-          <div class="moto-mural-row">
-            <span class="moto-mural-label">Destino</span>
-            <span class="moto-mural-value">${destino || "—"}</span>
-          </div>
-          <div class="moto-mural-chips">
-            <span>${Icons.weight(14)} ${p.peso || 0} kg</span>
-            <span>${Icons.money(14)} ${moneyMural.format(Number(p.valor_frete || 0))}</span>
-            <span>${Icons.calendar(14)} ${dataEntrega}</span>
-            <span>${distLojaLabel(p)}</span>
-          </div>
+        ${isExpanded ? `<div class="moto-rota-pedidos-list">${pedidosHtml}</div>` : ""}
+        <div class="moto-rota-card-actions">
+          <button class="moto-btn moto-btn-pegar" onclick="pegarRota('${rota.id}')">
+            ${Icons.plus(16)} Pegar esta rota
+          </button>
         </div>
-
-        <button class="moto-btn moto-btn-pegar"
-                id="btn-pegar-${p.id}"
-                onclick="pegarPedido('${p.id}')">
-          ${Icons.plus(16)} Pegar este pedido
-        </button>
-      </div>
-    `;
+      </div>`;
   }).join("");
 }
 
-function toggleSelecionado(pedidoId, checked) {
-  const card = document.getElementById(`mural-card-${pedidoId}`);
-  if (checked) {
-    muralState.selecionados.add(pedidoId);
-    card?.classList.add("is-selected");
-  } else {
-    muralState.selecionados.delete(pedidoId);
-    card?.classList.remove("is-selected");
-  }
-  atualizarBotaoMural();
+function toggleRotaExpand(rotaId) {
+  if (muralState.expanded.has(rotaId)) muralState.expanded.delete(rotaId);
+  else muralState.expanded.add(rotaId);
+  renderMural();
 }
 
-function atualizarBotaoMural() {
-  const n   = muralState.selecionados.size;
-  const btn = document.getElementById("floatingBtnMural");
-  const cnt = document.getElementById("selCount");
-  if (cnt) cnt.textContent = n;
-  if (btn) btn.classList.toggle("hidden", n < 2);
-}
-
-// ── Modal de seleção de veículo ───────────────────────────────────────────────
-
-async function abrirModalVeiculo(pedidoId) {
-  _modalVeiculoPedidoId    = pedidoId;
-  _modalVeiculoSelecionado = null;
-
-  const list        = document.getElementById("veiculoList");
-  const confirmarBtn = document.getElementById("veiculoModalConfirmar");
-  confirmarBtn.disabled = true;
-  list.innerHTML = '<div class="moto-veiculo-loading">Carregando veículos…</div>';
-
-  document.getElementById("veiculoModalBackdrop").classList.remove("hidden");
-
-  try {
-    const [veiculos, pedidos] = await Promise.all([
-      apiGet(`${API_BASE}/api/veiculos`),
-      apiGet(`${API_BASE}/api/pedidos`)
-    ]);
-
-    // Exclui pedidos do próprio motorista: veículo só é "Em uso" se for de OUTRO motorista
-    const meusPedidoIds = new Set(state.pedidos.map(p => p.id));
-    const emUso = new Set(
-      pedidos
-        .filter(p => p.status === "em rota" && p.veiculo_tipo && !meusPedidoIds.has(p.id))
-        .map(p => p.veiculo_tipo)
-    );
-
-    list.innerHTML = veiculos.map(v => {
-      const usado = emUso.has(v.id);
-      return `<div class="moto-veiculo-card${usado ? " is-disabled" : ""}"
-                   data-id="${v.id}"
-                   ${usado ? "" : `onclick="selecionarVeiculo('${v.id}')"`}>
-        ${usado ? '<span class="moto-veiculo-badge-uso">Em uso</span>' : ""}
-        <div class="moto-veiculo-nome">${v.nome}</div>
-        <div class="moto-veiculo-specs">
-          <span>${Number(v.capacidade || 0).toLocaleString("pt-BR")} kg</span>
-          <span>R$ ${Number(v.custo_km || 0).toFixed(2)}/km</span>
-        </div>
-        ${v.uso ? `<div class="moto-veiculo-uso">${v.uso}</div>` : ""}
-      </div>`;
-    }).join("");
-  } catch {
-    list.innerHTML = '<div class="moto-veiculo-erro">Erro ao carregar veículos.</div>';
-  }
-}
-
-function selecionarVeiculo(id) {
-  _modalVeiculoSelecionado = id;
-  document.querySelectorAll(".moto-veiculo-card").forEach(card => {
-    card.classList.toggle("is-selected", card.dataset.id === id);
-  });
-  document.getElementById("veiculoModalConfirmar").disabled = false;
-}
-
-function fecharModalVeiculo() {
-  document.getElementById("veiculoModalBackdrop").classList.add("hidden");
-  _modalVeiculoPedidoId    = null;
-  _modalVeiculoSelecionado = null;
-}
-
-async function confirmarVeiculo() {
-  const pedidoId  = _modalVeiculoPedidoId;
-  const veiculoId = _modalVeiculoSelecionado;
-  if (!pedidoId || !veiculoId) return;
-  fecharModalVeiculo();
-  await _executarPegarPedido(pedidoId, veiculoId);
-}
-
-async function pegarPedido(pedidoId) {
-  await abrirModalVeiculo(pedidoId);
-}
-
-async function _executarPegarPedido(pedidoId, veiculoId) {
-  const btn = document.getElementById(`btn-pegar-${pedidoId}`);
+async function pegarRota(rotaId) {
+  const card = document.getElementById(`rota-mural-${rotaId}`);
+  const btn  = card?.querySelector(".moto-btn-pegar");
   if (btn) { btn.disabled = true; btn.textContent = "Processando…"; }
 
   try {
-    const pedido = muralState.pedidos.find(p => p.id === pedidoId);
-    if (!pedido) return;
-
-    await apiPut(`${API_BASE}/api/pedidos/${pedidoId}`, { veiculo_tipo: veiculoId });
-    pedido.veiculo_tipo = veiculoId;
-
-    await _associarPedidosARota([pedido]);
-
-    showToast("Pedido adicionado à sua rota!");
-
-    muralState.pedidos = muralState.pedidos.filter(p => p.id !== pedidoId);
-    muralState.selecionados.delete(pedidoId);
-    atualizarBotaoMural();
+    await apiPost(`${API_BASE}/api/rotas/${rotaId}/pegar`, { motorista_id: state.motorista.id });
+    showToast("Rota adicionada às suas entregas!");
+    muralState.rotas = muralState.rotas.filter(r => r.id !== rotaId);
     renderMural();
-
     carregarEntregasDoDia(state.motorista.id).catch(() => {});
   } catch (e) {
     console.error(e);
-    showToast(e.message || "Erro ao pegar pedido. Tente novamente.", "erro");
-    if (btn) { btn.disabled = false; btn.innerHTML = `${Icons.plus(16)} Pegar este pedido`; }
+    showToast(e.message || "Erro ao pegar rota.", "erro");
+    if (btn) { btn.disabled = false; btn.innerHTML = `${Icons.plus(16)} Pegar esta rota`; }
   }
 }
 
-async function pegarPedidosSelecionados() {
-  const ids     = [...muralState.selecionados];
-  const pedidos = muralState.pedidos.filter(p => ids.includes(p.id));
-  if (!pedidos.length) return;
-
-  const btn = document.getElementById("floatingBtnMural");
-  if (btn) btn.style.opacity = ".5";
-
+async function removerPedidoDaRotaDisponivel(rotaId, pedidoId, event) {
+  event?.stopPropagation();
+  if (!confirm("Remover este pedido da rota?")) return;
   try {
-    await _associarPedidosARota(pedidos);
-
-    showToast(`${pedidos.length} pedidos adicionados à sua rota!`);
-
-    muralState.pedidos     = muralState.pedidos.filter(p => !ids.includes(p.id));
-    muralState.selecionados.clear();
-    atualizarBotaoMural();
+    await apiDelete(`${API_BASE}/api/rotas/${rotaId}/pedidos/${pedidoId}`);
+    const rota = muralState.rotas.find(r => r.id === rotaId);
+    if (rota) {
+      rota.cargas_ids = (rota.cargas_ids || []).filter(id => id !== pedidoId);
+      if (rota.cargas_ids.length === 0) muralState.rotas = muralState.rotas.filter(r => r.id !== rotaId);
+    }
+    showToast("Pedido removido da rota.");
     renderMural();
-
-    carregarEntregasDoDia(state.motorista.id).catch(() => {});
   } catch (e) {
     console.error(e);
-    showToast(e.message || "Erro ao criar rota. Tente novamente.", "erro");
-  } finally {
-    if (btn) btn.style.opacity = "";
+    showToast("Erro ao remover pedido.", "erro");
   }
-}
-
-async function _associarPedidosARota(pedidos) {
-  // Re-verifica status atual no servidor para prevenir race condition entre motoristas
-  const todosPedidos = await apiGet(`${API_BASE}/api/pedidos`);
-  const disponiveis  = pedidos.filter(p => {
-    const atual = todosPedidos.find(s => s.id === p.id);
-    return atual && atual.status === "aguardando motorista";
-  });
-
-  if (disponiveis.length === 0) {
-    throw new Error("Este pedido já foi atribuído a outro motorista.");
-  }
-  if (disponiveis.length < pedidos.length) {
-    const n = pedidos.length - disponiveis.length;
-    showToast(`${n} pedido(s) já pego(s) por outro motorista foram ignorados.`, "erro");
-  }
-
-  // Busca rota ativa do motorista
-  const todasRotas = await apiGet(`${API_BASE}/api/rotas`);
-  const rotaAtiva  = todasRotas.find(r =>
-    r.motorista_id === state.motorista.id &&
-    r.status       === "em andamento"
-  );
-
-  const pedidoIds  = disponiveis.map(p => p.id);
-  const freteExtra = disponiveis.reduce((s, p) => s + Number(p.valor_frete || 0), 0);
-  const distExtra  = disponiveis.reduce((s, p) => s + Number(p.distancia_km || 0), 0);
-
-  if (rotaAtiva) {
-    // Dedup: separa os que já estão na rota dos que precisam ser inseridos
-    const idsExistentes = new Set(rotaAtiva.cargas_ids || []);
-    const idsFiltrados  = pedidoIds.filter(id => !idsExistentes.has(id));
-    const idsJaExistem  = pedidoIds.filter(id => idsExistentes.has(id));
-
-    // Pedidos já presentes na rota: apenas corrige o status (fix de duplicação)
-    for (const id of idsJaExistem) {
-      await apiPut(`${API_BASE}/api/pedidos/${id}`, { status: "em rota" });
-    }
-
-    if (idsFiltrados.length) {
-      const ped       = disponiveis.filter(p => idsFiltrados.includes(p.id));
-      const novasIds  = [...(rotaAtiva.cargas_ids || []), ...idsFiltrados];
-      const novoFrete = Number((Number(rotaAtiva.frete_total || 0) + ped.reduce((s, p) => s + Number(p.valor_frete || 0), 0)).toFixed(2));
-      const novaDist  = Number((Number(rotaAtiva.distancia  || 0) + ped.reduce((s, p) => s + Number(p.distancia_km || 0), 0)).toFixed(1));
-
-      await apiPut(`${API_BASE}/api/rotas/${rotaAtiva.id}`, {
-        cargas_ids:  novasIds,
-        frete_total: novoFrete,
-        distancia:   novaDist
-      });
-    } else {
-      // Todos já estavam na rota — não precisa fazer mais nada além da correção de status
-      await apiPut(`${API_BASE}/api/motoristas/${state.motorista.id}`, { status: "em entrega" });
-      return;
-    }
-  } else {
-    // Antes de criar nova rota, verifica se algum pedido já está em rota ativa
-    const rotaComPedido = todasRotas.find(r =>
-      !["cancelada", "concluida"].includes(r.status) &&
-      pedidoIds.some(id => (r.cargas_ids || []).includes(id))
-    );
-
-    if (rotaComPedido) {
-      // Reutiliza a rota existente, apenas atualiza motorista e status
-      const idsExistentes = new Set(rotaComPedido.cargas_ids || []);
-      const idsFaltando   = pedidoIds.filter(id => !idsExistentes.has(id));
-      const updates = { motorista_id: state.motorista.id, status: "em andamento" };
-      if (idsFaltando.length) {
-        const ped = disponiveis.filter(p => idsFaltando.includes(p.id));
-        updates.cargas_ids  = [...(rotaComPedido.cargas_ids || []), ...idsFaltando];
-        updates.frete_total = Number((Number(rotaComPedido.frete_total || 0) + ped.reduce((s, p) => s + Number(p.valor_frete || 0), 0)).toFixed(2));
-        updates.distancia   = Number((Number(rotaComPedido.distancia   || 0) + ped.reduce((s, p) => s + Number(p.distancia_km || 0), 0)).toFixed(1));
-      }
-      await apiPut(`${API_BASE}/api/rotas/${rotaComPedido.id}`, updates);
-    } else {
-      const primeiro = disponiveis[0];
-      await apiPost(`${API_BASE}/api/rotas`, {
-        nome:              `${primeiro.destino_municipio} · ${state.motorista.nome}`,
-        tipo_rota:         "Rodoviária",
-        destino_municipio: primeiro.destino_municipio,
-        destino_estado:    primeiro.destino_estado,
-        motorista_id:      state.motorista.id,
-        status:            "em andamento",
-        cargas_ids:        pedidoIds,
-        frete_total:       Number(freteExtra.toFixed(2)),
-        distancia:         Number(distExtra.toFixed(1)),
-        saida:             null,
-        chegada:           null,
-        tempo:             null,
-        observacoes:       "Rota criada pelo motorista via mural de pedidos."
-      });
-    }
-  }
-
-  for (const pedido of disponiveis) {
-    await apiPut(`${API_BASE}/api/pedidos/${pedido.id}`, { status: "em rota" });
-  }
-
-  await apiPut(`${API_BASE}/api/motoristas/${state.motorista.id}`, { status: "em entrega" });
 }
 
 // ── Google Maps ───────────────────────────────────────────────────────────────
@@ -1037,13 +807,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.getElementById("logoutBtn").addEventListener("click", sair);
-
-  document.getElementById("veiculoModalClose").addEventListener("click", fecharModalVeiculo);
-  document.getElementById("veiculoModalCancelar").addEventListener("click", fecharModalVeiculo);
-  document.getElementById("veiculoModalConfirmar").addEventListener("click", confirmarVeiculo);
-  document.getElementById("veiculoModalBackdrop").addEventListener("click", e => {
-    if (e.target === e.currentTarget) fecharModalVeiculo();
-  });
 
   mostrarTelaPrincipal();
 });
