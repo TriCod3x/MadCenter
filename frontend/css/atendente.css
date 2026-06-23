@@ -642,7 +642,7 @@ img { max-width: 100%; }
 .atend-pedido-card:hover { transform: translateY(-2px); }
 
 .atend-pedido-card[data-status="aguardando motorista"] { border-left-color: #6b7280; }
-.atend-pedido-card[data-status="planejado"]            { border-left-color: #f97316; }
+.atend-pedido-card[data-status="planejado"]            { border-left-color: #eab308; }
 .atend-pedido-card[data-status="em rota"]              { border-left-color: #3b82f6; }
 .atend-pedido-card[data-status="entregue"]             { border-left-color: #22c55e; opacity: .7; }
 .atend-pedido-card[data-status="cancelado"]            { border-left-color: #ef4444; opacity: .6; }

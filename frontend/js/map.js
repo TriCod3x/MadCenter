@@ -340,7 +340,7 @@ function storeMarkerIcon() {
 
 function routeStatusColor(status) {
   return {
-    planejada:      "#f97316",
+    planejada:      "#eab308",
     "em andamento": "#3b82f6",
     concluida:      "#22c55e",
     cancelada:      "#ef4444"

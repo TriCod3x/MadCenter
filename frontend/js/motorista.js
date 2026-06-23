@@ -212,7 +212,7 @@ function renderPedidos() {
           onclick="marcarEntregue('${p.id}','${rota?.id || ""}')">
           ${Icons.checkCircle(16)} Entregue
         </button>
-        ${!isPendente ? `
+        ${!isPlanejado ? `
         <button class="moto-btn moto-btn-adiar"
           onclick="deixarParaDepois('${p.id}')">
           ${Icons.calendar(16)} Deixar para depois
@@ -525,7 +525,7 @@ async function desenharRota() {
     const { lat, lng } = getCoordsP(p);
     const isEntregue = p.status === "entregue";
     const isProximo  = !isEntregue && i === entregues.length;
-    const cor = isEntregue ? "#22c55e" : isProximo ? "#3b82f6" : p.status === "planejado" ? "#f97316" : "#6b7280";
+    const cor = isEntregue ? "#22c55e" : isProximo ? "#3b82f6" : p.status === "planejado" ? "#eab308" : "#6b7280";
     const marker = L.circleMarker([lat, lng], {
       radius: 10, color: "#fff", weight: 2, fillColor: cor, fillOpacity: 1
     });

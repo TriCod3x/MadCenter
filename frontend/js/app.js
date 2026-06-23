@@ -249,7 +249,7 @@ function renderDashboard() {
     </div>
   `).join("");
 
-  const statusBorder = { "aguardando motorista": "#6b7280", "planejado": "#f97316", "em rota": "#3b82f6", "entregue": "#22c55e", "próximo dia": "#a855f7", "cancelado": "#ef4444", "disponivel": "#8b5cf6" };
+  const statusBorder = { "aguardando motorista": "#6b7280", "planejado": "#eab308", "em rota": "#3b82f6", "entregue": "#22c55e", "próximo dia": "#a855f7", "cancelado": "#ef4444", "disponivel": "#8b5cf6" };
   document.getElementById("latestCargas").innerHTML = cargas.slice(-5).reverse().map((c) => `
     <div class="list-item" style="border-left-color:${statusBorder[c.status] || "var(--line)"}">
       <div class="list-item-body">
@@ -260,7 +260,7 @@ function renderDashboard() {
     </div>
   `).join("") || emptyText("Nenhum pedido cadastrado.");
 
-  const rotaBorder = { "planejada": "#f97316", "em andamento": "#3b82f6", "concluida": "#22c55e", "cancelada": "#ef4444" };
+  const rotaBorder = { "planejada": "#eab308", "em andamento": "#3b82f6", "concluida": "#22c55e", "cancelada": "#ef4444" };
   document.getElementById("nextRotas").innerHTML = rotas.filter((r) => r.status !== "concluida").slice(0, 5).map((r) => `
     <div class="list-item" style="border-left-color:${rotaBorder[r.status] || "var(--line)"}">
       <div class="list-item-body">
