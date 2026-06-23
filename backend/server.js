@@ -123,31 +123,26 @@ app.post("/api/pedidos", async (req, res) => {
       .single();
     if (errIns) return res.status(400).json({ error: errIns.message });
 
-    // Se existe rota planejada com pedidos no mesmo município → status disponivel
-    const municipio = req.body.municipio;
-    if (municipio) {
-      const { data: rotasPlanejadas } = await supabase
+    // Cria rota planejada automaticamente e vincula ao pedido via rota_pedidos
+    const destMun = req.body.destino_municipio || "";
+    const destEst = req.body.destino_estado || "";
+    if (destMun) {
+      const { data: rota } = await supabaseAdmin
         .from("rotas")
-        .select("cargas_ids")
-        .eq("status", "planejada");
+        .insert({
+          nome: `Auto - ${destMun}/${destEst}`,
+          destino_municipio: destMun,
+          destino_estado: destEst,
+          status: "planejada",
+          cargas_ids: [pedido.id],
+        })
+        .select("id")
+        .single();
 
-      const idsNasRotas = (rotasPlanejadas || [])
-        .flatMap((r) => Array.isArray(r.cargas_ids) ? r.cargas_ids : []);
-
-      if (idsNasRotas.length > 0) {
-        const { data: match } = await supabase
-          .from("pedidos")
-          .select("id")
-          .in("id", idsNasRotas)
-          .eq("municipio", municipio)
-          .limit(1);
-
-        if (match?.length > 0) {
-          await supabase.from("pedidos")
-            .update({ status: "disponivel" })
-            .eq("id", pedido.id);
-          pedido.status = "disponivel";
-        }
+      if (rota?.id) {
+        await supabaseAdmin
+          .from("rota_pedidos")
+          .insert({ rota_id: rota.id, pedido_id: pedido.id });
       }
     }
 
@@ -535,8 +530,8 @@ app.put("/api/pedidos/:id/cancelar-motorista", async (req, res) => {
 
     // 2. Status do pedido depende de existir rota planejada vinculada
     //    'disponivel'    → pedido está em rota planejada, sem motorista
-    //    'aguardando rota' → pedido sem nenhuma rota
-    const novoPedidoStatus = rotaVinculada ? "disponivel" : "aguardando rota";
+    //    'aguardando motorista' → pedido sem nenhuma rota
+    const novoPedidoStatus = rotaVinculada ? "disponivel" : "aguardando motorista";
     const { data: pedido, error: errPed } = await supabase
       .from("pedidos")
       .update({ status: novoPedidoStatus })

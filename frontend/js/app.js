@@ -19,7 +19,7 @@ const pageNames = {
 const API_BASE = window.location.hostname === "localhost" ? "http://localhost:3001" : "";
 
 const statusColors = {
-  "aguardando rota": "yellow",
+  "aguardando motorista": "yellow",
   "em rota": "blue",
   "entregue": "green",
   "próximo dia": "purple",
@@ -52,7 +52,7 @@ const fields = {
     ["cliente", "Cliente", "text", true],
     ["telefone", "Telefone/WhatsApp", "phone", true],
     ["prioridade", "Prioridade", "select:baixa,normal,alta,urgente", true],
-    ["status", "Status", "select:aguardando rota,em rota,próximo dia,entregue,cancelado", true],
+    ["status", "Status", "select:aguardando motorista,em rota,próximo dia,entregue,cancelado", true],
     ["observacoes", "Observações", "textarea", false]
   ],
   motoristas: [
@@ -161,8 +161,7 @@ function bindLayoutEvents() {
   });
   document.getElementById("motoristasSearch").addEventListener("input", renderTables);
   document.getElementById("rotasSearch").addEventListener("input", renderTables);
-  document.getElementById("generateRoutesBtn").addEventListener("click", generateRoutesByMunicipality);
-  document.getElementById("newRelatorioBtn")?.addEventListener("click", openRelatorioForm);
+document.getElementById("newRelatorioBtn")?.addEventListener("click", openRelatorioForm);
   bindUsuariosEvents();
   bindChartEvents();
   document.getElementById("mapReloadRoutes").addEventListener("click", renderMapPanel);
@@ -221,7 +220,7 @@ function renderDashboard() {
   const cargas = getCargas();
   const motoristas = getMotoristas();
   const rotas = getRotas();
-  const pending = cargas.filter((c) => ["aguardando rota", "próximo dia"].includes(c.status)).length;
+  const pending = cargas.filter((c) => ["aguardando motorista", "próximo dia"].includes(c.status)).length;
   const progress = cargas.filter((c) => c.status === "em rota").length;
   const completed = cargas.filter((c) => c.status === "entregue").length;
   const nextDay = cargas.filter((c) => c.status === "próximo dia").length;
@@ -231,7 +230,7 @@ function renderDashboard() {
 
   const metrics = [
     ["Pedidos cadastrados",    cargas.length,        Icons.package(20),    "mc-neutral"],
-    ["Aguardando rota",        pending,              Icons.clock(20),      "mc-yellow"],
+    ["Aguardando motorista",        pending,              Icons.clock(20),      "mc-yellow"],
     ["Em rota",                progress,             Icons.truck(20),      "mc-blue"],
     ["Próximo dia",            nextDay,              Icons.calendar(20),   "mc-orange"],
     ["Entregues",              completed,            Icons.checkCircle(20),"mc-green"],
@@ -248,7 +247,7 @@ function renderDashboard() {
     </div>
   `).join("");
 
-  const statusBorder = { "aguardando rota": "#f2c94c", "em rota": "#2374c6", "entregue": "#0fa958", "próximo dia": "#a855f7", "cancelado": "#d93025" };
+  const statusBorder = { "aguardando motorista": "#f2c94c", "em rota": "#2374c6", "entregue": "#0fa958", "próximo dia": "#a855f7", "cancelado": "#d93025" };
   document.getElementById("latestCargas").innerHTML = cargas.slice(-5).reverse().map((c) => `
     <div class="list-item" style="border-left-color:${statusBorder[c.status] || "var(--line)"}">
       <div class="list-item-body">
@@ -483,7 +482,7 @@ function downloadCSV(filename, rows) {
 
 function buildRouteSuggestions() {
   const groups = {};
-  getCargas().filter((c) => ["aguardando rota", "próximo dia"].includes(c.status)).forEach((c) => {
+  getCargas().filter((c) => ["aguardando motorista", "próximo dia"].includes(c.status)).forEach((c) => {
     const key = `${c.destinoMunicipio}|${c.destinoEstado}`;
     groups[key] = groups[key] || { municipio: c.destinoMunicipio, estado: c.destinoEstado, pedidos: [] };
     groups[key].pedidos.push(c);
@@ -493,7 +492,7 @@ function buildRouteSuggestions() {
 
 function renderFilters() {
   document.getElementById("cargasFilters").innerHTML = `
-    <select id="filterPedidoStatus"><option value="">Todos os status</option><option value="aguardando rota">Aguardando rota</option><option value="em rota">Em rota</option><option value="próximo dia">Próximo dia</option><option value="entregue">Entregue</option><option value="cancelado">Cancelado</option></select>
+    <select id="filterPedidoStatus"><option value="">Todos os status</option><option value="aguardando motorista">Aguardando motorista</option><option value="em rota">Em rota</option><option value="próximo dia">Próximo dia</option><option value="entregue">Entregue</option><option value="cancelado">Cancelado</option></select>
     <select id="filterPedidoPrioridade"><option value="">Todas as prioridades</option><option value="urgente">Urgente</option><option value="alta">Alta</option><option value="normal">Normal</option><option value="baixa">Baixa</option></select>
     <input id="filterPedidoDestino" placeholder="Destino" type="text">
     <input id="filterPedidoText" placeholder="Buscar material ou cliente" type="search">
@@ -737,7 +736,7 @@ function openForm(entity, id = null) {
 
 function defaultItem(entity) {
   if (entity === "cargas") {
-    return { descricao: "", tipo: "Tintas", peso: 0, volume: "", cep: "", destinoMunicipio: "Timon", destinoEstado: "MA", enderecoEntrega: "", numero: "", complemento: "", cliente: "", telefone: "", coleta: "", entrega: "", prioridade: "normal", veiculoTipo: "caminhonete", status: "aguardando rota", observacoes: "", lat: null, lng: null };
+    return { descricao: "", tipo: "Tintas", peso: 0, volume: "", cep: "", destinoMunicipio: "Timon", destinoEstado: "MA", enderecoEntrega: "", numero: "", complemento: "", cliente: "", telefone: "", coleta: "", entrega: "", prioridade: "normal", veiculoTipo: "caminhonete", status: "aguardando motorista", observacoes: "", lat: null, lng: null };
   }
   if (entity === "motoristas") {
     return { nome: "", telefone: "", categoria: "D", capacidade: 0, cidade: "Timon", estado: "MA", status: "disponível", observacoes: "" };
@@ -1460,80 +1459,6 @@ function getCollection(entity) {
   return [];
 }
 
-async function generateRoutesByMunicipality() {
-  const pending = getCargas().filter((c) => ["aguardando rota", "próximo dia"].includes(c.status));
-  const availableDrivers = getMotoristas().filter((driver) => driver.status === "disponível").sort((a, b) => b.capacidade - a.capacidade);
-  const groups = {};
-
-  pending.forEach((pedido) => {
-    const key = `${pedido.destinoMunicipio}|${pedido.destinoEstado}`;
-    groups[key] = groups[key] || { municipio: pedido.destinoMunicipio, estado: pedido.destinoEstado, pedidos: [] };
-    groups[key].pedidos.push(pedido);
-  });
-
-  let created = 0;
-  let overflowCount = 0;
-
-  for (const group of Object.values(groups)) {
-    if (group.pedidos.length < 2) continue;
-    const sorted = [...group.pedidos].sort((a, b) => (priorityOrder[b.prioridade || "normal"] || 0) - (priorityOrder[a.prioridade || "normal"] || 0));
-    const smallestWeight = Math.min(...sorted.map((item) => Number(item.peso || 0)));
-    const driver = availableDrivers.find((d) => d.capacidade >= smallestWeight);
-    if (!driver) {
-      for (const pedido of group.pedidos) {
-        await updateCarga(pedido.id, { status: "próximo dia" });
-      }
-      overflowCount += group.pedidos.length;
-      continue;
-    }
-
-    let assigned = [];
-    let usedWeight = 0;
-
-    for (const pedido of sorted) {
-      const weight = Number(pedido.peso || 0);
-      if (assigned.length === 0 || usedWeight + weight <= driver.capacidade) {
-        assigned.push(pedido);
-        usedWeight += weight;
-      } else {
-        await updateCarga(pedido.id, { status: "próximo dia" });
-        overflowCount += 1;
-      }
-    }
-
-    if (!assigned.length) continue;
-    const routeType = inferRouteType(assigned);
-    await saveRota({
-      nome: `${group.municipio} · ${driver.nome}`,
-      tipoRota: routeType,
-      destinoMunicipio: group.municipio,
-      destinoEstado: group.estado,
-      motoristaId: driver.id,
-      cargasIds: assigned.map((pedido) => pedido.id),
-      saida: `${assigned[0].coleta || ""}T08:00`,
-      chegada: `${assigned[0].entrega || ""}T14:00`,
-      distancia: Number(assigned.reduce((sum, pedido) => sum + Number(pedido.distanciaKm || 0), 0).toFixed(1)),
-      freteTotal: Number(assigned.reduce((sum, pedido) => sum + Number(pedido.valorFrete || 0), 0).toFixed(2)),
-      tempo: "3h00",
-      status: "planejada",
-      observacoes: "Rota gerada automaticamente por município."
-    });
-
-    for (const pedido of assigned) {
-      await updateCarga(pedido.id, { status: "em rota" });
-    }
-    await updateMotorista(driver.id, { status: "em entrega" });
-    availableDrivers.splice(availableDrivers.indexOf(driver), 1);
-    created += 1;
-  }
-
-  renderAll();
-  if (created === 0) {
-    toast("Nenhuma rota gerada. Verifique motoristas disponíveis e pedidos agrupáveis.");
-  } else {
-    toast(`Rotas geradas: ${created}. Pedidos deslocados para próximo dia: ${overflowCount}.`);
-  }
-}
 
 async function autoGenerateRouteForMunicipality(municipio, estado) {
   const rotaAtiva = getRotas().find((r) =>
@@ -1544,7 +1469,7 @@ async function autoGenerateRouteForMunicipality(municipio, estado) {
 
   if (rotaAtiva) {
     const novos = getCargas().filter((c) =>
-      c.status === "aguardando rota" &&
+      c.status === "aguardando motorista" &&
       c.destinoMunicipio === municipio &&
       c.destinoEstado === estado &&
       !(rotaAtiva.cargasIds || []).includes(c.id)
@@ -1565,7 +1490,7 @@ async function autoGenerateRouteForMunicipality(municipio, estado) {
   }
 
   const pending = getCargas().filter((c) =>
-    ["aguardando rota", "próximo dia"].includes(c.status) &&
+    ["aguardando motorista", "próximo dia"].includes(c.status) &&
     c.destinoMunicipio === municipio &&
     c.destinoEstado === estado
   );
@@ -1772,11 +1697,11 @@ async function marcarPedidoPendente(pedidoId, rotaId) {
     const pedido = getCargas().find((c) => c.id === pedidoId);
     if (!rota || !pedido) return;
 
-    // Remove o pedido da rota e volta para "aguardando rota"
+    // Remove o pedido da rota e volta para "aguardando motorista"
     const novasCargasIds = (rota.cargasIds || []).filter((id) => id !== pedidoId);
     const novoFrete = Number(Math.max(0, Number(rota.freteTotal || 0) - Number(pedido.valorFrete || 0)).toFixed(2));
 
-    await updateCarga(pedidoId, { status: "aguardando rota" });
+    await updateCarga(pedidoId, { status: "aguardando motorista" });
 
     if (novasCargasIds.length === 0) {
       // Etapa 4: sem pedidos restantes → cancela rota e libera motorista

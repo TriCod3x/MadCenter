@@ -286,7 +286,7 @@ function renderDeliveryMarkers(visibleRoutes = []) {
       const statusLabel = {
         "entregue": "✅ Entregue",
         "em rota": "🚚 Em rota",
-        "aguardando rota": "⏳ Aguardando",
+        "aguardando motorista": "⏳ Aguardando",
         "próximo dia": "📅 Próximo dia",
         "cancelado": "❌ Cancelado"
       }[carga.status] || carga.status;

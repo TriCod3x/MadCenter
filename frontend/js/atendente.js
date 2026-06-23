@@ -140,7 +140,7 @@ function filtrarMes(pedidos) {
 
 function atualizarResumo(hoje, mes) {
   const total        = hoje.length;
-  const aguardando   = hoje.filter(p => p.status === "aguardando rota").length;
+  const aguardando   = hoje.filter(p => p.status === "aguardando motorista").length;
   const emRota       = hoje.filter(p => p.status === "em rota").length;
   const entregueHoje = hoje.filter(p => p.status === "entregue").length;
   const totalMes     = (mes || []).length;
@@ -151,7 +151,7 @@ function atualizarResumo(hoje, mes) {
     </div>
     <div class="atend-resumo-card yellow">
       <div class="atend-resumo-icon">${Icons.clock(22)}</div>
-      <strong>${aguardando}</strong><span>Aguardando rota</span>
+      <strong>${aguardando}</strong><span>Aguardando motorista</span>
     </div>
     <div class="atend-resumo-card blue">
       <div class="atend-resumo-icon">${Icons.truck(22)}</div>
@@ -169,7 +169,7 @@ function atualizarResumo(hoje, mes) {
 }
 
 const STATUS_MAP = {
-  "aguardando rota": { cls: "yellow", label: "Aguardando rota" },
+  "aguardando motorista": { cls: "yellow", label: "Aguardando motorista" },
   "em rota":         { cls: "blue",   label: "Em rota" },
   "entregue":        { cls: "green",  label: "Entregue" },
   "próximo dia":     { cls: "orange", label: "Próximo dia" },
@@ -227,7 +227,7 @@ function renderPedidosMes(mes) {
 
   const totalMes   = mes.length;
   const entregues  = mes.filter(p => p.status === "entregue").length;
-  const aguardando = mes.filter(p => ["aguardando rota", "próximo dia"].includes(p.status)).length;
+  const aguardando = mes.filter(p => ["aguardando motorista", "próximo dia"].includes(p.status)).length;
   const frete      = mes.reduce((s, p) => s + Number(p.valor_frete || 0), 0);
 
   _mesPedidosCache = [...mes].sort((a, b) =>
@@ -253,7 +253,7 @@ function renderPedidosMes(mes) {
       >
       <select id="mesStatus" class="atend-mes-select">
         <option value="">Todos os status</option>
-        <option value="aguardando rota">Aguardando rota</option>
+        <option value="aguardando motorista">Aguardando motorista</option>
         <option value="disponivel">Disponível</option>
         <option value="em rota">Em rota</option>
         <option value="entregue">Entregue</option>
@@ -381,7 +381,7 @@ async function salvarPedido() {
     veiculo_tipo:      null,
     distancia_km:      Number(distKm.toFixed(1)),
     valor_frete:       null,
-    status:            "aguardando rota",
+    status:            "aguardando motorista",
     observacoes:       observacoes      || null,
     lat:               formState.lat    || null,
     lng:               formState.lng    || null

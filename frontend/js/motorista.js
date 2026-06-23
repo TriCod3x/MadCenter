@@ -603,7 +603,7 @@ async function carregarMural(silencioso = false) {
 
   try {
     const todos = await apiGet(`${API_BASE}/api/pedidos`);
-    muralState.pedidos     = todos.filter(p => p.status === "aguardando rota");
+    muralState.pedidos     = todos.filter(p => p.status === "aguardando motorista");
     muralState.selecionados.clear();
     atualizarBotaoMural();
     renderMural();
@@ -856,7 +856,7 @@ async function _associarPedidosARota(pedidos) {
   const todosPedidos = await apiGet(`${API_BASE}/api/pedidos`);
   const disponiveis  = pedidos.filter(p => {
     const atual = todosPedidos.find(s => s.id === p.id);
-    return atual && atual.status === "aguardando rota";
+    return atual && atual.status === "aguardando motorista";
   });
 
   if (disponiveis.length === 0) {

@@ -82,7 +82,7 @@ const SEED_DATA = {
       veiculoTipo: "bau-leve",
       distanciaKm: 44.4,
       valorFrete: 238,
-      status: "aguardando rota",
+      status: "aguardando motorista",
       observacoes: "Pedido agrupável com tintas."
     },
     {
@@ -103,7 +103,7 @@ const SEED_DATA = {
       veiculoTipo: "caminhonete",
       distanciaKm: 87.2,
       valorFrete: 244,
-      status: "aguardando rota",
+      status: "aguardando motorista",
       observacoes: "Sistema hidráulico completo."
     },
     {
@@ -124,7 +124,7 @@ const SEED_DATA = {
       veiculoTipo: "caminhonete",
       distanciaKm: 87.2,
       valorFrete: 244,
-      status: "aguardando rota",
+      status: "aguardando motorista",
       observacoes: "Entrega conjunta com hidráulica."
     },
     {
@@ -145,7 +145,7 @@ const SEED_DATA = {
       veiculoTipo: "tres-quartos",
       distanciaKm: 154.1,
       valorFrete: 938,
-      status: "aguardando rota",
+      status: "aguardando motorista",
       observacoes: "Carga frágil, exige cuidado."
     },
     {
@@ -166,7 +166,7 @@ const SEED_DATA = {
       veiculoTipo: "tres-quartos",
       distanciaKm: 154.1,
       valorFrete: 938,
-      status: "aguardando rota",
+      status: "aguardando motorista",
       observacoes: "Parada em Caxias antes do destino."
     },
     {

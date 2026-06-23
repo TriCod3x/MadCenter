@@ -641,7 +641,7 @@ img { max-width: 100%; }
 }
 .atend-pedido-card:hover { transform: translateY(-2px); }
 
-.atend-pedido-card[data-status="aguardando rota"] { border-left-color: var(--accent); }
+.atend-pedido-card[data-status="aguardando motorista"] { border-left-color: var(--accent); }
 .atend-pedido-card[data-status="em rota"]         { border-left-color: var(--blue); }
 .atend-pedido-card[data-status="entregue"]        { border-left-color: var(--success); opacity: .7; }
 .atend-pedido-card[data-status="cancelado"]       { border-left-color: var(--danger); opacity: .6; }
