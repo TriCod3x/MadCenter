@@ -253,6 +253,17 @@ app.post("/api/rotas", (req, res) => criar(req, res, "rotas"));
 app.put("/api/rotas/:id", (req, res) => atualizar(req, res, "rotas"));
 app.delete("/api/rotas/:id", (req, res) => deletar(req, res, "rotas"));
 
+app.delete("/api/rotas/:rotaId/pedidos/:pedidoId", autenticar, async (req, res) => {
+  const { rotaId, pedidoId } = req.params;
+  const { error } = await supabaseAdmin
+    .from("rota_pedidos")
+    .delete()
+    .eq("rota_id", rotaId)
+    .eq("pedido_id", pedidoId);
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 // ── Configurações ─────────────────────────────────────────────────────────────
 app.get("/api/configuracoes", async (req, res) => {
   const { data, error } = await supabase

@@ -1729,6 +1729,7 @@ function buildRotaPedidosHtml(rotaId) {
         <div class="pedido-detail-actions">
           ${!entregue ? `<button class="primary-button" onclick="markPedidoEntregue('${c.id}','${rotaId}')">${Icons.checkCircle(14)} Entregue</button>` : ""}
           ${!entregue && !pendente ? `<button class="secondary-button" onclick="marcarPedidoPendente('${c.id}','${rotaId}')">${Icons.calendar(14)} Pendente para outro dia</button>` : ""}
+          ${c.status === "cancelado" ? `<button class="secondary-button" onclick="removerPedidoDaRota('${c.id}','${rotaId}')">${Icons.trash(14)} Remover da rota</button>` : ""}
         </div>
       </div>
     `;
@@ -1748,6 +1749,20 @@ async function markPedidoEntregue(pedidoId, rotaId) {
   } catch (e) {
     console.error(e);
     toast("Erro ao marcar entrega.");
+  }
+}
+
+async function removerPedidoDaRota(pedidoId, rotaId) {
+  try {
+    await apiDelete(`/api/rotas/${rotaId}/pedidos/${pedidoId}`);
+    // Atualiza cache local da rota removendo o pedido da lista
+    const rota = getRotas().find((r) => r.id === rotaId);
+    if (rota) rota.cargasIds = (rota.cargasIds || []).filter((id) => id !== pedidoId);
+    document.getElementById("modalBody").innerHTML = buildRotaPedidosHtml(rotaId);
+    toast("Pedido removido da rota.");
+  } catch (e) {
+    console.error(e);
+    toast("Erro ao remover pedido da rota.");
   }
 }
 
