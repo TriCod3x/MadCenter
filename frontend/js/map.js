@@ -260,6 +260,8 @@ function renderDeliveryMarkers() {
       let pinClass;
       if (carga.status === "entregue") {
         pinClass = "completed";
+      } else if (carga.status === "cancelado") {
+        pinClass = "cancelled";
       } else if (nextPedidoIds.has(carga.id)) {
         pinClass = "next-delivery";
       } else if (carga.status === "em rota") {
