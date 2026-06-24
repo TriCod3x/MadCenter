@@ -290,6 +290,13 @@ async function marcarEntregue(pedidoId, rotaId) {
   const card = document.getElementById(`card-${pedidoId}`);
   if (card) card.style.opacity = "0.35";
 
+  // Limpa a rota do mapa imediatamente — feedback visual antes do API retornar
+  if (state.map) {
+    if (state.rotaAbortCtrl) { state.rotaAbortCtrl.abort(); state.rotaAbortCtrl = null; }
+    if (state.rotaLayer)  { try { state.map.removeLayer(state.rotaLayer); } catch {} state.rotaLayer  = null; }
+    if (state.routeLine)  { try { state.routeLine.remove(); }              catch {} state.routeLine   = null; }
+  }
+
   try {
     // 1. Marca pedido como entregue
     await apiPut(`${API_BASE}/api/pedidos/${pedidoId}`, { status: "entregue", data_entrega: new Date().toISOString() });
@@ -660,7 +667,7 @@ function renderMural() {
         <div class="moto-rota-pedido-item">
           <div class="moto-rota-pedido-info">
             <span><strong>${p.codigo || "—"}</strong> · ${p.cliente || "—"} ${prio}</span>
-            <small>${dest || "—"} · ${p.descricao || "—"} · ${p.peso || 0} kg</small>
+            <small>${dest || "—"} · ${p.descricao || "—"} · ${p.peso || 0} kg · ${distLojaLabel(p)}</small>
           </div>
           <button class="moto-btn-remover-pedido" title="Remover da rota"
                   onclick="removerPedidoDaRotaDisponivel('${rota.id}','${p.id}',event)">✕</button>
