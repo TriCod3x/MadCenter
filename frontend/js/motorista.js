@@ -614,12 +614,27 @@ async function carregarMural(silencioso = false) {
       apiGet(`${API_BASE}/api/rotas`),
       apiGet(`${API_BASE}/api/pedidos`)
     ]);
-    muralState.rotas   = todasRotas.filter(r => r.status === "planejada" && !r.motorista_id);
-    muralState.pedidos = todosPedidos;
+
+    console.log("[mural] Total rotas recebidas:", todasRotas?.length, todasRotas);
+    console.log("[mural] Total pedidos recebidos:", todosPedidos?.length);
+
+    const rotasFiltradas = (todasRotas || []).filter(r => r.status === "planejada" && !r.motorista_id);
+    console.log("[mural] Rotas planejadas sem motorista:", rotasFiltradas.length, rotasFiltradas.map(r => ({ id: r.id, cargas_ids: r.cargas_ids })));
+
+    muralState.rotas   = rotasFiltradas;
+    muralState.pedidos = todosPedidos || [];
+
+    // Diagnóstico de cross-referência: verificar se cargas_ids existem em pedidos
+    rotasFiltradas.forEach(rota => {
+      const ids = rota.cargas_ids || [];
+      const encontrados = ids.filter(id => (todosPedidos || []).some(p => p.id === id));
+      console.log(`[mural] Rota ${rota.id}: cargas_ids=${JSON.stringify(ids)} → pedidos encontrados: ${encontrados.length}/${ids.length}`);
+    });
+
     renderMural();
   } catch (e) {
     list.innerHTML = `<div class="moto-mural-loading">Erro ao carregar rotas. Tente novamente.</div>`;
-    console.error(e);
+    console.error("[mural] Erro em carregarMural:", e);
   } finally {
     if (loading) loading.style.display = "none";
   }

@@ -232,7 +232,7 @@ const MOTORISTAS_COLS = "id,nome,telefone,categoria,capacidade,cidade,estado,sta
 const ROTAS_COLS      = "id,codigo,nome,tipo_rota,destino_municipio,destino_estado,motorista_id,saida,chegada,distancia,frete_total,tempo,status,observacoes,cargas_ids";
 
 async function listar(req, res, tabela, colunas = "*") {
-  const { data, error } = await supabase.from(tabela).select(colunas);
+  const { data, error } = await supabaseAdmin.from(tabela).select(colunas);
 
   if (error) return res.status(400).json({ error: error.message });
 
