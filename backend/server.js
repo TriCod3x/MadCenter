@@ -393,7 +393,22 @@ app.put("/api/motoristas/:id", (req, res) => atualizar(req, res, "motoristas"));
 app.delete("/api/motoristas/:id", (req, res) => deletar(req, res, "motoristas"));
 
 // ── Rotas ─────────────────────────────────────────────────────────────────────
-app.get("/api/rotas", (req, res) => listar(req, res, "rotas", ROTAS_COLS));
+app.get("/api/rotas", async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("rotas")
+      .select(ROTAS_COLS);
+    if (error) {
+      console.error("[GET /api/rotas] Erro Supabase:", error.message, error.details);
+      return res.status(400).json({ error: error.message });
+    }
+    console.log(`[GET /api/rotas] Retornando ${data?.length ?? 0} rotas (sem filtro de motorista)`);
+    res.json(data || []);
+  } catch (e) {
+    console.error("[GET /api/rotas] Exceção:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 app.post("/api/rotas", (req, res) => criar(req, res, "rotas"));
 app.put("/api/rotas/:id", (req, res) => atualizar(req, res, "rotas"));
 app.delete("/api/rotas/:id", (req, res) => deletar(req, res, "rotas"));
