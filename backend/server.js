@@ -164,6 +164,27 @@ async function agruparPedidosEmRotas(novoPedido) {
       }
       console.log(`[agrupar] Rota ${rota.id} criada com ${ids.length} pedidos`);
     }
+
+    // Pedidos sem coords são ignorados pelo loop de agrupamento (não têm lat/lng para Haversine).
+    // Cada um recebe uma rota solo para não ficar sem rota planejada.
+    const naoAlocados = semRota.filter(p => !alocados.has(p.id));
+    for (const pedido of naoAlocados) {
+      const { data: rota, error: errRota } = await supabaseAdmin
+        .from("rotas")
+        .insert({
+          nome: `Auto - ${pedido.destino_municipio || "Sem destino"}`,
+          destino_municipio: pedido.destino_municipio,
+          destino_estado: pedido.destino_estado,
+          status: "planejada",
+          cargas_ids: [pedido.id],
+          frete_total: Number(pedido.valor_frete || 0),
+          distancia: Number(pedido.distancia_km || 0),
+        })
+        .select("id").single();
+      if (errRota || !rota?.id) { console.error("[agrupar] Erro ao criar rota solo:", errRota); continue; }
+      await supabaseAdmin.from("rota_pedidos").insert({ rota_id: rota.id, pedido_id: pedido.id });
+      console.log(`[agrupar] Rota solo ${rota.id} criada para pedido ${pedido.id} (sem coords)`);
+    }
   } catch (err) {
     console.error("[agruparPedidosEmRotas] Exceção:", err);
   }
