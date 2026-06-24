@@ -260,9 +260,16 @@ async function deletar(req, res, tabela) {
 app.get("/api/pedidos", (req, res) => listar(req, res, "pedidos", PEDIDOS_COLS));
 app.post("/api/pedidos", async (req, res) => {
   try {
+    // Converte strings vazias em null para campos opcionais
+    const body = { ...req.body };
+    const camposOpcionais = ["endereco_entrega", "numero", "complemento", "cep", "observacoes", "telefone", "lat", "lng"];
+    camposOpcionais.forEach(campo => {
+      if (body[campo] === "" || body[campo] === undefined) body[campo] = null;
+    });
+
     const { data: pedido, error: errIns } = await supabase
       .from("pedidos")
-      .insert(req.body)
+      .insert(body)
       .select()
       .single();
     if (errIns) return res.status(400).json({ error: errIns.message });
@@ -815,6 +822,38 @@ app.get("/api/relatorios/:id/csv", async (req, res) => {
     res.setHeader("Content-Type", "text/csv;charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="relatorio-${rel.periodo_inicio}-${rel.periodo_fim}.csv"`);
     res.send(csv);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Admin utilitários ─────────────────────────────────────────────────────────
+
+// POST /api/admin/reagrupar-todos — força reagrupamento de todos pedidos sem rota
+app.post("/api/admin/reagrupar-todos", autenticar, async (req, res) => {
+  try {
+    // Pedidos aguardando motorista
+    const { data: pedidosAguardando, error: errPed } = await supabaseAdmin
+      .from("pedidos")
+      .select("id,lat,lng,destino_municipio,destino_estado,valor_frete,distancia_km")
+      .eq("status", "aguardando motorista");
+    if (errPed) return res.status(400).json({ error: errPed.message });
+
+    // IDs já vinculados a alguma rota
+    const { data: vinculos } = await supabaseAdmin.from("rota_pedidos").select("pedido_id");
+    const comRota = new Set((vinculos || []).map(v => v.pedido_id));
+
+    const semRota = (pedidosAguardando || []).filter(p => !comRota.has(p.id));
+    if (!semRota.length) {
+      return res.json({ ok: true, reagrupados: 0, mensagem: "Nenhum pedido sem rota encontrado." });
+    }
+
+    // Chama agrupar para cada pedido sem rota (background, não paralelo para evitar duplicatas)
+    for (const pedido of semRota) {
+      await agruparPedidosEmRotas(pedido);
+    }
+
+    res.json({ ok: true, reagrupados: semRota.length, ids: semRota.map(p => p.id) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
