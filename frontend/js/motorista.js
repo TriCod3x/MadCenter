@@ -615,11 +615,16 @@ async function carregarMural(silencioso = false) {
       apiGet(`${API_BASE}/api/pedidos`)
     ]);
 
-    console.log("[mural] Total rotas recebidas:", todasRotas?.length, todasRotas);
+    console.log("[mural] Total rotas recebidas:", todasRotas?.length);
+    if (todasRotas?.length) console.log("[mural] Rota[0] raw:", JSON.stringify(todasRotas[0]));
     console.log("[mural] Total pedidos recebidos:", todosPedidos?.length);
 
     const rotasFiltradas = (todasRotas || []).filter(r => r.status === "planejada" && !r.motorista_id);
-    console.log("[mural] Rotas planejadas sem motorista:", rotasFiltradas.length, rotasFiltradas.map(r => ({ id: r.id, cargas_ids: r.cargas_ids })));
+    console.log("[mural] Rotas planejadas sem motorista:", rotasFiltradas.length);
+    // Diagnóstico: mostrar status e motorista_id de cada rota recebida
+    (todasRotas || []).forEach(r => {
+      console.log(`[mural] Rota ${r.id}: status="${r.status}" motorista_id=${JSON.stringify(r.motorista_id)} → passa filtro: ${r.status === "planejada" && !r.motorista_id}`);
+    });
 
     muralState.rotas   = rotasFiltradas;
     muralState.pedidos = todosPedidos || [];
