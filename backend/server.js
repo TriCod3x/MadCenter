@@ -113,7 +113,7 @@ async function agruparPedidosEmRotas(novoPedido) {
       const ids = pedidosList.map(p => p.id);
       const payload = {
         nome: `Auto - ${primeiro.destino_municipio || "Sem destino"}/${primeiro.destino_estado || ""}`,
-        tipo_rota: "entrega",
+        tipo_rota: "Rodoviária",
         destino_municipio: primeiro.destino_municipio || null,
         destino_estado: primeiro.destino_estado || null,
         status: "planejada",
