@@ -830,7 +830,7 @@ app.get("/api/relatorios/:id/csv", async (req, res) => {
 // ── Admin utilitários ─────────────────────────────────────────────────────────
 
 // POST /api/admin/reagrupar-todos — força reagrupamento de todos pedidos sem rota
-app.post("/api/admin/reagrupar-todos", autenticar, async (req, res) => {
+app.post("/api/admin/reagrupar-todos", async (req, res) => {
   try {
     // Pedidos aguardando motorista
     const { data: pedidosAguardando, error: errPed } = await supabaseAdmin
