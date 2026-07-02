@@ -1377,25 +1377,6 @@ tr:hover td {
   color: #ffd97a;
 }
 
-.leaflet-popup-content-wrapper {
-  border-radius: 10px;
-  box-shadow: 0 8px 28px rgba(0, 92, 46, .18);
-  font-size: 13px;
-  font-family: Inter, Segoe UI, Arial, sans-serif;
-  max-width: 280px;
-}
-
-.leaflet-popup-content {
-  margin: 12px 14px;
-  line-height: 1.6;
-}
-
-.leaflet-popup-content b {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 14px;
-  color: #005c2e;
-}
 
 /* ======================================
    OUTRAS PÁGINAS

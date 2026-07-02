@@ -53,6 +53,7 @@ const state = {
   rotas:           [],     // rotas em andamento do motorista
   pedidos:         [],     // pedidos dessas rotas
   map:             null,
+  infoWindow:      null,
   driverMarker:    null,
   deliveryMarkers: {},
   routeLine:       null,
@@ -402,18 +403,17 @@ async function cancelarPedido(pedidoId, rotaId) {
   }
 }
 
-// ── Mapa Leaflet ──────────────────────────────────────────────────────────────
+// ── Mapa (Google Maps) ─────────────────────────────────────────────────────────
 
 function iniciarMapa() {
-  if (!window.L) return;
+  // Aguarda a Maps JS API (carregada com loading=async)
+  if (!window.google?.maps) { ensureGoogleMaps().then(iniciarMapa); return; }
 
   const container = document.getElementById("motoristaMap");
   if (!container) return;
 
-  // Mapa já existe: apenas atualiza os layers sem destruir a instância
-  // (preserva zoom e posição entre refreshes)
+  // Mapa já existe: apenas redesenha os layers (preserva zoom e posição)
   if (state.map) {
-    setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 100);
     desenharRota();
     return;
   }
@@ -428,48 +428,58 @@ function iniciarMapa() {
     p => p.status !== "entregue" && p.lat && p.lng
   );
   const centro = primeiroPendente
-    ? [Number(primeiroPendente.lat), Number(primeiroPendente.lng)]
-    : [LOJA_LAT, LOJA_LNG];
+    ? { lat: Number(primeiroPendente.lat), lng: Number(primeiroPendente.lng) }
+    : { lat: LOJA_LAT, lng: LOJA_LNG };
 
-  state.map = L.map("motoristaMap", { zoomControl: true }).setView(centro, 12);
-
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 18,
-    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>'
-  }).addTo(state.map);
+  state.map = new google.maps.Map(container, {
+    center: centro,
+    zoom: 12,
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: true,
+    clickableIcons: false,
+    styles: MAP_STYLE_CLEAN,
+  });
+  state.infoWindow = new google.maps.InfoWindow();
 
   // Marcador fixo da loja
-  L.marker([LOJA_LAT, LOJA_LNG], {
-    icon: L.divIcon({
-      className: "",
-      html: `<div style="width:18px;height:18px;border-radius:50%;background:#4caf50;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45);"></div>`,
-      iconSize: [18, 18],
-      iconAnchor: [9, 9]
-    })
-  }).bindPopup("🏪 Madcenter — Ponto de partida").addTo(state.map);
-
-  setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 200);
+  const lojaMarker = new google.maps.Marker({
+    position: { lat: LOJA_LAT, lng: LOJA_LNG },
+    map: state.map,
+    title: "Madcenter — Ponto de partida",
+    icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: "#4caf50", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3, scale: 9 },
+  });
+  lojaMarker.addListener("click", () => {
+    state.infoWindow.setContent("🏪 Madcenter — Ponto de partida");
+    state.infoWindow.open({ anchor: lojaMarker, map: state.map });
+  });
 
   desenharRota();
   iniciarGeolocalizacao();
 }
 
-async function buscarRotaOSRM(pontos, signal) {
+// Busca a geometria da rota via backend (proxy da Directions API). Mantém suporte
+// a AbortSignal para cancelar chamadas obsoletas em refreshes rápidos.
+async function buscarRotaPath(pontos, signal) {
   try {
     const coords = pontos.map(p => `${p.lng},${p.lat}`).join(";");
-    const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
-    const res = await fetch(url, { signal: signal ?? AbortSignal.timeout(8000) });
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/api/rota-geometria?coords=${encodeURIComponent(coords)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal: signal ?? AbortSignal.timeout(8000),
+    });
     if (!res.ok) return null;
     const data = await res.json();
-    if (data.code !== "Ok" || !data.routes?.length) return null;
-    return data.routes[0].geometry;
+    const arr = data?.geometry?.coordinates;
+    if (Array.isArray(arr) && arr.length) return arr.map(([lng, lat]) => ({ lat, lng }));
+    return null;
   } catch {
     return null;
   }
 }
 
 async function desenharRota() {
-  // Cancela qualquer chamada OSRM anterior ainda em andamento
+  // Cancela qualquer chamada de rota anterior ainda em andamento
   if (state.rotaAbortCtrl) {
     state.rotaAbortCtrl.abort();
     state.rotaAbortCtrl = null;
@@ -478,10 +488,9 @@ async function desenharRota() {
   if (!state.map) return;
 
   // Remove marcadores e camada de rota anteriores
-  Object.values(state.deliveryMarkers).forEach(m => { try { m.remove(); } catch {} });
+  Object.values(state.deliveryMarkers).forEach(m => { try { m.setMap(null); } catch {} });
   state.deliveryMarkers = {};
-  if (state.routeLine) { try { state.routeLine.remove(); } catch {} state.routeLine = null; }
-  if (state.rotaLayer) { try { state.map.removeLayer(state.rotaLayer); } catch {} state.rotaLayer = null; }
+  if (state.rotaLayer) { try { state.rotaLayer.setMap(null); } catch {} state.rotaLayer = null; }
 
   const entregues = state.pedidos.filter(p => p.status === "entregue");
   const pendentes = state.pedidos.filter(p => p.status !== "entregue");
@@ -492,7 +501,7 @@ async function desenharRota() {
     lng: p.lng ? Number(p.lng) : obterCoordsMunicipio(p.destino_municipio, p.destino_estado).lng
   });
 
-  // Origem = último pedido entregue com coords, senão loja
+  // Origem = último pedido entregue com coords, senão loja (mantém "partir do ponto atual")
   const entreguesComCoord = state.pedidos
     .filter(p => p.status === "entregue" && p.lat && p.lng)
     .sort((a, b) => (b.data_entrega || b.entrega || "").localeCompare(a.data_entrega || a.entrega || ""));
@@ -506,39 +515,42 @@ async function desenharRota() {
     const ctrl = new AbortController();
     state.rotaAbortCtrl = ctrl;
 
-    const geojson = await buscarRotaOSRM(pontos, ctrl.signal);
+    const path = await buscarRotaPath(pontos, ctrl.signal);
 
     // Se uma chamada mais recente já abortou esta, descarta o resultado
     if (ctrl.signal.aborted) return;
     state.rotaAbortCtrl = null;
 
-    if (geojson) {
-      state.rotaLayer = L.geoJSON(geojson, {
-        style: { color: "#2196f3", weight: 5, opacity: 0.85 }
-      }).addTo(state.map);
+    if (path) {
+      state.rotaLayer = new google.maps.Polyline({
+        path, map: state.map, strokeColor: "#2196f3", strokeWeight: 5, strokeOpacity: 0.85,
+      });
     } else {
-      // Fallback: linha pontilhada se OSRM não responder
-      state.rotaLayer = L.polyline(
-        pontos.map(p => [p.lat, p.lng]),
-        { color: "#2196f3", weight: 4, dashArray: "8,6" }
-      ).addTo(state.map);
+      // Fallback: linha pontilhada se a rota não vier
+      state.rotaLayer = new google.maps.Polyline({
+        path: pontos, map: state.map, strokeColor: "#2196f3", strokeWeight: 4, strokeOpacity: 0,
+        icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, strokeWeight: 4, scale: 3 }, offset: "0", repeat: "10px" }],
+      });
     }
-    try { state.map.fitBounds(state.rotaLayer.getBounds(), { padding: [30, 30] }); } catch {}
+    const bounds = new google.maps.LatLngBounds();
+    pontos.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
+    try { state.map.fitBounds(bounds, 30); } catch {}
   }
 
-  // Marcadores dos pedidos (circleMarker)
+  // Marcadores dos pedidos
   const allPedidos = [...entregues, ...pendentes];
   allPedidos.forEach((p, i) => {
     const { lat, lng } = getCoordsP(p);
     const isEntregue = p.status === "entregue";
     const isProximo  = !isEntregue && i === entregues.length;
     const cor = isEntregue ? "#22c55e" : isProximo ? "#3b82f6" : p.status === "planejado" ? "#eab308" : "#6b7280";
-    const marker = L.circleMarker([lat, lng], {
-      radius: 10, color: "#fff", weight: 2, fillColor: cor, fillOpacity: 1
+    const marker = new google.maps.Marker({
+      position: { lat, lng }, map: state.map,
+      icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: cor, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2, scale: 7 },
     });
     const label = isEntregue ? "✅ Entregue" : isProximo ? "📍 Próxima entrega" : p.status === "planejado" ? "🗓 Planejado" : "⏳ Aguardando";
-    marker.bindPopup(`<b>${p.codigo || "—"}</b><br>${p.cliente || "—"}<br>${label}`);
-    marker.addTo(state.map);
+    const html = `<b>${p.codigo || "—"}</b><br>${p.cliente || "—"}<br>${label}`;
+    marker.addListener("click", () => { state.infoWindow.setContent(html); state.infoWindow.open({ anchor: marker, map: state.map }); });
     state.deliveryMarkers[p.id] = marker;
   });
 }
@@ -552,18 +564,18 @@ function iniciarGeolocalizacao() {
       state.currentPos = { lat: latitude, lng: longitude };
 
       if (state.driverMarker) {
-        state.driverMarker.setLatLng([latitude, longitude]);
+        state.driverMarker.setPosition({ lat: latitude, lng: longitude });
       } else {
-        state.driverMarker = L.marker([latitude, longitude], {
-          icon: L.divIcon({
-            className: "marcador-motorista",
-            html: `<div style="width:20px;height:20px;background:#00bcd4;border:3px solid white;border-radius:50%;box-shadow:0 0 8px rgba(0,188,212,0.8);"></div>`,
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
-          }),
-          title: "Sua localização"
-        }).addTo(state.map)
-          .bindPopup("📍 Você está aqui");
+        state.driverMarker = new google.maps.Marker({
+          position: { lat: latitude, lng: longitude },
+          map: state.map,
+          title: "Sua localização",
+          icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: "#00bcd4", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3, scale: 8 },
+        });
+        state.driverMarker.addListener("click", () => {
+          state.infoWindow.setContent("📍 Você está aqui");
+          state.infoWindow.open({ anchor: state.driverMarker, map: state.map });
+        });
       }
     },
     err => console.warn("Geolocalização indisponível:", err.message),
@@ -583,7 +595,7 @@ function switchTab(tab) {
   if (isEntregas) {
     const proximoComCoord = state.pedidos.find(p => p.status !== "entregue" && p.lat && p.lng);
     if (proximoComCoord) show("floatingBtn"); else hide("floatingBtn");
-    setTimeout(() => { if (state.map) state.map.invalidateSize(); }, 100);
+    // Google Maps redimensiona sozinho quando o container volta a ficar visível.
   } else {
     hide("floatingBtn");
     carregarMural();
@@ -782,8 +794,7 @@ function alternarTema() {
   const novo  = atual === "dark" ? "light" : "dark";
   localStorage.setItem("madcenter_tema", novo);
   aplicarTema(novo);
-  // Recalcula o mapa após troca de tema (caso layout mude)
-  if (state.map) setTimeout(() => state.map.invalidateSize(), 60);
+  // Google Maps redimensiona sozinho; não é preciso recalcular o mapa após troca de tema.
 }
 
 // ── Inicialização ────────────────────────────────────────────────────────────

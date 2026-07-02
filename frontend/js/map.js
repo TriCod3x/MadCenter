@@ -1,10 +1,12 @@
-﻿let logisticsMap;
+let logisticsMap;
 let mapBounds;
-const ROUTE_CACHE = {};
+const ROUTE_CACHE = {};        // coords-string → path [{lat,lng}] — persiste entre renders/filtros (evita re-chamar a Directions API)
 const ROUTE_LAYERS = {};
 let selectedRouteId = null;
 const DELIVERY_MARKERS = {};
 let mapLegendCollapsed = false;
+let mapInfoWindow = null;      // InfoWindow compartilhado
+const MAP_OVERLAYS = [];       // todos os markers/polylines ativos, para limpeza
 
 function normalizeCityName(text) {
   return String(text || "")
@@ -19,33 +21,20 @@ function coordKey(city, state) {
   return `${normalizeCityName(city)}-${String(state || "").trim().toLowerCase()}`;
 }
 
-function routeStyle(route) {
-  const color = routeStatusColor(route.status);
-  const weight = route.tipoRota === "Urbana" ? 4 : route.tipoRota === "Mista" ? 5 : 6;
-  let dashArray = null;
-  let opacity = 0.92;
+// ── Geometria de rota (via backend /api/rota-geometria — proxy da Directions API) ──
 
-  if (route.status === "planejada") {
-    dashArray = "6 6";
-    opacity = 0.82;
+// Chama o proxy do backend e converte o GeoJSON ([lng,lat]) em path do Google ([{lat,lng}]).
+async function fetchRotaPath(coords) {
+  try {
+    const data = await apiGet(`${API_BASE}/api/rota-geometria?coords=${encodeURIComponent(coords)}`);
+    const arr = data?.geometry?.coordinates;
+    if (Array.isArray(arr) && arr.length) {
+      return arr.map(([lng, lat]) => ({ lat, lng }));
+    }
+  } catch (error) {
+    console.warn("rota-geometria falhou", error);
   }
-
-  if (route.status === "cancelada") {
-    dashArray = "4 6";
-    opacity = 0.7;
-  }
-
-  if (route.status === "em andamento") {
-    dashArray = null;
-    opacity = 1;
-  }
-
-  if (route.status === "concluida") {
-    dashArray = null;
-    opacity = 0.95;
-  }
-
-  return { color, weight, opacity, dashArray };
+  return null;
 }
 
 async function getMultiWaypointGeometry(waypoints) {
@@ -53,35 +42,18 @@ async function getMultiWaypointGeometry(waypoints) {
   const coords = waypoints.map((w) => `${w.lng},${w.lat}`).join(";");
   const key = `multi:${coords}`;
   if (ROUTE_CACHE[key]) return ROUTE_CACHE[key];
-  try {
-    const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
-    const response = await fetch(url);
-    const data = await response.json();
-    if (data?.routes?.[0]?.geometry) {
-      ROUTE_CACHE[key] = data.routes[0].geometry;
-      return data.routes[0].geometry;
-    }
-  } catch (error) {
-    console.warn("OSRM multi-waypoint falhou", error);
-  }
-  return null;
+  const path = await fetchRotaPath(coords);
+  if (path) ROUTE_CACHE[key] = path;
+  return path;
 }
 
 async function getRouteGeometry(origin, destination) {
   const key = `${origin.lat},${origin.lng}:${destination.lat},${destination.lng}`;
   if (ROUTE_CACHE[key]) return ROUTE_CACHE[key];
-  try {
-    const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`;
-    const response = await fetch(url);
-    const data = await response.json();
-    if (data?.routes?.[0]?.geometry) {
-      ROUTE_CACHE[key] = data.routes[0].geometry;
-      return data.routes[0].geometry;
-    }
-  } catch (error) {
-    console.warn("OSRM route fetch falhou", error);
-  }
-  return null;
+  const coords = `${origin.lng},${origin.lat};${destination.lng},${destination.lat}`;
+  const path = await fetchRotaPath(coords);
+  if (path) ROUTE_CACHE[key] = path;
+  return path;
 }
 
 function getCityCoordinates(city, state) {
@@ -95,94 +67,117 @@ function getCoordForPedido(pedido) {
   return getCityCoordinates(pedido.destinoMunicipio, pedido.destinoEstado);
 }
 
-async function drawSequentialRoute(route) {
-  const LOJA = { lat: STORE_LOCATION.lat, lng: STORE_LOCATION.lng };
+// ── Helpers de mapa (Google Maps) ───────────────────────────────────────────────
 
-  const todosPedidos = (route.cargasIds || [])
-    .map((id) => getCargas().find((c) => c.id === id))
-    .filter(Boolean);
+// Símbolo circular colorido usado como ícone de marcador.
+function makeSimplePin(color, size = 16) {
+  return {
+    path: google.maps.SymbolPath.CIRCLE,
+    fillColor: color,
+    fillOpacity: 1,
+    strokeColor: "#fff",
+    strokeWeight: 2,
+    scale: size / 2,
+  };
+}
 
-  const entregues = todosPedidos.filter((c) => c.status === "entregue");
-  const pendentes  = todosPedidos.filter((c) => c.status !== "entregue" && c.status !== "cancelado");
+function storeMarkerIcon() {
+  return {
+    path: google.maps.SymbolPath.CIRCLE,
+    fillColor: "#111827",
+    fillOpacity: 1,
+    strokeColor: "#fff",
+    strokeWeight: 3,
+    scale: 9,
+  };
+}
 
-  if (!pendentes.length) return null;
-
-  // Ponto de partida: último pedido entregue (na ordem de cargas_ids) ou loja
-  let pontoPartida = LOJA;
-  if (entregues.length > 0) {
-    const ultimoEntregue = entregues[entregues.length - 1];
-    const coord = getCoordForPedido(ultimoEntregue);
-    if (coord) pontoPartida = coord;
-  }
-
-  // Waypoints: partida → pendente1 → pendente2 → ...
-  const waypoints = [pontoPartida];
-  for (const pedido of pendentes) {
-    const coord = getCoordForPedido(pedido);
-    if (coord) waypoints.push(coord);
-  }
-
-  if (waypoints.length < 2) return null;
-
-  const style = routeStyle(route);
-  let line;
-
-  const geometry = await getMultiWaypointGeometry(waypoints);
-  if (geometry) {
-    line = L.geoJSON(geometry, { style });
-  } else {
-    line = L.polyline(waypoints.map((w) => [w.lat, w.lng]), style);
-  }
-
-  line.addTo(logisticsMap);
-  waypoints.forEach((w) => extendBounds([w.lat, w.lng]));
-
-  // Marcador cinza no ponto de partida quando for uma entrega (não a loja)
-  if (entregues.length > 0) {
-    const deptIcon = L.divIcon({
-      className: "delivery-div-icon",
-      html: '<div class="delivery-pin departure-point"></div>',
-      iconSize: [14, 14],
-      iconAnchor: [7, 7]
+// Aplica estilo a uma polyline. Tracejado é feito com ícone repetido (Google não tem dashArray).
+function applyLineStyle(line, { color, weight, opacity, dashed }) {
+  if (dashed) {
+    line.setOptions({
+      strokeColor: color,
+      strokeWeight: weight,
+      strokeOpacity: 0,
+      icons: [{
+        icon: { path: "M 0,-1 0,1", strokeOpacity: opacity, strokeWeight: weight, scale: 3 },
+        offset: "0",
+        repeat: "12px",
+      }],
     });
-    const deptMarker = L.marker([pontoPartida.lat, pontoPartida.lng], { icon: deptIcon });
-    deptMarker.bindPopup("📍 Última entrega — ponto de partida atual");
-    deptMarker.addTo(logisticsMap);
+  } else {
+    line.setOptions({ strokeColor: color, strokeWeight: weight, strokeOpacity: opacity, icons: [] });
   }
+}
 
+function makePolyline(path, style) {
+  const line = new google.maps.Polyline({ path, map: logisticsMap });
+  applyLineStyle(line, style);
+  MAP_OVERLAYS.push(line);
   return line;
 }
 
-function initMap() {
-  if (!window.L) return null;
-  if (!logisticsMap) {
-    logisticsMap = L.map("logisticsMap", { zoomControl: true }).setView([STORE_LOCATION.lat, STORE_LOCATION.lng], 13);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 18,
-      attribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a>"
-    }).addTo(logisticsMap);
-  } else {
-    logisticsMap.setView([STORE_LOCATION.lat, STORE_LOCATION.lng], 13);
+function openMarkerPopup(marker) {
+  if (!mapInfoWindow || !marker._popupHtml) return;
+  mapInfoWindow.setContent(marker._popupHtml);
+  mapInfoWindow.open({ anchor: marker, map: logisticsMap });
+}
+
+function addMarker(coord, icon, popupHtml) {
+  const marker = new google.maps.Marker({ position: { lat: coord.lat, lng: coord.lng }, icon, map: logisticsMap });
+  if (popupHtml) {
+    marker._popupHtml = popupHtml;
+    marker.addListener("click", () => openMarkerPopup(marker));
   }
-  setTimeout(() => logisticsMap.invalidateSize(), 120);
+  MAP_OVERLAYS.push(marker);
+  return marker;
+}
+
+function fitBoundsCapped(bounds, padding, maxZoom) {
+  if (!bounds || bounds.isEmpty()) return;
+  logisticsMap.fitBounds(bounds, padding);
+  google.maps.event.addListenerOnce(logisticsMap, "idle", () => {
+    if (logisticsMap.getZoom() > maxZoom) logisticsMap.setZoom(maxZoom);
+  });
+}
+
+function initMap() {
+  if (!window.google?.maps) return null;
+  const center = { lat: STORE_LOCATION.lat, lng: STORE_LOCATION.lng };
+  if (!logisticsMap) {
+    const el = document.getElementById("logisticsMap");
+    if (!el) return null;
+    logisticsMap = new google.maps.Map(el, {
+      center,
+      zoom: 13,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: true,
+      clickableIcons: false,
+      styles: MAP_STYLE_CLEAN,
+    });
+    mapInfoWindow = new google.maps.InfoWindow();
+  } else {
+    logisticsMap.setCenter(center);
+    logisticsMap.setZoom(13);
+  }
   return logisticsMap;
 }
 
 function clearMapLayers() {
   if (!logisticsMap) return;
-  logisticsMap.eachLayer((layer) => {
-    if (layer instanceof L.Marker || layer instanceof L.Polyline || layer instanceof L.GeoJSON) {
-      try { logisticsMap.removeLayer(layer); } catch (error) { /**/ }
-    }
-  });
-  mapBounds = L.latLngBounds([]);
+  MAP_OVERLAYS.forEach((overlay) => { try { overlay.setMap(null); } catch (error) { /**/ } });
+  MAP_OVERLAYS.length = 0;
+  mapBounds = new google.maps.LatLngBounds();
   Object.keys(ROUTE_LAYERS).forEach((k) => delete ROUTE_LAYERS[k]);
   Object.keys(DELIVERY_MARKERS).forEach((k) => delete DELIVERY_MARKERS[k]);
   selectedRouteId = null;
+  if (mapInfoWindow) mapInfoWindow.close();
 }
 
+// Aceita [lat, lng] (formato usado nas chamadas existentes).
 function extendBounds(point) {
-  if (point) mapBounds.extend(point);
+  if (point) mapBounds.extend({ lat: point[0], lng: point[1] });
 }
 
 async function renderLogisticsMap(filters = {}) {
@@ -220,59 +215,40 @@ async function renderLogisticsMap(filters = {}) {
       const popup = `<strong>${pedido.codigo}</strong>${pedido.descricao ? ` — ${pedido.descricao}` : ""}<br>👤 ${pedido.cliente}`;
 
       if (pedido.status === "em rota") {
-        const geometry = await getRouteGeometry(store, coord);
-        let line;
-        const style = { color: "#3b82f6", weight: 4, opacity: 1 };
-        if (geometry) {
-          line = L.geoJSON(geometry, { style });
-        } else {
-          line = L.polyline([[store.lat, store.lng], [coord.lat, coord.lng]], style);
-        }
-        line.addTo(logisticsMap);
+        const path = await getRouteGeometry(store, coord);
+        const style = { color: "#3b82f6", weight: 4, opacity: 1, dashed: false };
+        const line = makePolyline(path || [store, coord], style);
         extendBounds([coord.lat, coord.lng]);
         lineEntries.push({ line, pedidoStatus: pedido.status });
 
-        const m = L.marker([coord.lat, coord.lng], { icon: makeSimplePin("#3b82f6") });
-        m.bindPopup(`${popup}<br>🚚 Em rota · ${route.codigo}`);
-        m.addTo(logisticsMap);
+        const m = addMarker(coord, makeSimplePin("#3b82f6"), `${popup}<br>🚚 Em rota · ${route.codigo}`);
         DELIVERY_MARKERS[pedido.id] = m;
         markers.push(m);
 
       } else if (pedido.status === "planejado") {
-        const line = L.polyline([[store.lat, store.lng], [coord.lat, coord.lng]], {
-          color: "#eab308", weight: 3, opacity: 0.85, dashArray: "8, 8"
-        });
-        line.addTo(logisticsMap);
+        const line = makePolyline([store, coord], { color: "#eab308", weight: 3, opacity: 0.85, dashed: true });
         extendBounds([store.lat, store.lng]);
         extendBounds([coord.lat, coord.lng]);
         lineEntries.push({ line, pedidoStatus: pedido.status });
 
-        const m = L.marker([coord.lat, coord.lng], { icon: makeSimplePin("#eab308") });
-        m.bindPopup(`${popup}<br>🗓 Planejado · ${route.codigo}`);
-        m.addTo(logisticsMap);
+        const m = addMarker(coord, makeSimplePin("#eab308"), `${popup}<br>🗓 Planejado · ${route.codigo}`);
         DELIVERY_MARKERS[pedido.id] = m;
         markers.push(m);
 
       } else if (pedido.status === "entregue") {
-        const m = L.marker([coord.lat, coord.lng], { icon: makeSimplePin("#22c55e") });
-        m.bindPopup(`${popup}<br>✅ Entregue · ${route.codigo}`);
-        m.addTo(logisticsMap);
+        const m = addMarker(coord, makeSimplePin("#22c55e"), `${popup}<br>✅ Entregue · ${route.codigo}`);
         extendBounds([coord.lat, coord.lng]);
         DELIVERY_MARKERS[pedido.id] = m;
         markers.push(m);
 
       } else if (pedido.status === "cancelado") {
-        const m = L.marker([coord.lat, coord.lng], { icon: makeSimplePin("#ef4444") });
-        m.bindPopup(`${popup}<br>❌ Cancelado · ${route.codigo}`);
-        m.addTo(logisticsMap);
+        const m = addMarker(coord, makeSimplePin("#ef4444"), `${popup}<br>❌ Cancelado · ${route.codigo}`);
         extendBounds([coord.lat, coord.lng]);
         DELIVERY_MARKERS[pedido.id] = m;
         markers.push(m);
 
       } else if (pedido.status === "aguardando motorista") {
-        const m = L.marker([coord.lat, coord.lng], { icon: makeSimplePin("#6b7280") });
-        m.bindPopup(`${popup}<br>⏳ Aguardando motorista · ${route.codigo}`);
-        m.addTo(logisticsMap);
+        const m = addMarker(coord, makeSimplePin("#6b7280"), `${popup}<br>⏳ Aguardando motorista · ${route.codigo}`);
         extendBounds([coord.lat, coord.lng]);
         DELIVERY_MARKERS[pedido.id] = m;
         markers.push(m);
@@ -288,12 +264,9 @@ async function renderLogisticsMap(filters = {}) {
 
   renderMapSummary(routeCards);
   renderRouteCards(routeCards);
-  if (mapBounds.isValid()) logisticsMap.fitBounds(mapBounds, { padding: [22, 22], maxZoom: 13 });
+  fitBoundsCapped(mapBounds, 22, 13);
   return routeCards;
 }
-
-// Marcadores de entrega são adicionados diretamente em renderLogisticsMap por pedido.status.
-// Esta função é mantida para compatibilidade mas não é mais chamada.
 
 function routeVisibleByFilters(route, filters = {}) {
   if (filters.status && filters.status !== "todos" && route.status !== filters.status) return false;
@@ -303,23 +276,8 @@ function routeVisibleByFilters(route, filters = {}) {
 }
 
 function drawStoreMarker(store) {
-  const marker = L.marker([store.lat, store.lng], { icon: storeMarkerIcon() });
-  marker.bindPopup(`<b>${STORE_LOCATION.name}</b><br>${STORE_LOCATION.address}`);
-  marker.addTo(logisticsMap);
+  addMarker(store, storeMarkerIcon(), `<b>${STORE_LOCATION.name}</b><br>${STORE_LOCATION.address}`);
   extendBounds([store.lat, store.lng]);
-}
-
-function storeMarkerIcon() {
-  return L.divIcon({ className: "store-div-icon", html: '<div class="store-pin"></div>', iconSize: [40, 40], iconAnchor: [20, 20] });
-}
-
-function makeSimplePin(color, size = 16) {
-  return L.divIcon({
-    className: "delivery-div-icon",
-    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3);"></div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2]
-  });
 }
 
 function routeStatusColor(status) {
@@ -332,45 +290,9 @@ function routeStatusColor(status) {
 }
 
 function pedidoLineStyle(status) {
-  if (status === "em rota")   return { color: "#3b82f6", weight: 4, opacity: 1,    dashArray: null };
-  if (status === "planejado") return { color: "#eab308", weight: 3, opacity: 0.85, dashArray: "8, 8" };
+  if (status === "em rota")   return { color: "#3b82f6", weight: 4, opacity: 1,    dashed: false };
+  if (status === "planejado") return { color: "#eab308", weight: 3, opacity: 0.85, dashed: true };
   return null;
-}
-
-async function drawRouteLine(origin, destination, route) {
-  const geometry = await getRouteGeometry(origin, destination);
-  let line;
-  const style = routeStyle(route);
-  if (geometry) {
-    line = L.geoJSON(geometry, { style });
-  } else {
-    line = L.polyline([[origin.lat, origin.lng], [destination.lat, destination.lng]], style);
-  }
-  line.addTo(logisticsMap);
-  extendBounds([origin.lat, origin.lng]);
-  extendBounds([destination.lat, destination.lng]);
-  return line;
-}
-
-function destinationMarkerIcon(status) {
-  return L.divIcon({ className: "delivery-div-icon", html: `<div class="delivery-pin ${status === 'concluida' ? 'completed' : status === 'em andamento' ? 'active' : 'pending'}"></div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
-}
-
-function drawDestinationMarker(destination, route) {
-  const marker = L.marker([destination.lat, destination.lng], { icon: destinationMarkerIcon(route.status) });
-  const driver = driverName(route.motoristaId);
-  marker.bindPopup(`
-    <strong>${route.codigo} · ${route.nome}</strong><br>
-    ${route.destinoMunicipio}/${route.destinoEstado} · ${route.tipoRota || "Rodoviária"}<br>
-    <strong>Motorista:</strong> ${driver}<br>
-    ${route.cargasIds?.length || 0} pedido(s)<br>
-    ${route.status}<br>
-    ${route.tempo ? `Tempo: ${route.tempo}<br>` : ""}
-    ${route.freteTotal ? `Frete total: ${money.format(Number(route.freteTotal || 0))}` : ""}
-  `);
-  marker.addTo(logisticsMap);
-  extendBounds([destination.lat, destination.lng]);
-  return marker;
 }
 
 function renderMapSummary(routes) {
@@ -438,25 +360,27 @@ function selectRoute(routeId) {
   Object.entries(ROUTE_LAYERS).forEach(([id, layer]) => {
     (layer.lineEntries || []).forEach(({ line }) => {
       if (id === routeId) {
-        line.setStyle({ color: "#F59E0B", weight: 5, opacity: 1, dashArray: null });
+        applyLineStyle(line, { color: "#F59E0B", weight: 5, opacity: 1, dashed: false });
       } else {
-        line.setStyle({ color: "#9ca3af", weight: 2, opacity: 0.35, dashArray: null });
+        applyLineStyle(line, { color: "#9ca3af", weight: 2, opacity: 0.35, dashed: false });
       }
     });
   });
 
-  // Centraliza o mapa na rota selecionada
+  // Centraliza o mapa na rota selecionada (loja ↔ destino)
   if (entry.destination) {
     const settings = getSettings();
     const storeLat = Number(settings?.latitudeLoja) || STORE_LOCATION.lat;
     const storeLng = Number(settings?.longitudeLoja) || STORE_LOCATION.lng;
-    const bounds = L.latLngBounds([storeLat, storeLng], [entry.destination.lat, entry.destination.lng]);
-    logisticsMap.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
+    const bounds = new google.maps.LatLngBounds();
+    bounds.extend({ lat: storeLat, lng: storeLng });
+    bounds.extend({ lat: entry.destination.lat, lng: entry.destination.lng });
+    fitBoundsCapped(bounds, 50, 13);
   }
 
   // Abre popup no primeiro marcador da rota
   const firstMarker = entry.markers?.[0];
-  if (firstMarker) firstMarker.openPopup();
+  if (firstMarker) openMarkerPopup(firstMarker);
 
   // Destaca marcadores dos pedidos da rota; esmaece os demais
   const rotaCargoIds = new Set(entry.route.cargasIds || []);
@@ -480,7 +404,7 @@ function deselectRoute() {
   Object.entries(ROUTE_LAYERS).forEach(([, entry]) => {
     (entry.lineEntries || []).forEach(({ line, pedidoStatus }) => {
       const style = pedidoLineStyle(pedidoStatus);
-      if (style) line.setStyle(style);
+      if (style) applyLineStyle(line, style);
     });
   });
 
@@ -488,10 +412,12 @@ function deselectRoute() {
   document.querySelectorAll(".map-route-card").forEach((card) => {
     card.classList.remove("selected");
   });
+
+  if (mapInfoWindow) mapInfoWindow.close();
 }
 
 function fitAllMapRoutes() {
-  if (mapBounds?.isValid()) logisticsMap.fitBounds(mapBounds, { padding: [24, 24], maxZoom: 13 });
+  fitBoundsCapped(mapBounds, 24, 13);
 }
 
 function renderMapLegend() {

@@ -70,15 +70,65 @@ async function lookupCep(input) {
   }
 }
 
+// Geocode forward a partir do CEP (via ViaCEP).
 async function geocodificarEndereco(viaCepData) {
+  const parts = [viaCepData.logradouro, viaCepData.bairro, viaCepData.localidade, viaCepData.uf, "Brasil"].filter(Boolean);
+  await aplicarGeocodeForward(parts.join(", "), { origem: "cep" });
+}
+
+// Geocode forward a partir do endereço digitado no formulário (disparado no blur do campo).
+async function geocodificarEnderecoDigitado() {
+  const road = document.getElementById("fEndereco").value.trim();
+  const city = document.getElementById("fMunicipio").value.trim();
+  const uf   = document.getElementById("fEstado").value.trim();
+  if (!road && !city) return;
+  const parts = [road, city, uf, "Brasil"].filter(Boolean);
+  await aplicarGeocodeForward(parts.join(", "), { origem: "endereco" });
+}
+
+// Chama /api/geocode?q= e aplica lat/lng em formState, preenche campos vazios com os
+// componentes retornados (CEP/município/estado) e sincroniza o marcador do picker se aberto.
+async function aplicarGeocodeForward(query, { origem } = {}) {
+  const msg = document.getElementById("cepMsg");
   try {
-    const parts = [viaCepData.logradouro, viaCepData.bairro, viaCepData.localidade, viaCepData.uf, "Brasil"].filter(Boolean);
-    const url   = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(parts.join(", "))}&format=json&limit=1&countrycodes=br`;
-    const res   = await fetch(url);
-    const list  = await res.json();
-    if (list.length) {
-      formState.lat = Number(list[0].lat);
-      formState.lng = Number(list[0].lon);
+    const geo = await apiGet(`${API_BASE}/api/geocode?q=${encodeURIComponent(query)}`);
+    if (!geo || geo.lat == null || geo.lng == null) return;
+    const lat = Number(geo.lat);
+    const lng = Number(geo.lng);
+    formState.lat = lat;
+    formState.lng = lng;
+
+    // Preenche apenas campos vazios para não sobrescrever o que o usuário digitou.
+    const setIfEmpty = (id, val) => {
+      const el = document.getElementById(id);
+      if (el && val && !el.value.trim()) el.value = val;
+    };
+    setIfEmpty("fMunicipio", geo.city);
+    setIfEmpty("fEstado", geo.stateCode);
+    if (geo.postcode && geo.postcode.length >= 8) {
+      const cepEl = document.getElementById("fCep");
+      if (cepEl && !cepEl.value.trim()) cepEl.value = geo.postcode.slice(0, 5) + "-" + geo.postcode.slice(5, 8);
+    }
+
+    const display = [document.getElementById("fEndereco").value.trim(), document.getElementById("fMunicipio").value.trim(), document.getElementById("fEstado").value.trim()].filter(Boolean).join(", ");
+    if (origem === "endereco" && msg) { msg.textContent = `✓ ${display || "Endereço localizado"}`; msg.className = "atend-cep-msg ok"; }
+
+    const preview = document.getElementById("atendLocationPreview");
+    if (preview) {
+      preview.textContent = `📍 ${display || `${lat.toFixed(5)}, ${lng.toFixed(5)}`}`;
+      preview.classList.remove("hidden");
+    }
+
+    // Sincroniza o marcador do picker se estiver aberto.
+    if (_mapPicker) {
+      const pos = { lat, lng };
+      if (_mapPickerMarker) _mapPickerMarker.setPosition(pos);
+      else _mapPickerMarker = new google.maps.Marker({ position: pos, map: _mapPicker });
+      _mapPicker.setCenter(pos);
+      _mapPicker.setZoom(15);
+      _mapPickerCoords = { lat, lng };
+      const info = document.getElementById("atendMapPickerInfo");
+      if (info) info.textContent = "📍 Ponto atualizado pelo endereço · Clique para mover";
     }
   } catch { /* geocodificação falhou — frete não exibido */ }
 }
@@ -448,13 +498,12 @@ function mostrarTelaPrincipal() {
 
 function _destroyMapPickerAtend() {
   if (_mapPickerInitTimer) { clearTimeout(_mapPickerInitTimer); _mapPickerInitTimer = null; }
+  if (_mapPickerMarker) {
+    try { _mapPickerMarker.setMap(null); } catch (e) { /* ignore */ }
+    _mapPickerMarker = null;
+  }
   if (_mapPicker) {
-    if (_mapPickerMarker) {
-      try { _mapPickerMarker.remove(); } catch (e) { /* ignore */ }
-      _mapPickerMarker = null;
-    }
-    _mapPicker.off();
-    try { _mapPicker.remove(); } catch (e) { /* ignore */ }
+    try { google.maps.event.clearInstanceListeners(_mapPicker); } catch (e) { /* ignore */ }
     _mapPicker = null;
   }
 }
@@ -467,32 +516,37 @@ function openMapPickerAtendente() {
   _destroyMapPickerAtend();
   _mapPickerCoords = null;
 
-  _mapPickerInitTimer = setTimeout(() => {
+  _mapPickerInitTimer = setTimeout(async () => {
     _mapPickerInitTimer = null;
+    await ensureGoogleMaps();
     const hasCoords = formState.lat && formState.lng;
     const initLat = hasCoords ? formState.lat : STORE_LAT;
     const initLng = hasCoords ? formState.lng : STORE_LNG;
 
-    const pinIcon = L.divIcon({ html: "📍", className: "custom-pin", iconSize: [30, 30], iconAnchor: [15, 30] });
-
-    _mapPicker = L.map("atendMapPickerContainer").setView([initLat, initLng], hasCoords ? 14 : 11);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>'
-    }).addTo(_mapPicker);
+    _mapPicker = new google.maps.Map(document.getElementById("atendMapPickerContainer"), {
+      center: { lat: initLat, lng: initLng },
+      zoom: hasCoords ? 14 : 11,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      clickableIcons: false,
+      styles: MAP_STYLE_CLEAN,
+    });
 
     if (hasCoords) {
       _mapPickerCoords = { lat: initLat, lng: initLng };
-      _mapPickerMarker = L.marker([initLat, initLng], { icon: pinIcon }).addTo(_mapPicker);
+      _mapPickerMarker = new google.maps.Marker({ position: { lat: initLat, lng: initLng }, map: _mapPicker });
       document.getElementById("atendMapPickerInfo").textContent = "📍 Ponto atual marcado · Clique para mover";
     }
 
-    _mapPicker.on("click", (e) => {
-      const { lat, lng } = e.latlng;
+    _mapPicker.addListener("click", (e) => {
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
       _mapPickerCoords = { lat, lng };
       if (_mapPickerMarker) {
-        _mapPickerMarker.setLatLng(e.latlng);
+        _mapPickerMarker.setPosition({ lat, lng });
       } else {
-        _mapPickerMarker = L.marker(e.latlng, { icon: pinIcon }).addTo(_mapPicker);
+        _mapPickerMarker = new google.maps.Marker({ position: { lat, lng }, map: _mapPicker });
       }
       document.getElementById("atendMapPickerInfo").textContent =
         `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} — Clique em "Confirmar localização"`;
@@ -521,18 +575,10 @@ async function confirmMapLocationAtendente() {
   if (msg) { msg.textContent = "Buscando endereço…"; msg.className = "atend-cep-msg"; }
 
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=pt-BR`;
-    const res = await fetch(url);
-    const data = await res.json();
+    const data = await apiGet(`${API_BASE}/api/geocode?lat=${lat}&lng=${lng}`);
 
-    if (data?.address) {
-      const addr = data.address;
-      const road = addr.road || addr.pedestrian || addr.footway || addr.street || "";
-      const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
-      const stateCode = addr.ISO3166_2_lvl4
-        ? addr.ISO3166_2_lvl4.replace("BR-", "")
-        : _getStateCodeAtend(addr.state || "");
-      const postcode = (addr.postcode || "").replace(/\D/g, "");
+    if (data && (data.road || data.city || data.stateCode)) {
+      const { road, city, stateCode, postcode } = data;
 
       if (road)      document.getElementById("fEndereco").value  = road;
       if (stateCode) document.getElementById("fEstado").value    = stateCode;
@@ -795,6 +841,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const cepInput = document.getElementById("fCep");
   cepInput.addEventListener("input",  () => applyCepMask(cepInput));
   cepInput.addEventListener("blur",   () => lookupCep(cepInput));
+
+  // Endereço digitado → geocode forward (sem depender do CEP)
+  const endInput = document.getElementById("fEndereco");
+  if (endInput) endInput.addEventListener("blur", () => geocodificarEnderecoDigitado());
 
   // Telefone
   const telInput = document.getElementById("fTelefone");

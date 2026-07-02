@@ -18,6 +18,7 @@ app.use(cors({
       "http://127.0.0.1:5500",
       "http://127.0.0.1:5501",
       "http://localhost:3000",
+      "http://localhost:3001",
     ];
     // Permite origens sem origin (ex: chamadas server-side) e domínios Vercel
     if (!origin || allowed.includes(origin) || /\.vercel\.app$/.test(origin)) {
@@ -46,6 +47,13 @@ if (!JWT_SECRET) {
   throw new Error("JWT_SECRET não foi configurado. Defina JWT_SECRET no arquivo .env.");
 }
 
+// Chave server-side do Google Maps (Directions + Geocoding). NUNCA é enviada ao cliente:
+// o frontend chama /api/rota-geometria e /api/geocode, que fazem o proxy aqui.
+const GOOGLE_MAPS_SERVER_KEY = process.env.GOOGLE_MAPS_SERVER_KEY;
+if (!GOOGLE_MAPS_SERVER_KEY) {
+  console.warn("[google] GOOGLE_MAPS_SERVER_KEY não configurada — /api/rota-geometria e /api/geocode retornarão vazio (frontend cai no fallback).");
+}
+
 function haversineKm(lat1, lng1, lat2, lng2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -71,6 +79,55 @@ function ordenarVizinhoMaisProximo(pedidos, lojaLat, lojaLng) {
   }
   return ordenados;
 }
+
+// ── Google Maps: utilitários (decode de polyline + cache em memória) ────────────
+
+// Decodifica o overview_polyline do Google para [{lat, lng}, ...]
+// (algoritmo padrão de "encoded polyline" do Google).
+function decodePolyline(encoded) {
+  const points = [];
+  let index = 0, lat = 0, lng = 0;
+  const len = encoded.length;
+  while (index < len) {
+    let result = 0, shift = 0, b;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+    result = 0; shift = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+    points.push({ lat: lat * 1e-5, lng: lng * 1e-5 });
+  }
+  return points;
+}
+
+// Cache simples em memória com TTL. Espelha o ROUTE_CACHE que já existe no cliente.
+function criarCache(ttlMs) {
+  const store = new Map();
+  return {
+    get(key) {
+      const entry = store.get(key);
+      if (!entry) return undefined;
+      if (Date.now() > entry.expira) { store.delete(key); return undefined; }
+      return entry.valor;
+    },
+    set(key, valor) {
+      store.set(key, { valor, expira: Date.now() + ttlMs });
+    },
+  };
+}
+
+const ROTA_CACHE    = criarCache(60 * 60 * 1000);      // 1h
+const GEOCODE_CACHE = criarCache(24 * 60 * 60 * 1000); // 24h
 
 async function agruparPedidosEmRotas(novoPedido) {
   try {
@@ -274,6 +331,153 @@ async function deletar(req, res, tabela) {
 
   res.json({ success: true });
 }
+
+// ── Google Maps: proxy Directions + Geocoding ──────────────────────────────────
+// Estes endpoints ficam sob o middleware autenticar() de /api (a chave só é usada
+// aqui no servidor). O frontend passa a chamá-los no lugar de OSRM/Nominatim.
+
+// GET /api/rota-geometria?coords=lng,lat;lng,lat;...
+// Mantém o MESMO formato de coords usado hoje pelo código OSRM (lng,lat separados por ";").
+// Retorna { geometry: <GeoJSON LineString> | null, distanciaMetros, duracaoSegundos }.
+app.get("/api/rota-geometria", async (req, res) => {
+  try {
+    const coordsStr = String(req.query.coords || "").trim();
+    if (!coordsStr) return res.status(400).json({ error: "Parâmetro 'coords' é obrigatório." });
+
+    // Parse "lng,lat;lng,lat;..." → [{ lat, lng }]
+    const pontos = coordsStr.split(";").map((par) => {
+      const [lng, lat] = par.split(",").map(Number);
+      return { lat, lng };
+    }).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+
+    if (pontos.length < 2) {
+      return res.status(400).json({ error: "São necessários pelo menos 2 pontos válidos." });
+    }
+
+    // Sem chave: responde vazio para o frontend cair no fallback de linha reta.
+    if (!GOOGLE_MAPS_SERVER_KEY) {
+      return res.json({ geometry: null, distanciaMetros: 0, duracaoSegundos: 0 });
+    }
+
+    const cacheKey = coordsStr;
+    const cached = ROTA_CACHE.get(cacheKey);
+    if (cached) return res.json(cached);
+
+    const origem  = pontos[0];
+    const destino = pontos[pontos.length - 1];
+    const meio    = pontos.slice(1, -1);
+
+    const params = new URLSearchParams({
+      origin: `${origem.lat},${origem.lng}`,
+      destination: `${destino.lat},${destino.lng}`,
+      mode: "driving",
+      language: "pt-BR",
+      key: GOOGLE_MAPS_SERVER_KEY,
+    });
+    if (meio.length) {
+      params.set("waypoints", meio.map((p) => `${p.lat},${p.lng}`).join("|"));
+    }
+
+    const url = `https://maps.googleapis.com/maps/api/directions/json?${params.toString()}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    if (data.status !== "OK" || !data.routes?.length) {
+      console.warn(`[google] Directions status=${data.status} ${data.error_message || ""}`);
+      // 200 com geometry:null → frontend usa fallback de linha reta
+      return res.json({ geometry: null, distanciaMetros: 0, duracaoSegundos: 0, status: data.status });
+    }
+
+    const rota = data.routes[0];
+    const linha = decodePolyline(rota.overview_polyline?.points || "");
+    const legs = rota.legs || [];
+    const distanciaMetros  = legs.reduce((s, l) => s + (l.distance?.value || 0), 0);
+    const duracaoSegundos  = legs.reduce((s, l) => s + (l.duration?.value || 0), 0);
+
+    const resultado = {
+      // GeoJSON usa ordem [lng, lat]; é o formato que L.geoJSON já consome hoje.
+      geometry: {
+        type: "LineString",
+        coordinates: linha.map((p) => [p.lng, p.lat]),
+      },
+      distanciaMetros,
+      duracaoSegundos,
+      status: "OK",
+    };
+
+    ROTA_CACHE.set(cacheKey, resultado);
+    res.json(resultado);
+  } catch (e) {
+    console.error("[google] Erro em /api/rota-geometria:", e.message);
+    // Não derruba o fluxo do cliente: devolve vazio para o fallback.
+    res.json({ geometry: null, distanciaMetros: 0, duracaoSegundos: 0, status: "ERROR" });
+  }
+});
+
+// Extrai campos normalizados de um resultado da Geocoding API do Google.
+function extrairEnderecoGoogle(result) {
+  const comps = result.address_components || [];
+  const pega = (tipo, curto = false) => {
+    const c = comps.find((x) => x.types.includes(tipo));
+    return c ? (curto ? c.short_name : c.long_name) : "";
+  };
+  return {
+    road: pega("route"),
+    city: pega("locality") || pega("administrative_area_level_2"),
+    stateCode: pega("administrative_area_level_1", true), // ex.: "MA"
+    postcode: (pega("postal_code") || "").replace(/\D/g, ""),
+  };
+}
+
+// GET /api/geocode
+//   Forward:  ?q=<endereço>            → { lat, lng, road, city, stateCode, postcode }
+//   Reverse:  ?lat=<lat>&lng=<lng>     → { lat, lng, road, city, stateCode, postcode }
+// Sem resultado / sem chave → campos nulos (frontend usa o próprio fallback).
+app.get("/api/geocode", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    const lat = req.query.lat;
+    const lng = req.query.lng;
+    const reverso = q === "" && lat != null && lng != null;
+
+    if (!q && !reverso) {
+      return res.status(400).json({ error: "Informe 'q' (forward) ou 'lat'+'lng' (reverse)." });
+    }
+
+    if (!GOOGLE_MAPS_SERVER_KEY) {
+      return res.json({ lat: null, lng: null });
+    }
+
+    const cacheKey = reverso ? `rev:${lat},${lng}` : `fwd:${q}`;
+    const cached = GEOCODE_CACHE.get(cacheKey);
+    if (cached) return res.json(cached);
+
+    const params = new URLSearchParams({ language: "pt-BR", region: "br", key: GOOGLE_MAPS_SERVER_KEY });
+    if (reverso) params.set("latlng", `${lat},${lng}`);
+    else params.set("address", q);
+
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    if (data.status !== "OK" || !data.results?.length) {
+      console.warn(`[google] Geocode status=${data.status} ${data.error_message || ""}`);
+      return res.json({ lat: null, lng: null, status: data.status });
+    }
+
+    const result = data.results[0];
+    const loc = result.geometry.location;
+    // Forward e reverse retornam os componentes de endereço (road/city/stateCode/postcode),
+    // permitindo autofill de CEP/município ao digitar um endereço, igual ao clique no mapa.
+    const resultado = { lat: loc.lat, lng: loc.lng, ...extrairEnderecoGoogle(result), status: "OK" };
+
+    GEOCODE_CACHE.set(cacheKey, resultado);
+    res.json(resultado);
+  } catch (e) {
+    console.error("[google] Erro em /api/geocode:", e.message);
+    res.json({ lat: null, lng: null, status: "ERROR" });
+  }
+});
 
 // ── Pedidos ───────────────────────────────────────────────────────────────────
 app.get("/api/pedidos", (req, res) => listar(req, res, "pedidos", PEDIDOS_COLS));

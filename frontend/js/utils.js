@@ -6,6 +6,32 @@ function getToken() {
   return sessionStorage.getItem("madcenter_token");
 }
 
+// ── Google Maps (carregamento async) ───────────────────────────────────────────
+// A Maps JS API é carregada com loading=async; o callback global (definido inline
+// no HTML, antes do script) resolve a promise abaixo. Use `await ensureGoogleMaps()`
+// antes de tocar em `google.maps.*`.
+function ensureGoogleMaps() {
+  if (window.google && window.google.maps) return Promise.resolve();
+  return window._googleMapsReady || Promise.resolve();
+}
+
+// ── Estilo de mapa ──────────────────────────────────────────────────────────────
+// Estilo limpo compartilhado por todos os google.maps.Map do app: esconde POIs
+// comerciais e ícones de trânsito que poluem o mapa e sobrepõem os marcadores de
+// entrega, mantendo ruas, bairros e labels de localização legíveis.
+const MAP_STYLE_CLEAN = [
+  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.business", elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.medical", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.place_of_worship", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.sports_complex", stylers: [{ visibility: "off" }] },
+  // Parques mantidos como referência visual, mas sem ícone de negócio.
+  { featureType: "poi.park", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  // Remove ícones/labels de transporte público (estações, pontos, etc.).
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+];
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 function sair() {

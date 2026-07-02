@@ -8,7 +8,6 @@
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <link rel="shortcut icon" href="assets/favicon.svg">
   <link rel="preconnect" href="https://cdnjs.cloudflare.com">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <link rel="stylesheet" href="css/motorista.css">
   <script>
     // Aplica tema salvo antes da pintura (evita flash)
@@ -183,7 +182,9 @@
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <!-- Google Maps JavaScript API (browser-key, restrita por HTTP referrer) -->
+  <script>window._googleMapsReady = new Promise((resolve) => { window.__onGoogleMapsReady = resolve; });</script>
+  <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDEO0f2aMzobfpywMok8EjfQLh7r-u_Z-Q&loading=async&language=pt-BR&region=BR&callback=__onGoogleMapsReady"></script>
   <script src="js/icons.js"></script>
   <script src="js/utils.js"></script>
   <script src="js/motorista.js"></script>

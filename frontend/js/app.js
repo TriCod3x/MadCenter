@@ -727,6 +727,9 @@ function openForm(entity, id = null) {
   document.getElementById("entityForm").addEventListener("submit", submitEntityForm);
   const munInput = document.querySelector('#entityForm [name="destinoMunicipio"]');
   if (munInput) setupMunicipioAutocomplete(munInput);
+  // Endereço digitado → geocode forward (sem depender do CEP)
+  const endInput = document.querySelector('#entityForm [name="enderecoEntrega"]');
+  if (endInput) endInput.addEventListener("blur", () => geocodeEnderecoDigitado(endInput.closest("form")));
   openModal();
 
   if (entity === "motoristas" && id) {
@@ -1072,31 +1075,69 @@ function setCepField(form, name, value) {
   if (el) el.value = value;
 }
 
+// Geocode forward a partir do CEP (via ViaCEP).
 async function geocodeEndereco(viaCepData, form) {
+  const parts = [viaCepData.logradouro, viaCepData.bairro, viaCepData.localidade, viaCepData.uf, "Brasil"].filter(Boolean);
+  await geocodeForward(parts.join(", "), form, { origem: "cep" });
+}
+
+// Geocode forward a partir do endereço digitado no formulário (disparado no blur do campo).
+async function geocodeEnderecoDigitado(form) {
+  if (!form) return;
+  const road = form.querySelector('[name="enderecoEntrega"]')?.value.trim() || "";
+  const city = form.querySelector('[name="destinoMunicipio"]')?.value.trim() || "";
+  const uf   = form.querySelector('[name="destinoEstado"]')?.value.trim() || "";
+  if (!road && !city) return;
+  const parts = [road, city, uf, "Brasil"].filter(Boolean);
+  await geocodeForward(parts.join(", "), form, { origem: "endereco" });
+}
+
+// Chama /api/geocode?q=, grava lat/lng nos campos ocultos, atualiza o frete, preenche
+// campos vazios com os componentes retornados e sincroniza o marcador do picker se aberto.
+async function geocodeForward(query, form, { origem } = {}) {
   try {
-    const parts = [viaCepData.logradouro, viaCepData.bairro, viaCepData.localidade, viaCepData.uf, "Brasil"].filter(Boolean);
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(parts.join(", "))}&format=json&limit=1&countrycodes=br`;
-    const res = await fetch(url);
-    const results = await res.json();
-    if (results.length) {
-      const lat = Number(results[0].lat);
-      const lng = Number(results[0].lon);
-      setCepField(form, "lat", lat);
-      setCepField(form, "lng", lng);
-      updateFreteEstimado(form, lat, lng);
-      // Sincroniza marcador no picker se estiver aberto
-      if (_mapPicker) {
-        if (_mapPickerMarker) {
-          _mapPickerMarker.setLatLng([lat, lng]);
-        } else {
-          const pinIcon = L.divIcon({ html: "📍", className: "custom-pin", iconSize: [30, 30], iconAnchor: [15, 30] });
-          _mapPickerMarker = L.marker([lat, lng], { icon: pinIcon }).addTo(_mapPicker);
-        }
-        _mapPicker.setView([lat, lng], 14);
-        _mapPickerCoords = { lat, lng };
-        document.getElementById("mapPickerInfo").textContent =
-          `${lat.toFixed(5)}, ${lng.toFixed(5)} — Ponto atualizado pelo CEP`;
+    const geo = await apiGet(`${API_BASE}/api/geocode?q=${encodeURIComponent(query)}`);
+    if (!geo || geo.lat == null || geo.lng == null) return;
+    const lat = Number(geo.lat);
+    const lng = Number(geo.lng);
+    setCepField(form, "lat", lat);
+    setCepField(form, "lng", lng);
+    updateFreteEstimado(form, lat, lng);
+
+    // Preenche apenas campos vazios para não sobrescrever o que o usuário digitou.
+    const setIfEmpty = (name, val) => {
+      const el = form.querySelector(`[name="${name}"]`);
+      if (el && val && !el.value.trim()) el.value = val;
+    };
+    setIfEmpty("destinoMunicipio", geo.city);
+    setIfEmpty("destinoEstado", geo.stateCode);
+    if (geo.postcode && geo.postcode.length >= 8) {
+      const cepEl = form.querySelector('[name="cep"]');
+      if (cepEl && !cepEl.value.trim()) cepEl.value = geo.postcode.slice(0, 5) + "-" + geo.postcode.slice(5, 8);
+    }
+
+    if (origem === "endereco") {
+      const msg = document.getElementById("cepMsg");
+      if (msg) {
+        const display = [form.querySelector('[name="enderecoEntrega"]')?.value.trim(), geo.city, geo.stateCode].filter(Boolean).join(", ");
+        msg.textContent = `✓ ${display || "Endereço localizado"}`;
+        msg.className = "cep-msg cep-ok";
       }
+    }
+
+    // Sincroniza marcador no picker se estiver aberto
+    if (_mapPicker) {
+      const pos = { lat, lng };
+      if (_mapPickerMarker) {
+        _mapPickerMarker.setPosition(pos);
+      } else {
+        _mapPickerMarker = new google.maps.Marker({ position: pos, map: _mapPicker });
+      }
+      _mapPicker.setCenter(pos);
+      _mapPicker.setZoom(14);
+      _mapPickerCoords = { lat, lng };
+      document.getElementById("mapPickerInfo").textContent =
+        `${lat.toFixed(5)}, ${lng.toFixed(5)} — Ponto atualizado pelo ${origem === "endereco" ? "endereço" : "CEP"}`;
     }
   } catch (e) {
     console.warn("Geocodificação falhou:", e);
@@ -1188,41 +1229,41 @@ function carregarMapaHistoricoMotorista(motoristaId) {
   if (semMsg) semMsg.style.display = "none";
 
   // Inicializa o mapa com delay para garantir que o container está visível
-  setTimeout(() => {
+  setTimeout(async () => {
     if (!document.getElementById("mapaHistoricoMotorista")) return;
+    await ensureGoogleMaps();
+    const el = document.getElementById("mapaHistoricoMotorista");
+    if (!el) return;
 
-    const map = L.map("mapaHistoricoMotorista", { zoomControl: true });
+    const map = new google.maps.Map(el, {
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: true,
+      clickableIcons: false,
+      styles: MAP_STYLE_CLEAN,
+    });
     window._mapaHistorico = map;
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 18,
-      attribution: "© OpenStreetMap"
-    }).addTo(map);
-
-    const bounds = pedidos.map(p => [p.lat, p.lng]);
+    const infoWindow = new google.maps.InfoWindow();
+    const bounds = new google.maps.LatLngBounds();
 
     pedidos.forEach(p => {
-      L.circleMarker([p.lat, p.lng], {
-        radius: 8,
-        color: "#fff",
-        weight: 2,
-        fillColor: "#22c55e",
-        fillOpacity: 1
-      }).bindPopup(`
-        <b>${p.codigo || "—"}</b><br>
-        ${p.cliente || "—"}<br>
-        ${p.enderecoEntrega ? p.enderecoEntrega + "<br>" : ""}
-        <small style="color:#666">${p.destinoMunicipio || ""}/${p.destinoEstado || ""}</small>
-      `).addTo(map);
+      const pos = { lat: p.lat, lng: p.lng };
+      const marker = new google.maps.Marker({
+        position: pos,
+        map,
+        icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: "#22c55e", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2, scale: 6 },
+      });
+      const html = `<b>${p.codigo || "—"}</b><br>${p.cliente || "—"}<br>${p.enderecoEntrega ? p.enderecoEntrega + "<br>" : ""}<small style="color:#666">${p.destinoMunicipio || ""}/${p.destinoEstado || ""}</small>`;
+      marker.addListener("click", () => { infoWindow.setContent(html); infoWindow.open({ anchor: marker, map }); });
+      bounds.extend(pos);
     });
 
-    if (bounds.length === 1) {
-      map.setView(bounds[0], 13);
-    } else {
-      map.fitBounds(bounds, { padding: [20, 20] });
+    if (pedidos.length === 1) {
+      map.setCenter({ lat: pedidos[0].lat, lng: pedidos[0].lng });
+      map.setZoom(13);
+    } else if (pedidos.length > 1) {
+      map.fitBounds(bounds, 20);
     }
-
-    map.invalidateSize();
   }, 300);
 }
 
@@ -1230,13 +1271,12 @@ function carregarMapaHistoricoMotorista(motoristaId) {
 
 function _destroyMapPicker() {
   if (_mapPickerInitTimer) { clearTimeout(_mapPickerInitTimer); _mapPickerInitTimer = null; }
+  if (_mapPickerMarker) {
+    try { _mapPickerMarker.setMap(null); } catch (e) { /* ignore */ }
+    _mapPickerMarker = null;
+  }
   if (_mapPicker) {
-    if (_mapPickerMarker) {
-      try { _mapPickerMarker.remove(); } catch (e) { /* ignore */ }
-      _mapPickerMarker = null;
-    }
-    _mapPicker.off();
-    try { _mapPicker.remove(); } catch (e) { /* ignore Leaflet cleanup errors */ }
+    try { google.maps.event.clearInstanceListeners(_mapPicker); } catch (e) { /* ignore */ }
     _mapPicker = null;
   }
 }
@@ -1251,39 +1291,39 @@ function openMapPicker() {
   _destroyMapPicker();
   _mapPickerCoords = null;
 
-  _mapPickerInitTimer = setTimeout(() => {
+  _mapPickerInitTimer = setTimeout(async () => {
     _mapPickerInitTimer = null;
+    await ensureGoogleMaps();
     const latInput = _mapPickerForm.querySelector('[name="lat"]');
     const lngInput = _mapPickerForm.querySelector('[name="lng"]');
     const hasCoords = latInput?.value && lngInput?.value && Number(latInput.value) && Number(lngInput.value);
     const initLat = hasCoords ? Number(latInput.value) : -4.760287;
     const initLng = hasCoords ? Number(lngInput.value) : -42.573777;
 
-    const pinIcon = L.divIcon({
-      html: "📍",
-      className: "custom-pin",
-      iconSize: [30, 30],
-      iconAnchor: [15, 30]
+    _mapPicker = new google.maps.Map(document.getElementById("mapPickerContainer"), {
+      center: { lat: initLat, lng: initLng },
+      zoom: hasCoords ? 14 : 11,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      clickableIcons: false,
+      styles: MAP_STYLE_CLEAN,
     });
-
-    _mapPicker = L.map("mapPickerContainer").setView([initLat, initLng], hasCoords ? 14 : 11);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>'
-    }).addTo(_mapPicker);
 
     if (hasCoords) {
       _mapPickerCoords = { lat: initLat, lng: initLng };
-      _mapPickerMarker = L.marker([initLat, initLng], { icon: pinIcon }).addTo(_mapPicker);
+      _mapPickerMarker = new google.maps.Marker({ position: { lat: initLat, lng: initLng }, map: _mapPicker });
       document.getElementById("mapPickerInfo").textContent = "Ponto atual marcado · Clique para mover";
     }
 
-    _mapPicker.on("click", (e) => {
-      const { lat, lng } = e.latlng;
+    _mapPicker.addListener("click", (e) => {
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
       _mapPickerCoords = { lat, lng };
       if (_mapPickerMarker) {
-        _mapPickerMarker.setLatLng(e.latlng);
+        _mapPickerMarker.setPosition({ lat, lng });
       } else {
-        _mapPickerMarker = L.marker(e.latlng, { icon: pinIcon }).addTo(_mapPicker);
+        _mapPickerMarker = new google.maps.Marker({ position: { lat, lng }, map: _mapPicker });
       }
       document.getElementById("mapPickerInfo").textContent =
         `${lat.toFixed(5)}, ${lng.toFixed(5)} — Clique em "Confirmar localização"`;
@@ -1316,18 +1356,10 @@ async function confirmMapLocation() {
   if (msg) { msg.textContent = "Buscando endereço…"; msg.className = "cep-msg"; }
 
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=pt-BR`;
-    const res = await fetch(url);
-    const data = await res.json();
+    const data = await apiGet(`${API_BASE}/api/geocode?lat=${lat}&lng=${lng}`);
 
-    if (data?.address) {
-      const addr = data.address;
-      const road = addr.road || addr.pedestrian || addr.footway || addr.street || "";
-      const city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
-      const stateCode = addr.ISO3166_2_lvl4
-        ? addr.ISO3166_2_lvl4.replace("BR-", "")
-        : _getStateCode(addr.state || "");
-      const postcode = (addr.postcode || "").replace(/\D/g, "");
+    if (data && (data.road || data.city || data.stateCode)) {
+      const { road, city, stateCode, postcode } = data;
 
       if (road) setCepField(form, "enderecoEntrega", road);
       if (stateCode) setCepField(form, "destinoEstado", stateCode);
