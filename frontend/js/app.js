@@ -706,7 +706,7 @@ function openForm(entity, id = null) {
 
   const mapaHtml = (entity === "motoristas" && id) ? `
     <div class="form-field full" style="display:flex;flex-direction:column;gap:.5rem">
-      <span style="font-weight:600;font-size:.875rem;color:var(--text)">📍 Últimas entregas realizadas</span>
+      <span style="font-weight:600;font-size:.875rem;color:var(--text);display:inline-flex;align-items:center;gap:6px">${Icons.mapPin(16)} Últimas entregas realizadas</span>
       <div id="mapaHistoricoMotorista" style="height:260px;border-radius:12px;background:var(--surface-soft);overflow:hidden"></div>
       <p id="semEntregasMsg" style="display:none;color:var(--muted);font-size:.8rem;text-align:center;padding:8px 0;margin:0">
         Nenhuma entrega registrada para este motorista.
@@ -1253,7 +1253,12 @@ function carregarMapaHistoricoMotorista(motoristaId) {
         map,
         icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: "#22c55e", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2, scale: 6 },
       });
-      const html = `<b>${p.codigo || "—"}</b><br>${p.cliente || "—"}<br>${p.enderecoEntrega ? p.enderecoEntrega + "<br>" : ""}<small style="color:#666">${p.destinoMunicipio || ""}/${p.destinoEstado || ""}</small>`;
+      const html = buildInfoWindowHtml({
+        titulo: p.codigo || "—",
+        subtitulo: p.cliente || "—",
+        status: "entregue",
+        linhas: [p.enderecoEntrega || null, [p.destinoMunicipio, p.destinoEstado].filter(Boolean).join("/") || null],
+      });
       marker.addListener("click", () => { infoWindow.setContent(html); infoWindow.open({ anchor: marker, map }); });
       bounds.extend(pos);
     });

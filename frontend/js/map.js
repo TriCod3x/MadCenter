@@ -212,7 +212,13 @@ async function renderLogisticsMap(filters = {}) {
       if (!coord) return;
       if (!firstCoord) firstCoord = coord;
 
-      const popup = `<strong>${pedido.codigo}</strong>${pedido.descricao ? ` — ${pedido.descricao}` : ""}<br>👤 ${pedido.cliente}`;
+      const popup = buildInfoWindowHtml({
+        titulo: pedido.codigo,
+        subtitulo: pedido.cliente,
+        status: pedido.status,
+        linhas: [pedido.descricao || null, `Rota ${route.codigo}`],
+      });
+      const cor = pedidoStatusMeta(pedido.status).color;
 
       if (pedido.status === "em rota") {
         const path = await getRouteGeometry(store, coord);
@@ -221,7 +227,7 @@ async function renderLogisticsMap(filters = {}) {
         extendBounds([coord.lat, coord.lng]);
         lineEntries.push({ line, pedidoStatus: pedido.status });
 
-        const m = addMarker(coord, makeSimplePin("#3b82f6"), `${popup}<br>🚚 Em rota · ${route.codigo}`);
+        const m = addMarker(coord, makeSimplePin(cor), popup);
         DELIVERY_MARKERS[pedido.id] = m;
         markers.push(m);
 
@@ -231,24 +237,12 @@ async function renderLogisticsMap(filters = {}) {
         extendBounds([coord.lat, coord.lng]);
         lineEntries.push({ line, pedidoStatus: pedido.status });
 
-        const m = addMarker(coord, makeSimplePin("#eab308"), `${popup}<br>🗓 Planejado · ${route.codigo}`);
+        const m = addMarker(coord, makeSimplePin(cor), popup);
         DELIVERY_MARKERS[pedido.id] = m;
         markers.push(m);
 
-      } else if (pedido.status === "entregue") {
-        const m = addMarker(coord, makeSimplePin("#22c55e"), `${popup}<br>✅ Entregue · ${route.codigo}`);
-        extendBounds([coord.lat, coord.lng]);
-        DELIVERY_MARKERS[pedido.id] = m;
-        markers.push(m);
-
-      } else if (pedido.status === "cancelado") {
-        const m = addMarker(coord, makeSimplePin("#ef4444"), `${popup}<br>❌ Cancelado · ${route.codigo}`);
-        extendBounds([coord.lat, coord.lng]);
-        DELIVERY_MARKERS[pedido.id] = m;
-        markers.push(m);
-
-      } else if (pedido.status === "aguardando motorista") {
-        const m = addMarker(coord, makeSimplePin("#6b7280"), `${popup}<br>⏳ Aguardando motorista · ${route.codigo}`);
+      } else if (pedido.status === "entregue" || pedido.status === "cancelado" || pedido.status === "aguardando motorista") {
+        const m = addMarker(coord, makeSimplePin(cor), popup);
         extendBounds([coord.lat, coord.lng]);
         DELIVERY_MARKERS[pedido.id] = m;
         markers.push(m);

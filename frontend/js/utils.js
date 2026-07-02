@@ -32,6 +32,59 @@ const MAP_STYLE_CLEAN = [
   { featureType: "transit", stylers: [{ visibility: "off" }] },
 ];
 
+// ── Status de pedido (paleta compartilhada) ────────────────────────────────────
+// Fonte única para cor + rótulo por status de pedido, reusada nos InfoWindows e badges.
+const PEDIDO_STATUS_META = {
+  "em rota":              { label: "Em rota",              color: "#3b82f6" },
+  "planejado":            { label: "Planejado",            color: "#eab308" },
+  "entregue":             { label: "Entregue",             color: "#22c55e" },
+  "cancelado":            { label: "Cancelado",            color: "#ef4444" },
+  "aguardando motorista": { label: "Aguardando motorista", color: "#6b7280" },
+};
+
+function pedidoStatusMeta(status) {
+  return PEDIDO_STATUS_META[status] || { label: status || "—", color: "#6b7280" };
+}
+
+// ── InfoWindow (conteúdo padronizado) ──────────────────────────────────────────
+// Gera o HTML de um InfoWindow do Google Maps com hierarquia clara: título em
+// destaque, subtítulo, badge de status colorido e linhas extras. Estilos inline
+// porque o balão do InfoWindow é sempre branco (independe do tema) e fica fora do
+// escopo do CSS das páginas.
+function buildInfoWindowHtml({ titulo, subtitulo, status, badge, linhas = [] } = {}) {
+  const meta = badge || (status ? pedidoStatusMeta(status) : null);
+  const badgeHtml = meta
+    ? `<span style="display:inline-block;margin-top:6px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;color:#fff;background:${meta.color}">${meta.label}</span>`
+    : "";
+  const linhasHtml = linhas
+    .filter(Boolean)
+    .map((l) => `<div style="font-size:11.5px;color:#6b7280;margin-top:4px">${l}</div>`)
+    .join("");
+  return `
+    <div style="min-width:150px;max-width:240px;font-family:inherit;line-height:1.35;padding:2px 2px 4px">
+      <div style="font-weight:700;font-size:14px;color:#111827">${titulo ?? "—"}</div>
+      ${subtitulo ? `<div style="font-size:12.5px;color:#374151;margin-top:2px">${subtitulo}</div>` : ""}
+      ${badgeHtml}
+      ${linhasHtml}
+    </div>
+  `.trim();
+}
+
+// ── Formatação de distância / duração ──────────────────────────────────────────
+function fmtDistancia(metros) {
+  if (!metros || metros < 0) return null;
+  return metros < 1000 ? `${Math.round(metros)} m` : `${(metros / 1000).toFixed(1)} km`;
+}
+
+function fmtDuracao(segundos) {
+  if (!segundos || segundos < 0) return null;
+  const min = Math.round(segundos / 60);
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const r = min % 60;
+  return r ? `${h}h${String(r).padStart(2, "0")}` : `${h}h`;
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 function sair() {

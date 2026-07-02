@@ -42,8 +42,8 @@ function distLoja(p) {
 }
 
 function distLojaLabel(p) {
-  if (!p.lat || !p.lng) return "📍 Distância não disponível";
-  return `📍 ${distLoja(p).toFixed(1)} km da loja`;
+  if (!p.lat || !p.lng) return "Distância indisponível";
+  return `${distLoja(p).toFixed(1)} km da loja`;
 }
 
 // ── Estado global ────────────────────────────────────────────────────────────
@@ -450,7 +450,7 @@ function iniciarMapa() {
     icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: "#4caf50", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3, scale: 9 },
   });
   lojaMarker.addListener("click", () => {
-    state.infoWindow.setContent("🏪 Madcenter — Ponto de partida");
+    state.infoWindow.setContent(buildInfoWindowHtml({ titulo: "Madcenter", subtitulo: "Ponto de partida" }));
     state.infoWindow.open({ anchor: lojaMarker, map: state.map });
   });
 
@@ -458,24 +458,56 @@ function iniciarMapa() {
   iniciarGeolocalizacao();
 }
 
-// Busca a geometria da rota via backend (proxy da Directions API). Mantém suporte
-// a AbortSignal para cancelar chamadas obsoletas em refreshes rápidos.
+// Combina múltiplos AbortSignals num só (aborta quando qualquer um abortar).
+// Usado para aplicar um timeout real mesmo quando um signal de cancelamento é passado.
+function combineSignals(signals) {
+  const ctrl = new AbortController();
+  for (const s of signals) {
+    if (!s) continue;
+    if (s.aborted) { ctrl.abort(); break; }
+    s.addEventListener("abort", () => ctrl.abort(), { once: true });
+  }
+  return ctrl.signal;
+}
+
+// Busca a geometria da rota via backend (proxy da Directions API). Retorna
+// { path, distanciaMetros, duracaoSegundos } quando a Directions responde com
+// traçado real, ou null quando falha genuinamente (erro/sem resultado) — só nesse
+// caso o chamador deve cair no fallback de linha reta. Loga falhas para não serem
+// silenciosas. Aplica timeout de 10s combinado com o signal de cancelamento.
 async function buscarRotaPath(pontos, signal) {
   try {
     const coords = pontos.map(p => `${p.lng},${p.lat}`).join(";");
     const token = getToken();
     const res = await fetch(`${API_BASE}/api/rota-geometria?coords=${encodeURIComponent(coords)}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
-      signal: signal ?? AbortSignal.timeout(8000),
+      signal: combineSignals([signal, AbortSignal.timeout(10000)]),
     });
-    if (!res.ok) return null;
+    if (!res.ok) { console.warn(`[rota] /api/rota-geometria HTTP ${res.status}`); return null; }
     const data = await res.json();
     const arr = data?.geometry?.coordinates;
-    if (Array.isArray(arr) && arr.length) return arr.map(([lng, lat]) => ({ lat, lng }));
+    if (Array.isArray(arr) && arr.length) {
+      return {
+        path: arr.map(([lng, lat]) => ({ lat, lng })),
+        distanciaMetros: Number(data.distanciaMetros) || 0,
+        duracaoSegundos: Number(data.duracaoSegundos) || 0,
+      };
+    }
+    console.warn(`[rota] Directions sem geometria (status=${data?.status || "?"}) — usando fallback reto`);
     return null;
-  } catch {
+  } catch (e) {
+    if (e?.name !== "AbortError") console.warn("[rota] Falha ao buscar geometria:", e?.message || e);
     return null;
   }
+}
+
+// Cap de zoom após fitBounds (evita zoom-out excessivo em rotas curtas).
+function fitBoundsCappedMoto(bounds, paddingPx, maxZoom) {
+  if (!bounds || bounds.isEmpty() || !state.map) return;
+  state.map.fitBounds(bounds, paddingPx);
+  google.maps.event.addListenerOnce(state.map, "idle", () => {
+    if (state.map.getZoom() > maxZoom) state.map.setZoom(maxZoom);
+  });
 }
 
 async function desenharRota() {
@@ -496,10 +528,19 @@ async function desenharRota() {
   const pendentes = state.pedidos.filter(p => p.status !== "entregue");
   if (!pendentes.length && !entregues.length) return;
 
+  // Coord para exibir marcador (aceita fallback de município p/ não sumir do mapa).
   const getCoordsP = p => ({
     lat: p.lat ? Number(p.lat) : obterCoordsMunicipio(p.destino_municipio, p.destino_estado).lat,
     lng: p.lng ? Number(p.lng) : obterCoordsMunicipio(p.destino_municipio, p.destino_estado).lng
   });
+
+  // Coord REAL do pedido (só quando há lat/lng válidos). Usada na Directions e no
+  // bounds — nunca centroide de município, para não puxar o traçado nem o zoom.
+  const coordRealP = p => {
+    const lat = Number(p.lat), lng = Number(p.lng);
+    return (p.lat && p.lng && Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0))
+      ? { lat, lng } : null;
+  };
 
   // Origem = último pedido entregue com coords, senão loja (mantém "partir do ponto atual")
   const entreguesComCoord = state.pedidos
@@ -509,33 +550,40 @@ async function desenharRota() {
   const pontoPartida = ultimoEntregue
     ? { lat: Number(ultimoEntregue.lat), lng: Number(ultimoEntregue.lng) }
     : { lat: state.lojaLat, lng: state.lojaLng };
-  const pontos = [pontoPartida, ...pendentes.map(getCoordsP)];
 
-  if (pontos.length >= 2) {
+  // Pontos REAIS da rota ativa: partida + pendentes que têm coordenada real.
+  const pontosReais = [pontoPartida, ...pendentes.map(coordRealP).filter(Boolean)];
+
+  state.rotaInfo = null; // { distanciaMetros, duracaoSegundos } quando a rota real vier
+
+  if (pontosReais.length >= 2) {
     const ctrl = new AbortController();
     state.rotaAbortCtrl = ctrl;
 
-    const path = await buscarRotaPath(pontos, ctrl.signal);
+    const resultado = await buscarRotaPath(pontosReais, ctrl.signal);
 
     // Se uma chamada mais recente já abortou esta, descarta o resultado
     if (ctrl.signal.aborted) return;
     state.rotaAbortCtrl = null;
 
-    if (path) {
+    if (resultado?.path) {
       state.rotaLayer = new google.maps.Polyline({
-        path, map: state.map, strokeColor: "#2196f3", strokeWeight: 5, strokeOpacity: 0.85,
+        path: resultado.path, map: state.map, strokeColor: "#2196f3", strokeWeight: 5, strokeOpacity: 0.85,
       });
+      state.rotaInfo = { distanciaMetros: resultado.distanciaMetros, duracaoSegundos: resultado.duracaoSegundos };
     } else {
-      // Fallback: linha pontilhada se a rota não vier
+      // Fallback (linha pontilhada) SÓ quando a Directions falha de verdade.
       state.rotaLayer = new google.maps.Polyline({
-        path: pontos, map: state.map, strokeColor: "#2196f3", strokeWeight: 4, strokeOpacity: 0,
+        path: pontosReais, map: state.map, strokeColor: "#2196f3", strokeWeight: 4, strokeOpacity: 0,
         icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, strokeWeight: 4, scale: 3 }, offset: "0", repeat: "10px" }],
       });
     }
-    const bounds = new google.maps.LatLngBounds();
-    pontos.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
-    try { state.map.fitBounds(bounds, 30); } catch {}
   }
+
+  // Bounds SOMENTE com os pontos reais da rota ativa + cap de zoom.
+  const bounds = new google.maps.LatLngBounds();
+  pontosReais.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
+  if (!bounds.isEmpty()) fitBoundsCappedMoto(bounds, 60, 15);
 
   // Marcadores dos pedidos
   const allPedidos = [...entregues, ...pendentes];
@@ -548,8 +596,13 @@ async function desenharRota() {
       position: { lat, lng }, map: state.map,
       icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: cor, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2, scale: 7 },
     });
-    const label = isEntregue ? "✅ Entregue" : isProximo ? "📍 Próxima entrega" : p.status === "planejado" ? "🗓 Planejado" : "⏳ Aguardando";
-    const html = `<b>${p.codigo || "—"}</b><br>${p.cliente || "—"}<br>${label}`;
+    const html = buildInfoWindowHtml({
+      titulo: p.codigo || "—",
+      subtitulo: p.cliente || "—",
+      status: p.status,
+      badge: isProximo ? { label: "Próxima entrega", color: "#3b82f6" } : null,
+      linhas: [p.lat && p.lng ? null : "Localização aproximada (sem geocode)"],
+    });
     marker.addListener("click", () => { state.infoWindow.setContent(html); state.infoWindow.open({ anchor: marker, map: state.map }); });
     state.deliveryMarkers[p.id] = marker;
   });
@@ -573,7 +626,7 @@ function iniciarGeolocalizacao() {
           icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: "#00bcd4", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3, scale: 8 },
         });
         state.driverMarker.addListener("click", () => {
-          state.infoWindow.setContent("📍 Você está aqui");
+          state.infoWindow.setContent(buildInfoWindowHtml({ titulo: "Você está aqui", subtitulo: "Sua localização atual" }));
           state.infoWindow.open({ anchor: state.driverMarker, map: state.map });
         });
       }
@@ -687,10 +740,7 @@ function renderMural() {
       .filter(Boolean);
     const isExpanded = muralState.expanded.has(rota.id);
     const temUrgente = pedidos.some(p => p.prioridade === "urgente");
-    const distTotal  = pedidos.reduce((s, p) => {
-      if (!p.lat || !p.lng) return s;
-      return s + haversineKm(state.lojaLat, state.lojaLng, Number(p.lat), Number(p.lng));
-    }, 0);
+    const semCoords  = pedidos.filter(p => !p.lat || !p.lng).length;
 
     const pedidosHtml = isExpanded ? pedidos.map(p => {
       const dest = [p.destino_municipio, p.destino_estado].filter(Boolean).join("/");
@@ -702,7 +752,7 @@ function renderMural() {
             <small>${dest || "—"} · ${p.descricao || "—"} · ${p.peso || 0} kg · ${distLojaLabel(p)}</small>
           </div>
           <button class="moto-btn-remover-pedido" title="Remover da rota"
-                  onclick="removerPedidoDaRotaDisponivel('${rota.id}','${p.id}',event)">✕</button>
+                  onclick="removerPedidoDaRotaDisponivel('${rota.id}','${p.id}',event)">${Icons.x(14)}</button>
         </div>`;
     }).join("") : "";
 
@@ -715,13 +765,15 @@ function renderMural() {
               <span class="moto-badge moto-badge-yellow">Planejada</span>
             </div>
             <div class="moto-rota-card-meta">
-              <span>${pedidos.length} pedido${pedidos.length !== 1 ? "s" : ""}</span>
+              <span class="moto-rota-paradas" style="display:inline-flex;align-items:center;gap:4px;font-weight:600">${Icons.mapPin(13)} ${pedidos.length} parada${pedidos.length !== 1 ? "s" : ""}</span>
               <span>·</span>
               <span>${rota.destino_municipio || "—"}/${rota.destino_estado || "—"}</span>
-              ${distTotal > 0 ? `<span>· ~${distTotal.toFixed(1)} km</span>` : ""}
+              <span>·</span>
+              <span class="moto-rota-dist" id="rota-dist-${rota.id}" style="display:inline-flex;align-items:center;gap:4px">${Icons.navigation(13)} calculando…</span>
+              ${semCoords ? `<span class="moto-rota-alerta" title="${semCoords} pedido(s) sem localização" style="color:#eab308">· ${semCoords} sem GPS</span>` : ""}
             </div>
           </div>
-          <span class="moto-rota-chevron">${isExpanded ? "▲" : "▼"}</span>
+          <span class="moto-rota-chevron" style="display:inline-flex;transition:transform .15s ease;${isExpanded ? "transform:rotate(180deg)" : ""}">${Icons.chevronDown(18)}</span>
         </div>
         ${isExpanded ? `<div class="moto-rota-pedidos-list">${pedidosHtml}</div>` : ""}
         <div class="moto-rota-card-actions">
@@ -731,6 +783,46 @@ function renderMural() {
         </div>
       </div>`;
   }).join("");
+
+  atualizarDistanciasMural();
+}
+
+// Cache de distância/tempo reais por rota do mural (evita re-chamar a Directions
+// ao expandir/recolher cards). Invalidado quando a rota muda (pedido removido).
+const muralRotaInfo = {};
+
+// Calcula a distância/tempo reais da rota: loja → cada parada (soma dos trechos),
+// via a mesma Directions já usada no mapa. Fallback para soma haversine se falhar.
+async function carregarInfoRotaMural(rota) {
+  const pedidos = (rota.cargas_ids || [])
+    .map(id => muralState.pedidos.find(p => p.id === id))
+    .filter(Boolean);
+  const stops = pedidos
+    .map(p => (p.lat && p.lng) ? { lat: Number(p.lat), lng: Number(p.lng) } : null)
+    .filter(Boolean);
+  if (!stops.length) return { semCoords: true };
+
+  const pontos = [{ lat: state.lojaLat, lng: state.lojaLng }, ...stops];
+  const parciais = stops.length < pedidos.length;
+  const r = await buscarRotaPath(pontos);
+  if (r) return { distanciaMetros: r.distanciaMetros, duracaoSegundos: r.duracaoSegundos, parciais };
+
+  // Fallback: soma linha-reta loja → cada parada (aproximado)
+  const somaKm = stops.reduce((s, c) => s + haversineKm(state.lojaLat, state.lojaLng, c.lat, c.lng), 0);
+  return { distanciaMetros: somaKm * 1000, aproximado: true, parciais };
+}
+
+// Preenche (assincronamente) a distância/tempo em cada card já renderizado.
+function atualizarDistanciasMural() {
+  muralState.rotas.forEach(async (rota) => {
+    if (!muralRotaInfo[rota.id]) muralRotaInfo[rota.id] = await carregarInfoRotaMural(rota);
+    const info = muralRotaInfo[rota.id];
+    const el = document.getElementById(`rota-dist-${rota.id}`);
+    if (!el || !info) return;
+    if (info.semCoords) { el.textContent = "distância indisponível"; return; }
+    const partes = [fmtDistancia(info.distanciaMetros), fmtDuracao(info.duracaoSegundos)].filter(Boolean).join(" · ");
+    el.innerHTML = `${Icons.navigation(13)} ${info.aproximado ? "~" : ""}${partes || "—"}${info.parciais ? " (parcial)" : ""}`;
+  });
 }
 
 function toggleRotaExpand(rotaId) {
@@ -767,6 +859,7 @@ async function removerPedidoDaRotaDisponivel(rotaId, pedidoId, event) {
       rota.cargas_ids = (rota.cargas_ids || []).filter(id => id !== pedidoId);
       if (rota.cargas_ids.length === 0) muralState.rotas = muralState.rotas.filter(r => r.id !== rotaId);
     }
+    delete muralRotaInfo[rotaId]; // força recálculo da distância da rota
     showToast("Pedido removido da rota.");
     renderMural();
   } catch (e) {
