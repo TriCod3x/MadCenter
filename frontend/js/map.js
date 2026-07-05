@@ -270,7 +270,12 @@ function routeVisibleByFilters(route, filters = {}) {
 }
 
 function drawStoreMarker(store) {
-  addMarker(store, storeMarkerIcon(), `<b>${STORE_LOCATION.name}</b><br>${STORE_LOCATION.address}`);
+  const popup = buildInfoWindowHtml({
+    titulo: STORE_LOCATION.name,
+    subtitulo: "Ponto de partida",
+    linhas: [STORE_LOCATION.address || null],
+  });
+  addMarker(store, storeMarkerIcon(), popup);
   extendBounds([store.lat, store.lng]);
 }
 
