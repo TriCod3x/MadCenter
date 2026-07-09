@@ -4,7 +4,7 @@
 
 const API_BASE = window.location.hostname === "localhost" ? "http://localhost:3001" : "";
 
-// Coordenadas da loja (Timon/MA)
+// Coordenadas da loja (José de Freitas/PI)
 const STORE_LAT = -4.760287;
 const STORE_LNG = -42.573777;
 const moneyFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });

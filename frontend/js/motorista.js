@@ -10,8 +10,7 @@ const LOJA_LNG = -42.573777;
 
 // Coordenadas de municípios para fallback quando pedido não tem lat/lng
 const MUNICIPIOS_COORDS_MOTO = {
-  "timon-ma":           { lat: -4.760287, lng: -42.573777 },
-  "jose de freitas-pi": { lat: -4.43028,  lng: -42.62778  },
+  "jose de freitas-pi": { lat: -4.760287, lng: -42.573777 },
   "teresina-pi":        { lat: -5.0892,   lng: -42.8016   },
   "caxias-ma":          { lat: -4.8589,   lng: -43.3561   },
   "codo-ma":            { lat: -4.4556,   lng: -43.8924   },

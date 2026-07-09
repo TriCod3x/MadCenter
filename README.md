@@ -1,6 +1,6 @@
 # 🚚 Madcenter Entregas — Gestão Operacional de Entregas
 
-> Plataforma web completa para gerenciamento de pedidos, rotas e motoristas de uma loja de construção em Timon/MA.
+> Plataforma web completa para gerenciamento de pedidos, rotas e motoristas de uma loja de construção em José de Freitas/PI.
 
 ![Madcenter](https://img.shields.io/badge/Madcenter-Entregas-1c6b30?style=for-the-badge)
 ![Version](https://img.shields.io/badge/versão-2.0.0-green?style=for-the-badge)
@@ -17,7 +17,7 @@
 
 ## 📋 Sobre o Projeto
 
-O **Madcenter Entregas** é um sistema de gestão operacional desenvolvido para a **Madcenter Construção**, loja de materiais de construção localizada em Timon/MA. O sistema conecta atendentes, motoristas e administradores em um fluxo integrado: do cadastro do pedido até a confirmação da entrega, com rastreamento em tempo real no mapa.
+O **Madcenter Entregas** é um sistema de gestão operacional desenvolvido para a **Madcenter Construção**, loja de materiais de construção localizada em José de Freitas/PI. O sistema conecta atendentes, motoristas e administradores em um fluxo integrado: do cadastro do pedido até a confirmação da entrega, com rastreamento em tempo real no mapa.
 
 ---
 

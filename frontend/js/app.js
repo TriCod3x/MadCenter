@@ -739,13 +739,13 @@ function openForm(entity, id = null) {
 
 function defaultItem(entity) {
   if (entity === "cargas") {
-    return { descricao: "", tipo: "Tintas", peso: 0, volume: "", cep: "", destinoMunicipio: "Timon", destinoEstado: "MA", enderecoEntrega: "", numero: "", complemento: "", cliente: "", telefone: "", coleta: "", entrega: "", prioridade: "normal", veiculoTipo: "caminhonete", status: "aguardando motorista", observacoes: "", lat: null, lng: null };
+    return { descricao: "", tipo: "Tintas", peso: 0, volume: "", cep: "", destinoMunicipio: "José de Freitas", destinoEstado: "PI", enderecoEntrega: "", numero: "", complemento: "", cliente: "", telefone: "", coleta: "", entrega: "", prioridade: "normal", veiculoTipo: "caminhonete", status: "aguardando motorista", observacoes: "", lat: null, lng: null };
   }
   if (entity === "motoristas") {
-    return { nome: "", telefone: "", categoria: "D", capacidade: 0, cidade: "Timon", estado: "MA", status: "disponível", observacoes: "" };
+    return { nome: "", telefone: "", categoria: "D", capacidade: 0, cidade: "José de Freitas", estado: "PI", status: "disponível", observacoes: "" };
   }
   if (entity === "rotas") {
-    return { nome: "", tipoRota: "Rodoviária", destinoMunicipio: "Timon", destinoEstado: "MA", motoristaId: "", saida: "", chegada: "", status: "planejada", observacoes: "" };
+    return { nome: "", tipoRota: "Rodoviária", destinoMunicipio: "José de Freitas", destinoEstado: "PI", motoristaId: "", saida: "", chegada: "", status: "planejada", observacoes: "" };
   }
   return {};
 }

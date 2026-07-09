@@ -7,7 +7,7 @@
 
 ## Visão Geral
 
-Sistema de gerenciamento de entregas da **Madcenter** (loja em Timon/MA). Permite que atendentes cadastrem pedidos, o admin monte rotas e atribua motoristas, e os motoristas acompanhem e registrem entregas em campo.
+Sistema de gerenciamento de entregas da **Madcenter** (loja em José de Freitas/PI). Permite que atendentes cadastrem pedidos, o admin monte rotas e atribua motoristas, e os motoristas acompanhem e registrem entregas em campo.
 
 **Três perfis de usuário:**
 - **Admin** — acesso total: pedidos, rotas, motoristas, veículos, usuários, relatórios, mapa

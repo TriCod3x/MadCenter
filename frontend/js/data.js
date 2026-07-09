@@ -1,8 +1,8 @@
 ﻿const STORE_LOCATION = {
   name: "Madcenter Construção",
-  address: "R. Airton Senna, 77 - Timon/MA",
-  city: "Timon",
-  state: "MA",
+  address: "R. Airton Senna, 77 - José de Freitas/PI",
+  city: "José de Freitas",
+  state: "PI",
   lat: -4.760287,
   lng: -42.573777
 };
@@ -16,8 +16,7 @@ const VEHICLE_TYPES = [
 ];
 
 const MUNICIPIOS_COORDS = {
-  "timon-ma": { nome: "Timon", estado: "MA", lat: -4.760287, lng: -42.573777 },
-  "jose de freitas-pi": { nome: "José de Freitas", estado: "PI", lat: -4.43028, lng: -42.62778 },
+  "jose de freitas-pi": { nome: "José de Freitas", estado: "PI", lat: -4.760287, lng: -42.573777 },
   "teresina-pi": { nome: "Teresina", estado: "PI", lat: -5.0892, lng: -42.8016 },
   "caxias-ma": { nome: "Caxias", estado: "MA", lat: -4.8589, lng: -43.3561 },
   "codo-ma": { nome: "Codó", estado: "MA", lat: -4.4556, lng: -43.8924 },
@@ -192,8 +191,8 @@ const SEED_DATA = {
     }
   ],
   motoristas: [
-    { id: "mot-001", nome: "Francisco Moura", telefone: "(86) 99921-4432", categoria: "D", capacidade: 3200, cidade: "Timon", estado: "MA", status: "em entrega", observacoes: "Entregas intermunicipais." },
-    { id: "mot-002", nome: "Raimundo Alves", telefone: "(99) 98845-1122", categoria: "D", capacidade: 1800, cidade: "Timon", estado: "MA", status: "disponível", observacoes: "Disponível para rotas de médio porte." },
+    { id: "mot-001", nome: "Francisco Moura", telefone: "(86) 99921-4432", categoria: "D", capacidade: 3200, cidade: "José de Freitas", estado: "PI", status: "em entrega", observacoes: "Entregas intermunicipais." },
+    { id: "mot-002", nome: "Raimundo Alves", telefone: "(99) 98845-1122", categoria: "D", capacidade: 1800, cidade: "José de Freitas", estado: "PI", status: "disponível", observacoes: "Disponível para rotas de médio porte." },
     { id: "mot-003", nome: "José Pereira", telefone: "(86) 97718-5544", categoria: "E", capacidade: 5000, cidade: "Caxias", estado: "MA", status: "disponível", observacoes: "Experiente em rotas de carga pesada." }
   ],
   rotas: [

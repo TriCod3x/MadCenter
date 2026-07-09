@@ -771,7 +771,7 @@ app.post("/api/usuarios", async (req, res) => {
           categoria:   "D",
           capacidade:  0,
           cidade:      "",
-          estado:      "MA",
+          estado:      "PI",
           status:      "disponível",
           observacoes: ""
         });
