@@ -76,12 +76,16 @@ async function lookupCep(input) {
 // Geocode forward a partir do CEP (via ViaCEP).
 async function geocodificarEndereco(viaCepData) {
   const parts = [viaCepData.logradouro, viaCepData.bairro, viaCepData.localidade, viaCepData.uf, "Brasil"].filter(Boolean);
-  await aplicarGeocodeForward(parts.join(", "), { origem: "cep" });
+  // Estimativa inicial pelo CEP (sem número) — preenche lat/lng, mas não avisa nem abre o
+  // picker, pois rua-sem-número cai em GEOMETRIC_CENTER até em cidades mapeadas (falso alarme).
+  await aplicarGeocodeForward(parts.join(", "), { origem: "cep", avisar: false });
 }
 
 // Geocode forward a partir do endereço digitado no formulário (disparado no blur do campo).
 // Concatena o número ao logradouro para dar precisão à consulta em cidades que o Google
 // tem mapeadas (José de Freitas cai no centroide de qualquer forma — ver aplicarGeocodeForward).
+// Só aciona aviso/auto-open do picker quando o endereço está completo (rua + número); sem
+// número o resultado é sempre aproximado e dispararia o alerta à toa.
 async function geocodificarEnderecoDigitado() {
   const road   = document.getElementById("fEndereco").value.trim();
   const numero = document.getElementById("fNumero").value.trim();
@@ -90,12 +94,12 @@ async function geocodificarEnderecoDigitado() {
   if (!road && !city) return;
   const logradouro = [road, numero].filter(Boolean).join(", ");
   const parts = [logradouro, city, uf, "Brasil"].filter(Boolean);
-  await aplicarGeocodeForward(parts.join(", "), { origem: "endereco" });
+  await aplicarGeocodeForward(parts.join(", "), { origem: "endereco", avisar: numero !== "" });
 }
 
 // Chama /api/geocode?q= e aplica lat/lng em formState, preenche campos vazios com os
 // componentes retornados (CEP/município/estado) e sincroniza o marcador do picker se aberto.
-async function aplicarGeocodeForward(query, { origem } = {}) {
+async function aplicarGeocodeForward(query, { origem, avisar = true } = {}) {
   const msg = document.getElementById("cepMsg");
   try {
     const geo = await apiGet(`${API_BASE}/api/geocode?q=${encodeURIComponent(query)}`);
@@ -141,17 +145,21 @@ async function aplicarGeocodeForward(query, { origem } = {}) {
       if (info) info.textContent = "📍 Ponto atualizado pelo endereço · Clique para mover";
     }
 
-    if (preciso) {
-      destacarBotaoMapPickerAtend(false);
-      _pickerAutoAbertoAprox = false;
-      if (origem === "endereco" && msg) { msg.textContent = `✓ ${display || "Endereço localizado"}`; msg.className = "atend-cep-msg ok"; }
-    } else {
-      // Ponto aproximado: o centroide não representa a entrega. Avisa e força ajuste manual.
-      if (msg) { msg.textContent = `⚠️ Endereço aproximado — ajuste o ponto exato clicando no mapa`; msg.className = "atend-cep-msg warn"; }
-      showToast("⚠️ Endereço aproximado — ajuste o ponto exato clicando no mapa");
-      destacarBotaoMapPickerAtend(true);
-      // Abre o picker automaticamente só na primeira vez, para não reabrir a cada blur.
-      if (!_mapPicker && !_pickerAutoAbertoAprox) { _pickerAutoAbertoAprox = true; openMapPickerAtendente(); }
+    // Aviso/auto-open só quando o endereço está completo (avisar=true). Geocodes parciais
+    // (CEP ou endereço sem número) só preenchem lat/lng como estimativa, sem alarme falso.
+    if (avisar) {
+      if (preciso) {
+        destacarBotaoMapPickerAtend(false);
+        _pickerAutoAbertoAprox = false;
+        if (origem === "endereco" && msg) { msg.textContent = `✓ ${display || "Endereço localizado"}`; msg.className = "atend-cep-msg ok"; }
+      } else {
+        // Ponto aproximado: o centroide não representa a entrega. Avisa e força ajuste manual.
+        if (msg) { msg.textContent = `⚠️ Endereço aproximado — ajuste o ponto exato clicando no mapa`; msg.className = "atend-cep-msg warn"; }
+        showToast("⚠️ Endereço aproximado — ajuste o ponto exato clicando no mapa");
+        destacarBotaoMapPickerAtend(true);
+        // Abre o picker automaticamente só na primeira vez, para não reabrir a cada blur.
+        if (!_mapPicker && !_pickerAutoAbertoAprox) { _pickerAutoAbertoAprox = true; openMapPickerAtendente(); }
+      }
     }
   } catch { /* geocodificação falhou — frete não exibido */ }
 }

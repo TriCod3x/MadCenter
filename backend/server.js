@@ -473,10 +473,16 @@ app.get("/api/geocode", async (req, res) => {
     //   Freitas e loteamentos novos caem aqui). Nesses casos o frontend avisa o atendente
     //   e força ajuste manual no mapa, pois o centroide não representa a entrega real.
     const locationType = result.geometry.location_type || null;
-    const preciso = ["ROOFTOP", "RANGE_INTERPOLATED"].includes(locationType);
+    // partial_match: o Google não casou o endereço exato — devolveu um palpite aproximado
+    // (ex.: "Rua Frederico Freitas" em José de Freitas vira uma "Estrada Rural" qualquer com
+    // location_type ROOFTOP). Não dá para confiar nesse ponto como preciso, mesmo ROOFTOP.
+    // Mantemos o lat/lng (é melhor que nada), mas rebaixamos para preciso=false para que o
+    // frontend avise e force o ajuste manual no mapa.
+    const partial = result.partial_match === true;
+    const preciso = !partial && ["ROOFTOP", "RANGE_INTERPOLATED"].includes(locationType);
     // Forward e reverse retornam os componentes de endereço (road/city/stateCode/postcode),
     // permitindo autofill de CEP/município ao digitar um endereço, igual ao clique no mapa.
-    const resultado = { lat: loc.lat, lng: loc.lng, ...extrairEnderecoGoogle(result), location_type: locationType, preciso, status: "OK" };
+    const resultado = { lat: loc.lat, lng: loc.lng, ...extrairEnderecoGoogle(result), location_type: locationType, partial_match: partial, preciso, status: "OK" };
 
     GEOCODE_CACHE.set(cacheKey, resultado);
     res.json(resultado);

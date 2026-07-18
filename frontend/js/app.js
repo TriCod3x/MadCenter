@@ -1093,10 +1093,14 @@ function destacarBotaoMapPicker(form, ativo) {
 // Geocode forward a partir do CEP (via ViaCEP).
 async function geocodeEndereco(viaCepData, form) {
   const parts = [viaCepData.logradouro, viaCepData.bairro, viaCepData.localidade, viaCepData.uf, "Brasil"].filter(Boolean);
-  await geocodeForward(parts.join(", "), form, { origem: "cep" });
+  // Estimativa inicial pelo CEP (sem número) — só preenche lat/lng, sem aviso/auto-open, pois
+  // rua-sem-número cai em GEOMETRIC_CENTER mesmo em cidades mapeadas (alarme falso).
+  await geocodeForward(parts.join(", "), form, { origem: "cep", avisar: false });
 }
 
 // Geocode forward a partir do endereço digitado no formulário (disparado no blur do campo).
+// Só aciona aviso/auto-open do picker quando o endereço está completo (rua + número); sem
+// número o resultado é sempre aproximado e dispararia o alerta à toa.
 async function geocodeEnderecoDigitado(form) {
   if (!form) return;
   const road   = form.querySelector('[name="enderecoEntrega"]')?.value.trim() || "";
@@ -1106,12 +1110,12 @@ async function geocodeEnderecoDigitado(form) {
   if (!road && !city) return;
   const logradouro = [road, numero].filter(Boolean).join(", ");
   const parts = [logradouro, city, uf, "Brasil"].filter(Boolean);
-  await geocodeForward(parts.join(", "), form, { origem: "endereco" });
+  await geocodeForward(parts.join(", "), form, { origem: "endereco", avisar: numero !== "" });
 }
 
 // Chama /api/geocode?q=, grava lat/lng nos campos ocultos, atualiza o frete, preenche
 // campos vazios com os componentes retornados e sincroniza o marcador do picker se aberto.
-async function geocodeForward(query, form, { origem } = {}) {
+async function geocodeForward(query, form, { origem, avisar = true } = {}) {
   try {
     const geo = await apiGet(`${API_BASE}/api/geocode?q=${encodeURIComponent(query)}`);
     if (!geo || geo.lat == null || geo.lng == null) return;
@@ -1137,21 +1141,25 @@ async function geocodeForward(query, form, { origem } = {}) {
       if (cepEl && !cepEl.value.trim()) cepEl.value = geo.postcode.slice(0, 5) + "-" + geo.postcode.slice(5, 8);
     }
 
+    // Aviso/auto-open só quando o endereço está completo (avisar=true). Geocodes parciais
+    // (CEP ou endereço sem número) só preenchem lat/lng como estimativa, sem alarme falso.
     const msg = document.getElementById("cepMsg");
-    if (preciso) {
-      destacarBotaoMapPicker(form, false);
-      _pickerAutoAbertoAprox = false;
-      if (origem === "endereco" && msg) {
-        const display = [form.querySelector('[name="enderecoEntrega"]')?.value.trim(), geo.city, geo.stateCode].filter(Boolean).join(", ");
-        msg.textContent = `✓ ${display || "Endereço localizado"}`;
-        msg.className = "cep-msg cep-ok";
+    if (avisar) {
+      if (preciso) {
+        destacarBotaoMapPicker(form, false);
+        _pickerAutoAbertoAprox = false;
+        if (origem === "endereco" && msg) {
+          const display = [form.querySelector('[name="enderecoEntrega"]')?.value.trim(), geo.city, geo.stateCode].filter(Boolean).join(", ");
+          msg.textContent = `✓ ${display || "Endereço localizado"}`;
+          msg.className = "cep-msg cep-ok";
+        }
+      } else {
+        // Ponto aproximado: avisa e força ajuste manual no mapa.
+        if (msg) { msg.textContent = "⚠️ Endereço aproximado — ajuste o ponto exato clicando no mapa"; msg.className = "cep-msg cep-warn"; }
+        toast("⚠️ Endereço aproximado — ajuste o ponto exato clicando no mapa");
+        destacarBotaoMapPicker(form, true);
+        if (!_mapPicker && !_pickerAutoAbertoAprox) { _pickerAutoAbertoAprox = true; openMapPicker(); }
       }
-    } else {
-      // Ponto aproximado: avisa e força ajuste manual no mapa.
-      if (msg) { msg.textContent = "⚠️ Endereço aproximado — ajuste o ponto exato clicando no mapa"; msg.className = "cep-msg cep-warn"; }
-      toast("⚠️ Endereço aproximado — ajuste o ponto exato clicando no mapa");
-      destacarBotaoMapPicker(form, true);
-      if (!_mapPicker && !_pickerAutoAbertoAprox) { _pickerAutoAbertoAprox = true; openMapPicker(); }
     }
 
     // Sincroniza marcador no picker se estiver aberto
