@@ -714,6 +714,7 @@ tr:hover td {
 
 .cep-msg.cep-ok  { color: #16a34a; }
 .cep-msg.cep-error { color: #dc2626; }
+.cep-msg.cep-warn { color: #b45309; font-weight: 600; }
 
 .driver-hint { font-size: 12px; color: var(--warning); margin-top: 4px; display: block; }
 
@@ -1807,6 +1808,17 @@ tr:hover td {
 
 [data-theme="dark"] .btn-map-picker { background: #16a34a; }
 [data-theme="dark"] .btn-map-picker:hover { background: #15803d; }
+
+/* Endereço aproximado: pulsa o botão para chamar ao ajuste manual. */
+.btn-map-picker.needs-attention {
+  background: #d97706;
+  animation: btn-picker-pulse 1.4s ease-in-out infinite;
+}
+.btn-map-picker.needs-attention:hover { background: #b45309; }
+@keyframes btn-picker-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, .5); }
+  50%      { box-shadow: 0 0 0 6px rgba(217, 119, 6, 0); }
+}
 
 /* ── Frete manual + calculadora de combustível ─── */
 

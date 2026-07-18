@@ -32,6 +32,9 @@ function pedidoFromDB(p) {
     observacoes: p.observacoes,
     lat: p.lat ? Number(p.lat) : null,
     lng: p.lng ? Number(p.lng) : null,
+    // Precisão do geocode: true = endereço exato, false = ponto aproximado (centroide),
+    // null = sem informação (pedidos antigos / antes da migração).
+    geoPreciso: typeof p.geo_preciso === "boolean" ? p.geo_preciso : null,
     dataEntrega: p.data_entrega || null
   };
 }
@@ -61,6 +64,7 @@ function pedidoToDB(p) {
     observacoes: p.observacoes,
     lat: p.lat || null,
     lng: p.lng || null,
+    geo_preciso: typeof p.geoPreciso === "boolean" ? p.geoPreciso : null,
     data_entrega: p.dataEntrega || null
   };
 }

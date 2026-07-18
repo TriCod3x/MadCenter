@@ -467,9 +467,16 @@ app.get("/api/geocode", async (req, res) => {
 
     const result = data.results[0];
     const loc = result.geometry.location;
+    // location_type indica a qualidade do ponto:
+    //   ROOFTOP / RANGE_INTERPOLATED → endereço exato (Google tem a geometria da rua)
+    //   GEOMETRIC_CENTER / APPROXIMATE → só o centroide do bairro/cidade (ruas de José de
+    //   Freitas e loteamentos novos caem aqui). Nesses casos o frontend avisa o atendente
+    //   e força ajuste manual no mapa, pois o centroide não representa a entrega real.
+    const locationType = result.geometry.location_type || null;
+    const preciso = ["ROOFTOP", "RANGE_INTERPOLATED"].includes(locationType);
     // Forward e reverse retornam os componentes de endereço (road/city/stateCode/postcode),
     // permitindo autofill de CEP/município ao digitar um endereço, igual ao clique no mapa.
-    const resultado = { lat: loc.lat, lng: loc.lng, ...extrairEnderecoGoogle(result), status: "OK" };
+    const resultado = { lat: loc.lat, lng: loc.lng, ...extrairEnderecoGoogle(result), location_type: locationType, preciso, status: "OK" };
 
     GEOCODE_CACHE.set(cacheKey, resultado);
     res.json(resultado);
@@ -481,6 +488,20 @@ app.get("/api/geocode", async (req, res) => {
 
 // ── Pedidos ───────────────────────────────────────────────────────────────────
 app.get("/api/pedidos", (req, res) => listar(req, res, "pedidos", PEDIDOS_COLS));
+// Insere/atualiza em `pedidos` tolerando a ausência da coluna `geo_preciso` (adicionada
+// por migração — ver README). Se o schema ainda não tiver a coluna, o PostgREST devolve
+// erro citando "geo_preciso"; nesse caso removemos a flag e repetimos, para nunca
+// bloquear o cadastro/edição só por causa do marcador de precisão.
+async function persistirPedidoTolerante(runQuery, body) {
+  let { data, error } = await runQuery(body);
+  if (error && "geo_preciso" in body && /geo_preciso/.test(error.message)) {
+    console.warn("[pedidos] coluna geo_preciso ausente no schema — salvando sem a flag. Rode a migração do README.");
+    const { geo_preciso, ...semFlag } = body;
+    ({ data, error } = await runQuery(semFlag));
+  }
+  return { data, error };
+}
+
 app.post("/api/pedidos", async (req, res) => {
   try {
     // Converte strings vazias em null para campos opcionais
@@ -490,11 +511,10 @@ app.post("/api/pedidos", async (req, res) => {
       if (body[campo] === "" || body[campo] === undefined) body[campo] = null;
     });
 
-    const { data: pedido, error: errIns } = await supabase
-      .from("pedidos")
-      .insert(body)
-      .select()
-      .single();
+    const { data: pedido, error: errIns } = await persistirPedidoTolerante(
+      (b) => supabase.from("pedidos").insert(b).select().single(),
+      body
+    );
     if (errIns) return res.status(400).json({ error: errIns.message });
 
     // Agrupamento automático em background — não bloqueia o retorno
@@ -519,12 +539,10 @@ app.put("/api/pedidos/:id", async (req, res) => {
     if (body.status === "entregue" && !body.entrega) body.entrega = isoUTC3;
   }
 
-  const { data, error } = await supabase
-    .from("pedidos")
-    .update(body)
-    .eq("id", id)
-    .select()
-    .single();
+  const { data, error } = await persistirPedidoTolerante(
+    (b) => supabase.from("pedidos").update(b).eq("id", id).select().single(),
+    body
+  );
   if (error) return res.status(400).json({ error: error.message });
 
   // Quando pedido é cancelado, limpa a rota vinculada

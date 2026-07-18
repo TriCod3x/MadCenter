@@ -83,6 +83,8 @@ let _mapPickerMarker = null;
 let _mapPickerCoords = null;
 let _mapPickerForm = null;
 let _mapPickerInitTimer = null;
+// Abre o picker uma única vez quando o endereço é aproximado (destaque + toast repetem).
+let _pickerAutoAbertoAprox = false;
 
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -536,7 +538,7 @@ function renderPedidosTable() {
     c.codigo,
     c.cliente,
     c.descricao,
-    `${c.destinoMunicipio}/${c.destinoEstado}`,
+    `${c.destinoMunicipio}/${c.destinoEstado}${geoAproxBadge(c)}`,
     `${c.peso} kg`,
     vehicleName(c.veiculoTipo),
     money.format(Number(c.valorFrete || 0)),
@@ -701,6 +703,7 @@ function _entityIcon(entity, size = 18) {
 
 function openForm(entity, id = null) {
   App.modal = { entity, mode: id ? "edit" : "new", id };
+  _pickerAutoAbertoAprox = false;
   const item = id ? getCollection(entity).find((record) => record.id === id) : defaultItem(entity);
   document.getElementById("modalTitle").innerHTML = `${_entityIcon(entity, 18)} ${id ? "Editar" : "Cadastrar"} ${singular(entity)}`;
 
@@ -727,9 +730,12 @@ function openForm(entity, id = null) {
   document.getElementById("entityForm").addEventListener("submit", submitEntityForm);
   const munInput = document.querySelector('#entityForm [name="destinoMunicipio"]');
   if (munInput) setupMunicipioAutocomplete(munInput);
-  // Endereço digitado → geocode forward (sem depender do CEP)
+  // Endereço digitado → geocode forward (sem depender do CEP). O número entra na consulta,
+  // então o blur do campo Número também re-dispara o geocode.
   const endInput = document.querySelector('#entityForm [name="enderecoEntrega"]');
   if (endInput) endInput.addEventListener("blur", () => geocodeEnderecoDigitado(endInput.closest("form")));
+  const numInput = document.querySelector('#entityForm [name="numero"]');
+  if (numInput) numInput.addEventListener("blur", () => geocodeEnderecoDigitado(numInput.closest("form")));
   openModal();
 
   if (entity === "motoristas" && id) {
@@ -846,6 +852,7 @@ function fieldHtml(field, item) {
       </label>
       <input type="hidden" name="lat" value="${item?.lat || ""}">
       <input type="hidden" name="lng" value="${item?.lng || ""}">
+      <input type="hidden" name="geoPreciso" value="${typeof item?.geoPreciso === "boolean" ? item.geoPreciso : ""}">
       <input type="hidden" name="distanciaKm" value="${item?.distanciaKm || ""}">
     `;
   }
@@ -887,6 +894,8 @@ async function submitEntityForm(event) {
       data.valorFrete = Number(data.valorFrete || 0);
       data.lat = data.lat ? Number(data.lat) : null;
       data.lng = data.lng ? Number(data.lng) : null;
+      // Campo oculto vem como string "true"/"false"/"" — normaliza para boolean/null.
+      data.geoPreciso = data.geoPreciso === "true" ? true : data.geoPreciso === "false" ? false : null;
     }
 
     if (entity === "motoristas") {
@@ -1075,6 +1084,12 @@ function setCepField(form, name, value) {
   if (el) el.value = value;
 }
 
+// Realça (ou apaga o realce d)o botão "Selecionar no mapa" quando o endereço veio aproximado.
+function destacarBotaoMapPicker(form, ativo) {
+  const btn = (form || document).querySelector(".btn-map-picker");
+  if (btn) btn.classList.toggle("needs-attention", !!ativo);
+}
+
 // Geocode forward a partir do CEP (via ViaCEP).
 async function geocodeEndereco(viaCepData, form) {
   const parts = [viaCepData.logradouro, viaCepData.bairro, viaCepData.localidade, viaCepData.uf, "Brasil"].filter(Boolean);
@@ -1084,11 +1099,13 @@ async function geocodeEndereco(viaCepData, form) {
 // Geocode forward a partir do endereço digitado no formulário (disparado no blur do campo).
 async function geocodeEnderecoDigitado(form) {
   if (!form) return;
-  const road = form.querySelector('[name="enderecoEntrega"]')?.value.trim() || "";
-  const city = form.querySelector('[name="destinoMunicipio"]')?.value.trim() || "";
-  const uf   = form.querySelector('[name="destinoEstado"]')?.value.trim() || "";
+  const road   = form.querySelector('[name="enderecoEntrega"]')?.value.trim() || "";
+  const numero = form.querySelector('[name="numero"]')?.value.trim() || "";
+  const city   = form.querySelector('[name="destinoMunicipio"]')?.value.trim() || "";
+  const uf     = form.querySelector('[name="destinoEstado"]')?.value.trim() || "";
   if (!road && !city) return;
-  const parts = [road, city, uf, "Brasil"].filter(Boolean);
+  const logradouro = [road, numero].filter(Boolean).join(", ");
+  const parts = [logradouro, city, uf, "Brasil"].filter(Boolean);
   await geocodeForward(parts.join(", "), form, { origem: "endereco" });
 }
 
@@ -1103,6 +1120,10 @@ async function geocodeForward(query, form, { origem } = {}) {
     setCepField(form, "lat", lat);
     setCepField(form, "lng", lng);
     updateFreteEstimado(form, lat, lng);
+    // geo.preciso: true = endereço exato; false = centroide aproximado (ruas sem geometria
+    // no Google, ex.: José de Freitas). Grava no campo oculto para persistir no pedido.
+    const preciso = geo.preciso === true;
+    setCepField(form, "geoPreciso", preciso ? "true" : "false");
 
     // Preenche apenas campos vazios para não sobrescrever o que o usuário digitou.
     const setIfEmpty = (name, val) => {
@@ -1116,13 +1137,21 @@ async function geocodeForward(query, form, { origem } = {}) {
       if (cepEl && !cepEl.value.trim()) cepEl.value = geo.postcode.slice(0, 5) + "-" + geo.postcode.slice(5, 8);
     }
 
-    if (origem === "endereco") {
-      const msg = document.getElementById("cepMsg");
-      if (msg) {
+    const msg = document.getElementById("cepMsg");
+    if (preciso) {
+      destacarBotaoMapPicker(form, false);
+      _pickerAutoAbertoAprox = false;
+      if (origem === "endereco" && msg) {
         const display = [form.querySelector('[name="enderecoEntrega"]')?.value.trim(), geo.city, geo.stateCode].filter(Boolean).join(", ");
         msg.textContent = `✓ ${display || "Endereço localizado"}`;
         msg.className = "cep-msg cep-ok";
       }
+    } else {
+      // Ponto aproximado: avisa e força ajuste manual no mapa.
+      if (msg) { msg.textContent = "⚠️ Endereço aproximado — ajuste o ponto exato clicando no mapa"; msg.className = "cep-msg cep-warn"; }
+      toast("⚠️ Endereço aproximado — ajuste o ponto exato clicando no mapa");
+      destacarBotaoMapPicker(form, true);
+      if (!_mapPicker && !_pickerAutoAbertoAprox) { _pickerAutoAbertoAprox = true; openMapPicker(); }
     }
 
     // Sincroniza marcador no picker se estiver aberto
@@ -1150,6 +1179,14 @@ function calculateDistanceKm(originLat, originLng, destLat, destLng) {
   const dLng = toRad(destLng - originLng);
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(originLat)) * Math.cos(toRad(destLat)) * Math.sin(dLng / 2) ** 2;
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Badge de alerta quando a coordenada do pedido é aproximada (centroide), não o endereço
+// exato — sinaliza ao admin que o ponto precisa de ajuste manual no mapa. Só aparece com
+// geoPreciso === false; null (pedidos antigos / sem geocode) não mostra nada.
+function geoAproxBadge(carga) {
+  if (carga.geoPreciso !== false) return "";
+  return ` <span class="badge badge-orange" title="Localização aproximada — ajuste o ponto exato no mapa ao editar o pedido">${Icons.mapPin(10)} aprox.</span>`;
 }
 
 function badge(value) {
@@ -1354,6 +1391,10 @@ async function confirmMapLocation() {
   setCepField(form, "lat", lat);
   setCepField(form, "lng", lng);
   updateFreteEstimado(form, lat, lng);
+  // Ponto escolhido a dedo no mapa é considerado exato.
+  setCepField(form, "geoPreciso", "true");
+  destacarBotaoMapPicker(form, false);
+  _pickerAutoAbertoAprox = false;
 
   closeMapPicker();
 

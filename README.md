@@ -277,6 +277,7 @@ CREATE TABLE pedidos (
   observacoes TEXT,
   lat NUMERIC,
   lng NUMERIC,
+  geo_preciso BOOLEAN,      -- true = endereço exato; false = ponto aproximado (centroide); null = sem info
   criado_em TIMESTAMP DEFAULT now()
 );
 

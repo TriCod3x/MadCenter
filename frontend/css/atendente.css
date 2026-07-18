@@ -526,8 +526,9 @@ img { max-width: 100%; }
   margin-top: 2px;
   font-weight: 600;
 }
-.atend-cep-msg.ok  { color: var(--success); }
-.atend-cep-msg.err { color: var(--danger); }
+.atend-cep-msg.ok   { color: var(--success); }
+.atend-cep-msg.err  { color: var(--danger); }
+.atend-cep-msg.warn { color: var(--warning, #b45309); }
 
 /* ── FRETE ESTIMADO ────────────────────────────────── */
 
@@ -567,6 +568,22 @@ img { max-width: 100%; }
   background: var(--surface-soft);
   border-color: var(--primary);
   transform: translateY(-1px);
+}
+
+/* Endereço aproximado: pulsa o botão para chamar o atendente ao ajuste manual. */
+.atend-btn-map-picker.needs-attention {
+  color: #fff;
+  background: var(--warning, #d97706);
+  border-color: var(--warning, #d97706);
+  animation: atend-picker-pulse 1.4s ease-in-out infinite;
+}
+.atend-btn-map-picker.needs-attention:hover {
+  background: #b45309;
+  border-color: #b45309;
+}
+@keyframes atend-picker-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, .5); }
+  50%      { box-shadow: 0 0 0 6px rgba(217, 119, 6, 0); }
 }
 
 .atend-location-preview {

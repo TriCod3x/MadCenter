@@ -10,13 +10,16 @@ const STORE_LNG = -42.573777;
 const moneyFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 // Estado do formulário: coordenadas obtidas via CEP/geocodificação
-let formState = { lat: null, lng: null };
+let formState = { lat: null, lng: null, geoPreciso: null };
 
 // Estado do map picker
 let _mapPicker = null;
 let _mapPickerMarker = null;
 let _mapPickerCoords = null;
 let _mapPickerInitTimer = null;
+// Evita reabrir o picker a cada blur quando o endereço é aproximado — abre só uma vez;
+// o destaque no botão e o toast continuam sinalizando nas vezes seguintes.
+let _pickerAutoAbertoAprox = false;
 
 // Data de hoje para filtrar pedidos
 let todayStr = new Date().toISOString().slice(0, 10);
@@ -77,12 +80,16 @@ async function geocodificarEndereco(viaCepData) {
 }
 
 // Geocode forward a partir do endereço digitado no formulário (disparado no blur do campo).
+// Concatena o número ao logradouro para dar precisão à consulta em cidades que o Google
+// tem mapeadas (José de Freitas cai no centroide de qualquer forma — ver aplicarGeocodeForward).
 async function geocodificarEnderecoDigitado() {
-  const road = document.getElementById("fEndereco").value.trim();
-  const city = document.getElementById("fMunicipio").value.trim();
-  const uf   = document.getElementById("fEstado").value.trim();
+  const road   = document.getElementById("fEndereco").value.trim();
+  const numero = document.getElementById("fNumero").value.trim();
+  const city   = document.getElementById("fMunicipio").value.trim();
+  const uf     = document.getElementById("fEstado").value.trim();
   if (!road && !city) return;
-  const parts = [road, city, uf, "Brasil"].filter(Boolean);
+  const logradouro = [road, numero].filter(Boolean).join(", ");
+  const parts = [logradouro, city, uf, "Brasil"].filter(Boolean);
   await aplicarGeocodeForward(parts.join(", "), { origem: "endereco" });
 }
 
@@ -97,6 +104,10 @@ async function aplicarGeocodeForward(query, { origem } = {}) {
     const lng = Number(geo.lng);
     formState.lat = lat;
     formState.lng = lng;
+    // geo.preciso: true = endereço exato (ROOFTOP/RANGE_INTERPOLATED); false = centroide
+    // aproximado (ruas sem geometria no Google, ex.: José de Freitas).
+    const preciso = geo.preciso === true;
+    formState.geoPreciso = preciso;
 
     // Preenche apenas campos vazios para não sobrescrever o que o usuário digitou.
     const setIfEmpty = (id, val) => {
@@ -111,7 +122,6 @@ async function aplicarGeocodeForward(query, { origem } = {}) {
     }
 
     const display = [document.getElementById("fEndereco").value.trim(), document.getElementById("fMunicipio").value.trim(), document.getElementById("fEstado").value.trim()].filter(Boolean).join(", ");
-    if (origem === "endereco" && msg) { msg.textContent = `✓ ${display || "Endereço localizado"}`; msg.className = "atend-cep-msg ok"; }
 
     const preview = document.getElementById("atendLocationPreview");
     if (preview) {
@@ -129,6 +139,19 @@ async function aplicarGeocodeForward(query, { origem } = {}) {
       _mapPickerCoords = { lat, lng };
       const info = document.getElementById("atendMapPickerInfo");
       if (info) info.textContent = "📍 Ponto atualizado pelo endereço · Clique para mover";
+    }
+
+    if (preciso) {
+      destacarBotaoMapPickerAtend(false);
+      _pickerAutoAbertoAprox = false;
+      if (origem === "endereco" && msg) { msg.textContent = `✓ ${display || "Endereço localizado"}`; msg.className = "atend-cep-msg ok"; }
+    } else {
+      // Ponto aproximado: o centroide não representa a entrega. Avisa e força ajuste manual.
+      if (msg) { msg.textContent = `⚠️ Endereço aproximado — ajuste o ponto exato clicando no mapa`; msg.className = "atend-cep-msg warn"; }
+      showToast("⚠️ Endereço aproximado — ajuste o ponto exato clicando no mapa");
+      destacarBotaoMapPickerAtend(true);
+      // Abre o picker automaticamente só na primeira vez, para não reabrir a cada blur.
+      if (!_mapPicker && !_pickerAutoAbertoAprox) { _pickerAutoAbertoAprox = true; openMapPickerAtendente(); }
     }
   } catch { /* geocodificação falhou — frete não exibido */ }
 }
@@ -434,7 +457,8 @@ async function salvarPedido() {
     status:            "aguardando motorista",
     observacoes:       observacoes      || null,
     lat:               formState.lat    || null,
-    lng:               formState.lng    || null
+    lng:               formState.lng    || null,
+    geo_preciso:       typeof formState.geoPreciso === "boolean" ? formState.geoPreciso : null
   };
 
   btn.disabled   = true;
@@ -463,7 +487,9 @@ function limparFormulario() {
   document.getElementById("fPrioridade").value = "normal";
   const cepMsg = document.getElementById("cepMsg");
   if (cepMsg) { cepMsg.textContent = ""; cepMsg.className = "atend-cep-msg"; }
-  formState = { lat: null, lng: null };
+  destacarBotaoMapPickerAtend(false);
+  _pickerAutoAbertoAprox = false;
+  formState = { lat: null, lng: null, geoPreciso: null };
   _destroyMapPickerAtend();
   _mapPickerCoords = null;
   const preview = document.getElementById("atendLocationPreview");
@@ -559,6 +585,13 @@ function closeMapPickerAtendente() {
   _destroyMapPickerAtend();
 }
 
+// Realça (ou apaga o realce d)o botão "Selecionar no mapa" quando o endereço veio aproximado,
+// chamando a atenção do atendente para o ajuste manual — único jeito confiável nessas cidades.
+function destacarBotaoMapPickerAtend(ativo) {
+  const btn = document.getElementById("btnMapPickerAtend");
+  if (btn) btn.classList.toggle("needs-attention", !!ativo);
+}
+
 async function confirmMapLocationAtendente() {
   if (!_mapPickerCoords) {
     showToast("Clique no mapa para marcar uma localização antes de confirmar.");
@@ -568,6 +601,10 @@ async function confirmMapLocationAtendente() {
   const { lat, lng } = _mapPickerCoords;
   formState.lat = lat;
   formState.lng = lng;
+  // Ponto escolhido a dedo no mapa é considerado exato — some o alerta de "aproximado".
+  formState.geoPreciso = true;
+  destacarBotaoMapPickerAtend(false);
+  _pickerAutoAbertoAprox = false;
 
   closeMapPickerAtendente();
 
@@ -842,9 +879,12 @@ document.addEventListener("DOMContentLoaded", () => {
   cepInput.addEventListener("input",  () => applyCepMask(cepInput));
   cepInput.addEventListener("blur",   () => lookupCep(cepInput));
 
-  // Endereço digitado → geocode forward (sem depender do CEP)
+  // Endereço digitado → geocode forward (sem depender do CEP). O número entra na consulta,
+  // então o blur do próprio campo Número também re-dispara o geocode.
   const endInput = document.getElementById("fEndereco");
   if (endInput) endInput.addEventListener("blur", () => geocodificarEnderecoDigitado());
+  const numInput = document.getElementById("fNumero");
+  if (numInput) numInput.addEventListener("blur", () => geocodificarEnderecoDigitado());
 
   // Telefone
   const telInput = document.getElementById("fTelefone");
