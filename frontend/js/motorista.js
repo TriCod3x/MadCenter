@@ -56,7 +56,7 @@ const state = {
   driverMarker:    null,
   deliveryMarkers: {},
   routeLine:       null,
-  rotaLayer:       null,
+  rotaLayers:      [],     // uma polyline por rota "em andamento"
   rotaAbortCtrl:   null,
   geoWatchId:      null,
   currentPos:      null,   // { lat, lng }
@@ -147,11 +147,22 @@ async function carregarEntregasDoDia(motoristaId, silencioso = false) {
 // ── Render ────────────────────────────────────────────────────────────────────
 
 function getPedidosOrdenados() {
-  const byDist = (a, b) => distLoja(a) - distLoja(b);
-  const emRota   = state.pedidos.filter(p => p.status === "em rota").sort(byDist);
-  const pendente = state.pedidos.filter(p => p.status === "planejado").sort(byDist);
-  const entregue = state.pedidos.filter(p => p.status === "entregue").sort(byDist);
-  const outros   = state.pedidos.filter(p => !["em rota","planejado","entregue"].includes(p.status)).sort(byDist);
+  // Ordena pela MESMA sequência do trajeto no mapa: cargas_ids (ordem vizinho-mais-próximo
+  // gravada pelo backend), concatenando as rotas ativas. Assim a lista segue a ordem que o
+  // motorista de fato percorre, e não distância-da-loja isolada. Fallback p/ distância quando
+  // o pedido não estiver em cargas_ids (não deve ocorrer, mas evita quebrar a ordenação).
+  const posCargas = new Map();
+  state.rotas.flatMap(r => Array.isArray(r.cargas_ids) ? r.cargas_ids : [])
+    .forEach((id, i) => { if (!posCargas.has(id)) posCargas.set(id, i); });
+  const byRota = (a, b) => {
+    const ia = posCargas.has(a.id) ? posCargas.get(a.id) : Infinity;
+    const ib = posCargas.has(b.id) ? posCargas.get(b.id) : Infinity;
+    return ia !== ib ? ia - ib : distLoja(a) - distLoja(b);
+  };
+  const emRota   = state.pedidos.filter(p => p.status === "em rota").sort(byRota);
+  const pendente = state.pedidos.filter(p => p.status === "planejado").sort(byRota);
+  const entregue = state.pedidos.filter(p => p.status === "entregue").sort(byRota);
+  const outros   = state.pedidos.filter(p => !["em rota","planejado","entregue"].includes(p.status)).sort(byRota);
   return [...emRota, ...outros, ...pendente, ...entregue];
 }
 
@@ -293,7 +304,7 @@ async function marcarEntregue(pedidoId, rotaId) {
   // Limpa a rota do mapa imediatamente — feedback visual antes do API retornar
   if (state.map) {
     if (state.rotaAbortCtrl) { state.rotaAbortCtrl.abort(); state.rotaAbortCtrl = null; }
-    if (state.rotaLayer)  { try { state.map.removeLayer(state.rotaLayer); } catch {} state.rotaLayer  = null; }
+    (state.rotaLayers || []).forEach(l => { try { l.setMap(null); } catch {} }); state.rotaLayers = [];
     if (state.routeLine)  { try { state.routeLine.remove(); }              catch {} state.routeLine   = null; }
   }
 
@@ -509,6 +520,9 @@ function fitBoundsCappedMoto(bounds, paddingPx, maxZoom) {
   });
 }
 
+// Paleta para diferenciar visualmente rotas simultâneas do mesmo motorista.
+const ROTA_CORES = ["#2196f3", "#8b5cf6", "#f97316", "#0d9488", "#e11d48"];
+
 async function desenharRota() {
   // Cancela qualquer chamada de rota anterior ainda em andamento
   if (state.rotaAbortCtrl) {
@@ -518,14 +532,13 @@ async function desenharRota() {
 
   if (!state.map) return;
 
-  // Remove marcadores e camada de rota anteriores
+  // Remove marcadores e camadas de rota anteriores
   Object.values(state.deliveryMarkers).forEach(m => { try { m.setMap(null); } catch {} });
   state.deliveryMarkers = {};
-  if (state.rotaLayer) { try { state.rotaLayer.setMap(null); } catch {} state.rotaLayer = null; }
+  (state.rotaLayers || []).forEach(l => { try { l.setMap(null); } catch {} });
+  state.rotaLayers = [];
 
-  const entregues = state.pedidos.filter(p => p.status === "entregue");
-  const pendentes = state.pedidos.filter(p => p.status !== "entregue");
-  if (!pendentes.length && !entregues.length) return;
+  if (!state.pedidos.length) return;
 
   // Coord para exibir marcador (aceita fallback de município p/ não sumir do mapa).
   const getCoordsP = p => ({
@@ -541,55 +554,71 @@ async function desenharRota() {
       ? { lat, lng } : null;
   };
 
-  // Origem = último pedido entregue com coords, senão loja (mantém "partir do ponto atual")
-  const entreguesComCoord = state.pedidos
-    .filter(p => p.status === "entregue" && p.lat && p.lng)
-    .sort((a, b) => (b.data_entrega || b.entrega || "").localeCompare(a.data_entrega || a.entrega || ""));
-  const ultimoEntregue = entreguesComCoord[0];
-  const pontoPartida = ultimoEntregue
-    ? { lat: Number(ultimoEntregue.lat), lng: Number(ultimoEntregue.lng) }
-    : { lat: state.lojaLat, lng: state.lojaLng };
+  const ctrl = new AbortController();
+  state.rotaAbortCtrl = ctrl;
 
-  // Pontos REAIS da rota ativa: partida + pendentes que têm coordenada real.
-  const pontosReais = [pontoPartida, ...pendentes.map(coordRealP).filter(Boolean)];
+  const bounds = new google.maps.LatLngBounds();
+  const proximoIds = new Set();      // primeira parada pendente de CADA rota (marcador azul)
+  let distTotal = 0, duracaoTotal = 0;
 
-  state.rotaInfo = null; // { distanciaMetros, duracaoSegundos } quando a rota real vier
+  // Uma polyline por rota "em andamento" — pedidos de rotas distintas NUNCA são encadeados
+  // no mesmo traçado. Dentro de cada rota, a ordem das paradas segue cargas_ids, que o backend
+  // já gravou por vizinho-mais-próximo (loja → mais próxima → próxima → ... → última).
+  await Promise.all(state.rotas.map(async (rota, idx) => {
+    const pedidosDaRota = (rota.cargas_ids || [])
+      .map(id => state.pedidos.find(p => p.id === id))
+      .filter(Boolean);
+    if (!pedidosDaRota.length) return;
 
-  if (pontosReais.length >= 2) {
-    const ctrl = new AbortController();
-    state.rotaAbortCtrl = ctrl;
+    const pendentes = pedidosDaRota.filter(p => p.status !== "entregue");
+    if (pendentes.length) proximoIds.add(pendentes[0].id);
 
+    // Origem = último pedido entregue com coords DESTA rota, senão loja ("partir do ponto atual").
+    const ultimoEntregue = pedidosDaRota
+      .filter(p => p.status === "entregue" && p.lat && p.lng)
+      .sort((a, b) => (b.data_entrega || b.entrega || "").localeCompare(a.data_entrega || a.entrega || ""))[0];
+    const pontoPartida = ultimoEntregue
+      ? { lat: Number(ultimoEntregue.lat), lng: Number(ultimoEntregue.lng) }
+      : { lat: state.lojaLat, lng: state.lojaLng };
+
+    // Pontos REAIS: partida + pendentes com coordenada real, NA ORDEM de cargas_ids.
+    const pontosReais = [pontoPartida, ...pendentes.map(coordRealP).filter(Boolean)];
+    pontosReais.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
+    if (pontosReais.length < 2) return;
+
+    const cor = ROTA_CORES[idx % ROTA_CORES.length];
     const resultado = await buscarRotaPath(pontosReais, ctrl.signal);
-
-    // Se uma chamada mais recente já abortou esta, descarta o resultado
     if (ctrl.signal.aborted) return;
-    state.rotaAbortCtrl = null;
 
     if (resultado?.path) {
-      state.rotaLayer = new google.maps.Polyline({
-        path: resultado.path, map: state.map, strokeColor: "#2196f3", strokeWeight: 5, strokeOpacity: 0.85,
-      });
-      state.rotaInfo = { distanciaMetros: resultado.distanciaMetros, duracaoSegundos: resultado.duracaoSegundos };
+      state.rotaLayers.push(new google.maps.Polyline({
+        path: resultado.path, map: state.map, strokeColor: cor, strokeWeight: 5, strokeOpacity: 0.85,
+      }));
+      distTotal += resultado.distanciaMetros || 0;
+      duracaoTotal += resultado.duracaoSegundos || 0;
     } else {
       // Fallback (linha pontilhada) SÓ quando a Directions falha de verdade.
-      state.rotaLayer = new google.maps.Polyline({
-        path: pontosReais, map: state.map, strokeColor: "#2196f3", strokeWeight: 4, strokeOpacity: 0,
+      state.rotaLayers.push(new google.maps.Polyline({
+        path: pontosReais, map: state.map, strokeColor: cor, strokeWeight: 4, strokeOpacity: 0,
         icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, strokeWeight: 4, scale: 3 }, offset: "0", repeat: "10px" }],
-      });
+      }));
     }
-  }
+  }));
 
-  // Bounds SOMENTE com os pontos reais da rota ativa + cap de zoom.
-  const bounds = new google.maps.LatLngBounds();
-  pontosReais.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
+  // Se uma chamada mais recente já abortou esta, descarta o resultado
+  if (ctrl.signal.aborted) return;
+  state.rotaAbortCtrl = null;
+  state.rotaInfo = (distTotal || duracaoTotal)
+    ? { distanciaMetros: distTotal, duracaoSegundos: duracaoTotal } : null;
+
+  // Bounds SOMENTE com os pontos reais das rotas ativas + cap de zoom.
   if (!bounds.isEmpty()) fitBoundsCappedMoto(bounds, 60, 15);
 
-  // Marcadores dos pedidos
-  const allPedidos = [...entregues, ...pendentes];
-  allPedidos.forEach((p, i) => {
+  // Marcadores de todos os pedidos (todas as rotas ativas).
+  state.pedidos.forEach(p => {
     const { lat, lng } = getCoordsP(p);
     const isEntregue = p.status === "entregue";
-    const isProximo  = !isEntregue && i === entregues.length;
+    const isProximo  = proximoIds.has(p.id);
     const cor = isEntregue ? "#22c55e" : isProximo ? "#3b82f6" : p.status === "planejado" ? "#eab308" : "#6b7280";
     const marker = new google.maps.Marker({
       position: { lat, lng }, map: state.map,
