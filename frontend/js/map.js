@@ -82,14 +82,9 @@ function makeSimplePin(color, size = 16) {
 }
 
 function storeMarkerIcon() {
-  return {
-    path: google.maps.SymbolPath.CIRCLE,
-    fillColor: "#111827",
-    fillOpacity: 1,
-    strokeColor: "#fff",
-    strokeWeight: 3,
-    scale: 9,
-  };
+  // Pin dedicado da sede/loja (grafite + dourado da marca), distinto dos
+  // marcadores circulares de pedido. Definido em icons.js (fonte única).
+  return Icons.storeMapMarker();
 }
 
 // Aplica estilo a uma polyline. Tracejado é feito com ícone repetido (Google não tem dashArray).

@@ -168,21 +168,6 @@ document.getElementById("newRelatorioBtn")?.addEventListener("click", openRelato
   bindChartEvents();
   document.getElementById("mapReloadRoutes").addEventListener("click", renderMapPanel);
   document.getElementById("mapFitRoutes").addEventListener("click", fitAllMapRoutes);
-  document.getElementById("restoreSeedBtn").addEventListener("click", () => {
-    confirmAction("Restaurar dados de exemplo?", () => {
-      initStorage(true);
-      applyTheme(localStorage.getItem("madcenter_tema") || "dark");
-      renderAll();
-      toast("Dados exemplo restaurados.");
-    });
-  });
-  document.getElementById("clearDataBtn").addEventListener("click", () => {
-    confirmAction("Limpar todos os dados salvos?", () => {
-      resetToEmptyData();
-      renderAll();
-      toast("Dados limpos.");
-    });
-  });
 }
 
 function showPage(page) {

@@ -259,11 +259,3 @@ async function saveSettings(data) {
   await apiPut(`${API_BASE}/api/configuracoes`, payload);
   DB.settings = { ...DB.settings, ...payload };
 }
-
-function clearAllData() {
-  console.warn("clearAllData desativado usando Supabase.");
-}
-
-function resetToEmptyData() {
-  console.warn("resetToEmptyData desativado usando Supabase.");
-}

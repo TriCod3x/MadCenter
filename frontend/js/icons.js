@@ -36,3 +36,21 @@ const Icons = {
   x:           (s=20) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
   store:       (s=20) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9h18"/><path d="M9 21v-6h6v6"/></svg>`,
 };
+
+// Marcador da sede/loja para o Google Maps — pin em gota (grafite + dourado da
+// marca) com o glifo `store` dentro. Formato e cor deliberadamente distintos dos
+// marcadores circulares de pedido, para o motorista/admin identificar a sede num relance.
+// Requer o objeto google.maps já carregado (Size/Point). Uso: marker.icon = Icons.storeMapMarker();
+Icons.storeMapMarker = function () {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="52" viewBox="0 0 40 52">`
+    + `<path d="M20 1.5C10.9 1.5 3.5 8.9 3.5 18 3.5 29.5 20 50.5 20 50.5S36.5 29.5 36.5 18C36.5 8.9 29.1 1.5 20 1.5Z" fill="#1f2937" stroke="#ffffff" stroke-width="1.6"/>`
+    + `<g transform="translate(12.4 9.4) scale(0.63)" fill="none" stroke="#f2c94c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">`
+    + `<path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9h18"/><path d="M9 21v-6h6v6"/>`
+    + `</g></svg>`;
+  return {
+    url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
+    scaledSize: new google.maps.Size(40, 52),
+    anchor: new google.maps.Point(20, 51),
+    labelOrigin: new google.maps.Point(20, 18),
+  };
+};

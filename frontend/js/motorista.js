@@ -207,6 +207,11 @@ function renderPedidos() {
       isEntregue ? "is-entregue" : isPlanejado ? "is-pendente" : isProximo ? "is-proximo" : ""
     ].join(" ").trim();
 
+    // Borda lateral = cor da rota deste pedido no mapa (paleta ROTA_CORES),
+    // para o motorista associar card ↔ traçado quando há várias rotas ativas.
+    const corRota = corDaRota(rota?.id);
+    const corStyle = corRota ? ` style="border-left-color:${corRota}"` : "";
+
     const statusBadge = isEntregue
       ? `<span class="moto-badge moto-badge-green">Entregue</span>`
       : isPlanejado
@@ -232,7 +237,7 @@ function renderPedidos() {
     ` : "";
 
     return `
-      <div class="${cardClass}" id="card-${p.id}">
+      <div class="${cardClass}" id="card-${p.id}"${corStyle}>
         <div class="moto-card-header">
           <strong class="moto-card-codigo">${p.codigo || "—"}</strong>
           ${statusBadge}
@@ -457,7 +462,7 @@ function iniciarMapa() {
     position: { lat: LOJA_LAT, lng: LOJA_LNG },
     map: state.map,
     title: "Madcenter — Ponto de partida",
-    icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: "#4caf50", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 3, scale: 9 },
+    icon: Icons.storeMapMarker(),
   });
   lojaMarker.addListener("click", () => {
     state.infoWindow.setContent(buildInfoWindowHtml({ titulo: "Madcenter", subtitulo: "Ponto de partida" }));
@@ -523,6 +528,14 @@ function fitBoundsCappedMoto(bounds, paddingPx, maxZoom) {
 // Paleta para diferenciar visualmente rotas simultâneas do mesmo motorista.
 const ROTA_CORES = ["#2196f3", "#8b5cf6", "#f97316", "#0d9488", "#e11d48"];
 
+// Cor da rota = posição dela em state.rotas (mesma indexação usada no traçado do mapa),
+// para que a borda do card e a polyline daquela rota sejam SEMPRE a mesma cor.
+// Retorna null quando a rota não está entre as ativas.
+function corDaRota(rotaId) {
+  const idx = state.rotas.findIndex(r => r.id === rotaId);
+  return idx >= 0 ? ROTA_CORES[idx % ROTA_CORES.length] : null;
+}
+
 async function desenharRota() {
   // Cancela qualquer chamada de rota anterior ainda em andamento
   if (state.rotaAbortCtrl) {
@@ -564,7 +577,7 @@ async function desenharRota() {
   // Uma polyline por rota "em andamento" — pedidos de rotas distintas NUNCA são encadeados
   // no mesmo traçado. Dentro de cada rota, a ordem das paradas segue cargas_ids, que o backend
   // já gravou por vizinho-mais-próximo (loja → mais próxima → próxima → ... → última).
-  await Promise.all(state.rotas.map(async (rota, idx) => {
+  await Promise.all(state.rotas.map(async (rota) => {
     const pedidosDaRota = (rota.cargas_ids || [])
       .map(id => state.pedidos.find(p => p.id === id))
       .filter(Boolean);
@@ -586,7 +599,7 @@ async function desenharRota() {
     pontosReais.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
     if (pontosReais.length < 2) return;
 
-    const cor = ROTA_CORES[idx % ROTA_CORES.length];
+    const cor = corDaRota(rota.id);
     const resultado = await buscarRotaPath(pontosReais, ctrl.signal);
     if (ctrl.signal.aborted) return;
 
