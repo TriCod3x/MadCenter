@@ -188,7 +188,11 @@ function renderPedidos() {
   if (title) title.style.display = "block";
 
   const naoEntregues = ordenados.filter(p => p.status !== "entregue");
-  const primeiroPendenteId = naoEntregues.find(p => p.status === "em rota")?.id
+  // Destaque azul = a MESMA próxima parada global do mapa (mais próxima da origem
+  // compartilhada, entre todas as rotas). Fallback p/ 1ª pendente quando ainda não há
+  // coord real em nenhuma rota (contexto sem próxima definida).
+  const primeiroPendenteId = calcularContextoRota().proximaParada?.id
+    || naoEntregues.find(p => p.status === "em rota")?.id
     || naoEntregues[0]?.id;
 
   list.innerHTML = ordenados.map(p => {
@@ -539,6 +543,63 @@ function corDaRota(rotaId) {
   return idx >= 0 ? ROTA_CORES[idx % ROTA_CORES.length] : null;
 }
 
+// Coord REAL do pedido (lat/lng válidos, sem fallback de município). null se ausente.
+function coordRealPedido(p) {
+  const lat = Number(p.lat), lng = Number(p.lng);
+  return (p.lat && p.lng && Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0))
+    ? { lat, lng } : null;
+}
+
+// Contexto de navegação — FONTE ÚNICA para o mapa e os cards, garantindo consistência.
+// Regras (decididas com o usuário):
+//  • Origem = ÚLTIMA entrega concluída de QUALQUER rota (posição atual do motorista);
+//    sem nenhuma entrega ainda → loja. Vale ENTRE rotas diferentes.
+//  • "Mais próxima primeiro, uma rota por vez": a rota ATIVA é sticky — se a última
+//    entrega pertence a uma rota que ainda tem pendentes, o motorista termina ESSA
+//    rota antes de trocar (mesmo que outra rota tenha parada momentaneamente mais
+//    perto). Só quando não há rota em andamento (início, ou a anterior foi concluída)
+//    é que se escolhe a rota cuja próxima parada está mais perto da origem.
+//  • Próxima parada GLOBAL = a próxima parada da rota ativa (único destaque azul).
+function calcularContextoRota() {
+  // Entregues com coord, mais recente primeiro = posição atual do motorista.
+  const ultimoEntregue = state.pedidos
+    .filter(p => p.status === "entregue" && coordRealPedido(p))
+    .sort((a, b) => (b.data_entrega || b.entrega || "").localeCompare(a.data_entrega || a.entrega || ""))[0];
+  const origem = ultimoEntregue
+    ? coordRealPedido(ultimoEntregue)
+    : { lat: state.lojaLat, lng: state.lojaLng };
+
+  // Pendentes de uma rota (com coord real), NA ORDEM de cargas_ids (sequência do backend).
+  const pendentesDe = rota => (rota.cargas_ids || [])
+    .map(id => state.pedidos.find(p => p.id === id)).filter(Boolean)
+    .filter(p => p.status !== "entregue" && coordRealPedido(p));
+
+  let rotaAtiva = null, pendentesAtiva = [];
+
+  // 1) Rota em andamento = a que contém a última entrega e ainda tem pendentes → termina primeiro.
+  if (ultimoEntregue) {
+    const rotaDoUltimo = state.rotas.find(r => (r.cargas_ids || []).includes(ultimoEntregue.id));
+    if (rotaDoUltimo) {
+      const pend = pendentesDe(rotaDoUltimo);
+      if (pend.length) { rotaAtiva = rotaDoUltimo; pendentesAtiva = pend; }
+    }
+  }
+
+  // 2) Sem rota em andamento: escolhe a rota cuja próxima parada está mais perto da origem.
+  if (!rotaAtiva) {
+    let menorDist = Infinity;
+    for (const rota of state.rotas) {
+      const pend = pendentesDe(rota);
+      if (!pend.length) continue;
+      const c = coordRealPedido(pend[0]);
+      const d = haversineKm(origem.lat, origem.lng, c.lat, c.lng);
+      if (d < menorDist) { menorDist = d; rotaAtiva = rota; pendentesAtiva = pend; }
+    }
+  }
+
+  return { origem, rotaAtiva, proximaParada: pendentesAtiva[0] || null, pendentesAtiva };
+}
+
 async function desenharRota() {
   // Cancela qualquer chamada de rota anterior ainda em andamento
   if (state.rotaAbortCtrl) {
@@ -562,47 +623,25 @@ async function desenharRota() {
     lng: p.lng ? Number(p.lng) : obterCoordsMunicipio(p.destino_municipio, p.destino_estado).lng
   });
 
-  // Coord REAL do pedido (só quando há lat/lng válidos). Usada na Directions e no
-  // bounds — nunca centroide de município, para não puxar o traçado nem o zoom.
-  const coordRealP = p => {
-    const lat = Number(p.lat), lng = Number(p.lng);
-    return (p.lat && p.lng && Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0))
-      ? { lat, lng } : null;
-  };
-
   const ctrl = new AbortController();
   state.rotaAbortCtrl = ctrl;
 
   const bounds = new google.maps.LatLngBounds();
-  const proximoIds = new Set();      // primeira parada pendente de CADA rota (marcador azul)
   let distTotal = 0, duracaoTotal = 0;
 
-  // Uma polyline por rota "em andamento" — pedidos de rotas distintas NUNCA são encadeados
-  // no mesmo traçado. Dentro de cada rota, a ordem das paradas segue cargas_ids, que o backend
-  // já gravou por vizinho-mais-próximo (loja → mais próxima → próxima → ... → última).
-  await Promise.all(state.rotas.map(async (rota) => {
-    const pedidosDaRota = (rota.cargas_ids || [])
-      .map(id => state.pedidos.find(p => p.id === id))
-      .filter(Boolean);
-    if (!pedidosDaRota.length) return;
+  // Origem compartilhada (última entrega global → loja) + rota ativa (mais próxima
+  // primeiro) + próxima parada global — tudo vindo da fonte única.
+  const { origem, rotaAtiva, proximaParada, pendentesAtiva } = calcularContextoRota();
+  state.proximaGlobalId = proximaParada?.id || null;
 
-    const pendentes = pedidosDaRota.filter(p => p.status !== "entregue");
-    if (pendentes.length) proximoIds.add(pendentes[0].id);
-
-    // Origem = último pedido entregue com coords DESTA rota, senão loja ("partir do ponto atual").
-    const ultimoEntregue = pedidosDaRota
-      .filter(p => p.status === "entregue" && p.lat && p.lng)
-      .sort((a, b) => (b.data_entrega || b.entrega || "").localeCompare(a.data_entrega || a.entrega || ""))[0];
-    const pontoPartida = ultimoEntregue
-      ? { lat: Number(ultimoEntregue.lat), lng: Number(ultimoEntregue.lng) }
-      : { lat: state.lojaLat, lng: state.lojaLng };
-
-    // Pontos REAIS: partida + pendentes com coordenada real, NA ORDEM de cargas_ids.
-    const pontosReais = [pontoPartida, ...pendentes.map(coordRealP).filter(Boolean)];
+  // Desenha SOMENTE a rota ativa, partindo da origem compartilhada. As demais rotas
+  // ficam em espera (marcadores visíveis, sem traçado) até esta terminar. Dentro da
+  // rota ativa, a ordem das paradas segue cargas_ids (sequência do backend).
+  if (rotaAtiva && pendentesAtiva.length) {
+    const pontosReais = [origem, ...pendentesAtiva.map(coordRealPedido)];
     pontosReais.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
-    if (pontosReais.length < 2) return;
 
-    const cor = corDaRota(rota.id);
+    const cor = corDaRota(rotaAtiva.id);
     const resultado = await buscarRotaPath(pontosReais, ctrl.signal);
     if (ctrl.signal.aborted) return;
 
@@ -619,7 +658,7 @@ async function desenharRota() {
         icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, strokeWeight: 4, scale: 3 }, offset: "0", repeat: "10px" }],
       }));
     }
-  }));
+  }
 
   // Se uma chamada mais recente já abortou esta, descarta o resultado
   if (ctrl.signal.aborted) return;
@@ -627,14 +666,15 @@ async function desenharRota() {
   state.rotaInfo = (distTotal || duracaoTotal)
     ? { distanciaMetros: distTotal, duracaoSegundos: duracaoTotal } : null;
 
-  // Bounds SOMENTE com os pontos reais das rotas ativas + cap de zoom.
+  // Bounds focado na rota ATIVA (origem + suas paradas) + cap de zoom.
   if (!bounds.isEmpty()) fitBoundsCappedMoto(bounds, 60, 15);
 
-  // Marcadores de todos os pedidos (todas as rotas ativas).
+  // Marcadores de TODOS os pedidos (todas as rotas), mas só UMA próxima global (azul).
+  // As paradas das rotas em espera aparecem sem traçado até a rota ativa terminar.
   state.pedidos.forEach(p => {
     const { lat, lng } = getCoordsP(p);
     const isEntregue = p.status === "entregue";
-    const isProximo  = proximoIds.has(p.id);
+    const isProximo  = p.id === state.proximaGlobalId;
     const cor = isEntregue ? "#22c55e" : isProximo ? "#3b82f6" : p.status === "planejado" ? "#eab308" : "#6b7280";
     const marker = new google.maps.Marker({
       position: { lat, lng }, map: state.map,

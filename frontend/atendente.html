@@ -175,7 +175,11 @@
                 Selecionar no mapa
               </button>
               <div id="atendLocationPreview" class="atend-location-preview hidden"></div>
-              <div id="atendFretePreview" class="atend-frete-preview hidden"></div>
+            </div>
+            <div class="atend-field">
+              <label for="fFrete">Frete (R$)</label>
+              <input id="fFrete" type="number" placeholder="0.00" min="0" step="0.01" inputmode="decimal">
+              <span id="atendFretePreview" class="atend-frete-hint hidden"></span>
             </div>
             <div class="atend-field atend-field-full">
               <label for="fObs">Observações (opcional)</label>

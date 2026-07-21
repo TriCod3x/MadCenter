@@ -194,8 +194,9 @@ async function getFreteConfig() {
   return _freteConfig;
 }
 
-// Mostra o frete estimado (read-only) assim que há coordenada. Mesma fórmula do
-// backend: max(dist*custo_km + fixo, minimo). Some quando não há lat/lng.
+// Mostra a SUGESTÃO de frete (referência) assim que há coordenada. O campo de frete
+// é editável — o atendente decide o valor final; se deixar em branco, o backend calcula
+// por esta mesma fórmula: max(dist*custo_km + fixo, minimo). Some quando não há lat/lng.
 async function atualizarFretePreview() {
   const el = document.getElementById("atendFretePreview");
   if (!el) return;
@@ -203,7 +204,7 @@ async function atualizarFretePreview() {
   const distKm = calcularDistanciaKm(STORE_LAT, STORE_LNG, formState.lat, formState.lng);
   const cfg = await getFreteConfig();
   const frete = Math.max(distKm * cfg.custoKm + cfg.custoAdicionalFixo, cfg.freteMinimo);
-  el.innerHTML = `Frete estimado: <strong>${moneyFmt.format(frete)}</strong> · ${distKm.toFixed(1)} km`;
+  el.innerHTML = `Sugestão: <strong>${moneyFmt.format(frete)}</strong> · ${distKm.toFixed(1)} km`;
   el.classList.remove("hidden");
 }
 
@@ -459,6 +460,11 @@ async function salvarPedido() {
   const destinoMunicipio = document.getElementById("fMunicipio").value.trim();
   const destinoEstado    = document.getElementById("fEstado").value.trim().toUpperCase();
   const observacoes      = document.getElementById("fObs").value.trim();
+  // Frete digitado pelo atendente. Em branco/0 → null, para o backend calcular pela
+  // fórmula (config global) como fallback e ninguém ficar sem frete por esquecimento.
+  const freteRaw         = document.getElementById("fFrete").value.trim();
+  const freteNum         = Number(freteRaw);
+  const valorFrete       = (freteRaw !== "" && Number.isFinite(freteNum) && freteNum > 0) ? freteNum : null;
 
   // Validações
   if (!cliente)                { showToast("Preencha o nome do cliente."); return; }
@@ -493,7 +499,7 @@ async function salvarPedido() {
     prioridade,
     veiculo_tipo:      null,
     distancia_km:      Number(distKm.toFixed(1)),
-    valor_frete:       null,
+    valor_frete:       valorFrete,
     status:            "aguardando motorista",
     observacoes:       observacoes      || null,
     lat:               formState.lat    || null,
@@ -521,7 +527,7 @@ async function salvarPedido() {
 function limparFormulario() {
   const ids = ["fCodigo", "fCliente", "fTelefone", "fProduto", "fVolume", "fCep",
                "fEndereco", "fNumero", "fComplemento", "fMunicipio",
-               "fEstado", "fObs", "fPeso"];
+               "fEstado", "fObs", "fPeso", "fFrete"];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
   document.getElementById("fCategoria").value  = "Tintas";
   document.getElementById("fPrioridade").value = "normal";
@@ -811,6 +817,10 @@ function editarPedido(id) {
                 .map(([v,l]) => `<option value="${v}"${p.veiculo_tipo === v ? " selected" : ""}>${l}</option>`).join("")}
             </select>
           </div>
+          <div class="atend-field">
+            <label for="eFrete">Frete (R$)</label>
+            <input id="eFrete" type="number" value="${p.valor_frete != null ? Number(p.valor_frete).toFixed(2) : ""}" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+          </div>
           <div class="atend-field atend-field-full">
             <label for="eObs">Observações</label>
             <textarea id="eObs" rows="3">${p.observacoes || ""}</textarea>
@@ -868,6 +878,9 @@ async function salvarEdicaoPedido(id) {
     destino_estado:    document.getElementById("eEstado").value.trim().toUpperCase() || null,
     entrega:           document.getElementById("eDataEntrega").value          || null,
     veiculo_tipo:      document.getElementById("eVeiculo").value,
+    // Frete: valor positivo → grava; em branco → undefined (preserva o valor atual,
+    // não zera). O admin/atendente pode ajustar aqui a qualquer momento.
+    valor_frete:       (() => { const v = Number(document.getElementById("eFrete").value.trim()); return Number.isFinite(v) && v > 0 ? v : undefined; })(),
     observacoes:       document.getElementById("eObs").value.trim()           || null
   };
 

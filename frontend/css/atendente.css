@@ -600,20 +600,17 @@ img { max-width: 100%; }
   animation: atend-fade-in .25s ease;
 }
 
-/* Preview de frete estimado (read-only) — quem calcula o valor final é o backend. */
-.atend-frete-preview {
-  margin-top: 8px;
-  padding: 11px 14px;
-  background: var(--surface-soft);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
-  border-radius: var(--radius);
-  color: var(--text);
-  font-size: 13px;
+/* Sugestão de frete (referência) abaixo do campo editável — o valor final é o
+   que o atendente digita; se ficar em branco, o backend calcula pela fórmula. */
+.atend-frete-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
   font-weight: 600;
+  color: var(--muted);
   animation: atend-fade-in .25s ease;
 }
-.atend-frete-preview strong { color: var(--primary-2); }
+.atend-frete-hint strong { color: var(--primary-2); }
 
 /* ── AÇÕES DO FORMULÁRIO ───────────────────────────── */
 
