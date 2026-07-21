@@ -315,11 +315,14 @@ async function marcarEntregue(pedidoId, rotaId) {
 
   try {
     // 1. Marca pedido como entregue
-    await apiPut(`${API_BASE}/api/pedidos/${pedidoId}`, { status: "entregue", data_entrega: new Date().toISOString() });
+    const agoraISO = new Date().toISOString();
+    await apiPut(`${API_BASE}/api/pedidos/${pedidoId}`, { status: "entregue", data_entrega: agoraISO });
 
-    // 2. Atualiza estado local
+    // 2. Atualiza estado local — grava data_entrega também, senão o sort de "último entregue"
+    //    em desenharRota fica sem chave (null) e a origem regride para o pedido mais próximo
+    //    da loja em vez do realmente entregue por último (na 2ª+ entrega da sessão).
     const pedido = state.pedidos.find(p => p.id === pedidoId);
-    if (pedido) pedido.status = "entregue";
+    if (pedido) { pedido.status = "entregue"; pedido.data_entrega = agoraISO; }
 
     // 3. Verifica se todos da rota foram entregues
     if (rotaId) {

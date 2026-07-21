@@ -1431,6 +1431,16 @@ function updateFreteEstimado(form, lat, lng) {
   setCepField(form, "distanciaKm", distKm.toFixed(1));
   const calcDist = document.getElementById("calcDistancia");
   if (calcDist) calcDist.value = distKm.toFixed(1);
+
+  // Preenche o campo de frete com a estimativa por distância (config global).
+  // O valor definitivo é recalculado no backend no salvamento; aqui é só para o
+  // admin ver/ajustar antes de salvar. Mesma fórmula: max(dist*custo_km + fixo, minimo).
+  const s = getSettings();
+  const frete = Math.max(
+    distKm * Number(s.custoKm || 0) + Number(s.custoAdicionalFixo || 0),
+    Number(s.freteMinimo || 0)
+  );
+  setCepField(form, "valorFrete", frete.toFixed(2));
 }
 
 function toggleFreteCalc() {

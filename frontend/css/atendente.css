@@ -600,6 +600,21 @@ img { max-width: 100%; }
   animation: atend-fade-in .25s ease;
 }
 
+/* Preview de frete estimado (read-only) — quem calcula o valor final é o backend. */
+.atend-frete-preview {
+  margin-top: 8px;
+  padding: 11px 14px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  animation: atend-fade-in .25s ease;
+}
+.atend-frete-preview strong { color: var(--primary-2); }
+
 /* ── AÇÕES DO FORMULÁRIO ───────────────────────────── */
 
 .atend-form-actions { display: flex; gap: 12px; }

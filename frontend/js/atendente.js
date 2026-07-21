@@ -132,6 +132,7 @@ async function aplicarGeocodeForward(query, { origem, avisar = true } = {}) {
       preview.textContent = `📍 ${display || `${lat.toFixed(5)}, ${lng.toFixed(5)}`}`;
       preview.classList.remove("hidden");
     }
+    atualizarFretePreview();
 
     // Sincroniza o marcador do picker se estiver aberto.
     if (_mapPicker) {
@@ -173,6 +174,37 @@ function calcularDistanciaKm(lat1, lng1, lat2, lng2) {
   const a = Math.sin(dLat / 2) ** 2
           + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Config de frete (custo_km/adicional/mínimo) — carregada uma vez para o preview.
+// O valor DEFINITIVO é calculado no backend ao salvar; aqui é só estimativa read-only.
+let _freteConfig = null;
+async function getFreteConfig() {
+  if (_freteConfig) return _freteConfig;
+  try {
+    const cfg = await apiGet(`${API_BASE}/api/configuracoes`);
+    _freteConfig = {
+      custoKm:            Number(cfg?.custo_km || 0),
+      custoAdicionalFixo: Number(cfg?.custo_adicional_fixo || 0),
+      freteMinimo:        Number(cfg?.frete_minimo || 0),
+    };
+  } catch {
+    _freteConfig = { custoKm: 0, custoAdicionalFixo: 0, freteMinimo: 0 };
+  }
+  return _freteConfig;
+}
+
+// Mostra o frete estimado (read-only) assim que há coordenada. Mesma fórmula do
+// backend: max(dist*custo_km + fixo, minimo). Some quando não há lat/lng.
+async function atualizarFretePreview() {
+  const el = document.getElementById("atendFretePreview");
+  if (!el) return;
+  if (!formState.lat || !formState.lng) { el.classList.add("hidden"); return; }
+  const distKm = calcularDistanciaKm(STORE_LAT, STORE_LNG, formState.lat, formState.lng);
+  const cfg = await getFreteConfig();
+  const frete = Math.max(distKm * cfg.custoKm + cfg.custoAdicionalFixo, cfg.freteMinimo);
+  el.innerHTML = `Frete estimado: <strong>${moneyFmt.format(frete)}</strong> · ${distKm.toFixed(1)} km`;
+  el.classList.remove("hidden");
 }
 
 // ── Carregar / Renderizar ─────────────────────────────────────────────────────
@@ -502,6 +534,8 @@ function limparFormulario() {
   _mapPickerCoords = null;
   const preview = document.getElementById("atendLocationPreview");
   if (preview) { preview.textContent = ""; preview.classList.add("hidden"); }
+  const fretePreview = document.getElementById("atendFretePreview");
+  if (fretePreview) { fretePreview.textContent = ""; fretePreview.classList.add("hidden"); }
 }
 
 // ── Formulário show/hide ──────────────────────────────────────────────────────
@@ -609,6 +643,7 @@ async function confirmMapLocationAtendente() {
   const { lat, lng } = _mapPickerCoords;
   formState.lat = lat;
   formState.lng = lng;
+  atualizarFretePreview();
   // Ponto escolhido a dedo no mapa é considerado exato — some o alerta de "aproximado".
   formState.geoPreciso = true;
   destacarBotaoMapPickerAtend(false);

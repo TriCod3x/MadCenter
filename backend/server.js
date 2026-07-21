@@ -62,6 +62,44 @@ function haversineKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
+// ── Frete por distância (config global) ───────────────────────────────────────
+// Fonte única de cálculo de frete, usada no cadastro (POST) e na edição de endereço
+// (PUT) de pedidos. Precifica por distância usando os parâmetros de `configuracoes`
+// (custo_km, custo_adicional_fixo, frete_minimo) — NÃO por tipo de veículo, pois o
+// atendente cadastra sem escolher veículo. Fórmula: max(dist*custo_km + fixo, minimo).
+async function getConfigFrete() {
+  const { data: cfg } = await supabaseAdmin
+    .from("configuracoes")
+    .select("custo_km,custo_adicional_fixo,frete_minimo")
+    .limit(1).single();
+  return {
+    custoKm:            Number(cfg?.custo_km || 0),
+    custoAdicionalFixo: Number(cfg?.custo_adicional_fixo || 0),
+    freteMinimo:        Number(cfg?.frete_minimo || 0),
+  };
+}
+
+function calcularFrete(distanciaKm, cfg) {
+  const base = Number(distanciaKm || 0) * cfg.custoKm + cfg.custoAdicionalFixo;
+  return Number(Math.max(base, cfg.freteMinimo).toFixed(2));
+}
+
+// Preenche body.valor_frete quando o cliente não mandou um valor (null/0/vazio) e há
+// distância conhecida. Preserva override manual positivo (ex.: admin editou o campo).
+// Mutação in-place; ignora silenciosamente se a config não puder ser lida.
+async function aplicarFreteSeNecessario(body) {
+  const freteInformado = Number(body.valor_frete);
+  const jaTemFrete = Number.isFinite(freteInformado) && freteInformado > 0;
+  const distancia = Number(body.distancia_km);
+  if (jaTemFrete || !Number.isFinite(distancia) || distancia <= 0) return;
+  try {
+    const cfg = await getConfigFrete();
+    body.valor_frete = calcularFrete(distancia, cfg);
+  } catch (e) {
+    console.warn("[frete] não foi possível calcular automaticamente:", e.message);
+  }
+}
+
 function ordenarVizinhoMaisProximo(pedidos, lojaLat, lojaLng) {
   const restantes = [...pedidos];
   const ordenados = [];
@@ -517,6 +555,9 @@ app.post("/api/pedidos", async (req, res) => {
       if (body[campo] === "" || body[campo] === undefined) body[campo] = null;
     });
 
+    // Frete por distância (config global) quando o cliente não informou valor.
+    await aplicarFreteSeNecessario(body);
+
     const { data: pedido, error: errIns } = await persistirPedidoTolerante(
       (b) => supabase.from("pedidos").insert(b).select().single(),
       body
@@ -544,6 +585,11 @@ app.put("/api/pedidos/:id", async (req, res) => {
     if (body.status === "em rota"  && !body.coleta)  body.coleta  = isoUTC3;
     if (body.status === "entregue" && !body.entrega) body.entrega = isoUTC3;
   }
+
+  // Recalcula frete quando a edição traz nova distância (ex.: endereço alterado) e
+  // não veio valor manual. PUTs sem distancia_km (ex.: motorista marcando entregue)
+  // são ignorados por aplicarFreteSeNecessario.
+  await aplicarFreteSeNecessario(body);
 
   const { data, error } = await persistirPedidoTolerante(
     (b) => supabase.from("pedidos").update(b).eq("id", id).select().single(),
