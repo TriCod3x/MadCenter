@@ -38,21 +38,23 @@ const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL
 
 const fields = {
   cargas: [
+    // Nenhum campo do pedido é obrigatório: o salvamento nunca trava por campo vazio.
+    // Pedido sem endereço/CEP fica sem lat/lng e cai na rota "Não encontrados" (revisão manual).
     ["codigo", "Código do pedido", "text", false],
-    ["descricao", "Produto/material", "text", true],
-    ["tipo", "Categoria do material", "select:Tintas,Elétrica,Hidráulica,Ferramentas,Pisos e revestimentos,Cimento e argamassa,Outros", true],
-    ["peso", "Peso (kg)", "number", true],
+    ["descricao", "Produto/material", "text", false],
+    ["tipo", "Categoria do material", "select:Tintas,Elétrica,Hidráulica,Ferramentas,Pisos e revestimentos,Cimento e argamassa,Outros", false],
+    ["peso", "Peso (kg)", "number", false],
     ["volume", "Volume", "text", false],
-    ["cep", "CEP", "cep", true],
-    ["destinoMunicipio", "Município de destino", "city", true],
-    ["destinoEstado", "Estado de destino", "text", true],
-    ["enderecoEntrega", "Endereço de entrega", "text", true],
+    ["cep", "CEP", "cep", false],
+    ["destinoMunicipio", "Município de destino", "city", false],
+    ["destinoEstado", "Estado de destino", "text", false],
+    ["enderecoEntrega", "Endereço de entrega", "text", false],
     ["numero", "Número", "text", false],
     ["complemento", "Complemento", "text", false],
-    ["cliente", "Cliente", "text", true],
-    ["telefone", "Telefone/WhatsApp", "phone", true],
-    ["prioridade", "Prioridade", "select:baixa,normal,alta,urgente", true],
-    ["status", "Status", "select:aguardando motorista,em rota,próximo dia,entregue,cancelado", true],
+    ["cliente", "Cliente", "text", false],
+    ["telefone", "Telefone/WhatsApp", "phone", false],
+    ["prioridade", "Prioridade", "select:baixa,normal,alta,urgente", false],
+    ["status", "Status", "select:aguardando motorista,em rota,próximo dia,entregue,cancelado", false],
     ["observacoes", "Observações", "textarea", false]
   ],
   motoristas: [
@@ -88,8 +90,8 @@ let _pickerAutoAbertoAprox = false;
 
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const _token  = sessionStorage.getItem("madcenter_token");
-  const _perfil = sessionStorage.getItem("madcenter_perfil");
+  const _token  = getStored("madcenter_token");
+  const _perfil = getStored("madcenter_perfil");
   if (!_token || _perfil !== "admin") {
     window.location.replace("login.html");
     return;
@@ -152,9 +154,7 @@ function bindLayoutEvents() {
     renderEntregasChart(_chartPeriodo);
   });
   document.getElementById("logoutBtn").addEventListener("click", () => {
-    sessionStorage.removeItem("madcenter_token");
-    sessionStorage.removeItem("madcenter_nome");
-    sessionStorage.removeItem("madcenter_perfil");
+    limparSessaoStorage();
     window.location.replace("login.html");
   });
   document.getElementById("quickSearch").addEventListener("input", (event) => {
@@ -626,15 +626,17 @@ function renderRotasTable() {
   const rows = getRotas().filter((r) => `${r.codigo} ${r.nome} ${r.destinoMunicipio} ${r.destinoEstado}`.toLowerCase().includes(search));
   table("rotasTable", ["Código", "Nome", "Destino", "Motorista", "Pedidos", "Distância", "Frete", "Status", "Ações"], rows.map((r) => {
     const total = (r.cargasIds || []).length;
+    // Rota de revisão manual: sem destino/motorista/distância reais e com rótulo neutro.
+    const revisao = r.tipoRota === "Não encontrados";
     return [
       r.codigo,
-      r.nome,
-      `${r.destinoMunicipio}/${r.destinoEstado}`,
-      buildRotaMotoristaSelect(r.id, r.motoristaId),
+      revisao ? `${Icons.mapPin(12)} Não encontrados` : r.nome,
+      revisao ? "—" : `${r.destinoMunicipio}/${r.destinoEstado}`,
+      revisao ? "—" : buildRotaMotoristaSelect(r.id, r.motoristaId),
       `<button class="table-action table-action-pedidos" onclick="openRotaPedidos('${r.id}')" title="Ver pedidos desta rota">${Icons.package(12)} ${total} pedido${total !== 1 ? "s" : ""}</button>`,
-      `${Number(r.distancia || 0).toFixed(1)} km`,
+      revisao ? "—" : `${Number(r.distancia || 0).toFixed(1)} km`,
       money.format(Number(r.freteTotal || 0)),
-      badge(r.status),
+      revisao ? `<span class="badge badge-gray">revisão manual</span>` : badge(r.status),
       actionsRota(r.id)
     ];
   }));
@@ -869,11 +871,8 @@ async function submitEntityForm(event) {
     console.log("submitEntityForm →", entity, data);
 
     if (entity === "cargas") {
-      const cepDigits = (data.cep || "").replace(/\D/g, "");
-      if (cepDigits.length !== 8) {
-        toast("CEP obrigatório: preencha um CEP válido (8 dígitos) antes de salvar.");
-        return;
-      }
+      // Nenhum campo é obrigatório: sem coordenadas o backend envia o pedido para a
+      // rota "Não encontrados" (revisão manual), então nada fica invisível no sistema.
       data.peso = Number(data.peso || 0);
       data.distanciaKm = Number(data.distanciaKm || 0);
       data.valorFrete = Number(data.valorFrete || 0);
@@ -1620,8 +1619,12 @@ async function autoGenerateRouteForMunicipality(municipio, estado) {
 }
 
 async function autoAssignPedidoToRoute(pedido) {
-  const { id, lat, lng, destinoMunicipio, destinoEstado, cliente, valorFrete, distanciaKm } = pedido;
+  const { id, lat, lng, destinoMunicipio, destinoEstado, cliente, valorFrete, distanciaKm, geoPreciso } = pedido;
   const hasCoords = lat && lng && Number(lat) !== 0 && Number(lng) !== 0;
+
+  // Sem localização confiável (sem coords ou geocode aproximado) → não agrupa por proximidade
+  // no frontend. O backend coloca o pedido na rota "Não encontrados" para revisão manual.
+  if (!hasCoords || geoPreciso === false) return;
   const rotasAtivas = getRotas().filter((r) => r.status === "planejada");
   let rotaEncontrada = null;
 
@@ -2383,7 +2386,7 @@ async function submitRelatorioForm(e) {
     const totalEntregas = pedidosDoPeriodo.filter((p) => p.status === "entregue").length;
     const totalFrete = pedidosDoPeriodo.reduce((s, p) => s + Number(p.valorFrete || 0), 0);
 
-    const nome = sessionStorage.getItem("madcenter_nome") || "admin";
+    const nome = getStored("madcenter_nome") || "admin";
     await apiPost(`${API_BASE}/api/relatorios`, {
       nome: nomeRelatorio,
       periodo_inicio: inicio,
@@ -2405,7 +2408,7 @@ async function submitRelatorioForm(e) {
 }
 
 function baixarRelatorio(id) {
-  const token = sessionStorage.getItem("madcenter_token");
+  const token = getStored("madcenter_token");
   const a = document.createElement("a");
   a.href = `${API_BASE}/api/relatorios/${id}/csv?token=${token}`;
   a.click();

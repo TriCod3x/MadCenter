@@ -1,9 +1,25 @@
 "use strict";
 
-// ── Token ─────────────────────────────────────────────────────────────────────
+// ── Token / Sessão ──────────────────────────────────────────────────────────────
+// A sessão pode viver em sessionStorage (padrão, expira ao fechar o navegador) ou em
+// localStorage (quando o usuário marca "Lembrar de mim" no login, persiste ~30 dias).
+// Leitura sempre considera as duas — sessionStorage tem prioridade porque um login
+// sem "lembrar" limpa o localStorage antigo, então ambas nunca coexistem.
+const SESSION_KEYS = ["madcenter_token", "madcenter_nome", "madcenter_perfil"];
+
+function getStored(key) {
+  return sessionStorage.getItem(key) || localStorage.getItem(key);
+}
+
+function limparSessaoStorage() {
+  SESSION_KEYS.forEach((k) => {
+    sessionStorage.removeItem(k);
+    localStorage.removeItem(k);
+  });
+}
 
 function getToken() {
-  return sessionStorage.getItem("madcenter_token");
+  return getStored("madcenter_token");
 }
 
 // ── Google Maps (carregamento async) ───────────────────────────────────────────
@@ -88,9 +104,7 @@ function fmtDuracao(segundos) {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 function sair() {
-  sessionStorage.removeItem("madcenter_token");
-  sessionStorage.removeItem("madcenter_nome");
-  sessionStorage.removeItem("madcenter_perfil");
+  limparSessaoStorage();
   window.location.href = "login.html";
 }
 
@@ -98,7 +112,7 @@ function verificarSessao(perfilEsperado) {
   const token = getToken();
   if (!token) { window.location.replace("login.html"); return false; }
   if (perfilEsperado) {
-    const perfil = sessionStorage.getItem("madcenter_perfil");
+    const perfil = getStored("madcenter_perfil");
     if (perfil !== perfilEsperado) { window.location.replace("login.html"); return false; }
   }
   return true;

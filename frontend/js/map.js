@@ -315,6 +315,24 @@ function renderRouteCards(routes) {
   }
   list.innerHTML = routes.map((route) => {
     const driver = getMotoristas().find((m) => m.id === route.motoristaId);
+    // Rota "Não encontrados" é uma lista de pendências de revisão manual, não um trajeto:
+    // cor neutra (cinza), sem destino/motorista e com rótulo próprio.
+    if (route.tipoRota === "Não encontrados") {
+      return `
+        <div class="map-route-card map-route-card-revisao" data-route-id="${route.id}" style="cursor:pointer">
+          <div>
+            <strong>${route.codigo}</strong>
+            <span>Não encontrados</span>
+            <small>Sem localização confiável · revisão manual</small>
+          </div>
+          <div>
+            <span>—</span>
+            <small>${route.cargasIds?.length || 0} pedido(s)</small>
+            <span class="badge badge-gray">revisão</span>
+          </div>
+        </div>
+      `;
+    }
     return `
       <div class="map-route-card" data-route-id="${route.id}" style="cursor:pointer">
         <div>
@@ -421,7 +439,8 @@ function renderMapLegend() {
     { status: "planejada",     label: "Planejada",      desc: "Entrega agendada" },
     { status: "em andamento",  label: "Em andamento",   desc: "Em trânsito" },
     { status: "concluida",     label: "Concluída",      desc: "Entrega realizada" },
-    { status: "cancelada",     label: "Cancelada",      desc: "Cancelada ou bloqueada" }
+    { status: "cancelada",     label: "Cancelada",      desc: "Cancelada ou bloqueada" },
+    { status: "revisao",       label: "Não encontrados", desc: "Sem localização — revisão manual" }
   ];
   legend.classList.toggle("is-collapsed", mapLegendCollapsed);
   legend.innerHTML = `

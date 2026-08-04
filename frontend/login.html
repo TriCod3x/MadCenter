@@ -130,6 +130,26 @@
       background: #17211d;
     }
 
+    /* ── Lembrar de mim ── */
+    .login-remember {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      margin-top: .875rem;
+      font-size: .875rem;
+      color: #1f2933;
+      cursor: pointer;
+      user-select: none;
+    }
+    [data-theme="dark"] .login-remember { color: #edf6f1; }
+    .login-remember input {
+      width: 16px;
+      height: 16px;
+      accent-color: #005c2e;
+      cursor: pointer;
+    }
+    [data-theme="dark"] .login-remember input { accent-color: #0fa958; }
+
     /* ── Erro ── */
     .login-error {
       color: #d93025;
@@ -204,6 +224,11 @@
         </div>
       </div>
 
+      <label class="login-remember">
+        <input type="checkbox" id="lembrarInput">
+        <span>Lembrar de mim</span>
+      </label>
+
       <div id="loginError" class="login-error" style="margin-top:.75rem"></div>
 
       <button class="login-btn" type="submit" id="loginBtn" style="margin-top:1.25rem">
@@ -245,8 +270,10 @@
     });
 
     // ── Redireciona se já está logado ─────────────────────────────────────────
-    const token  = sessionStorage.getItem("madcenter_token");
-    const perfil = sessionStorage.getItem("madcenter_perfil");
+    // Sessão pode estar em sessionStorage (padrão) ou localStorage ("Lembrar de mim").
+    const getStored = (k) => sessionStorage.getItem(k) || localStorage.getItem(k);
+    const token  = getStored("madcenter_token");
+    const perfil = getStored("madcenter_perfil");
     if (token && perfil) {
       const dest = { admin: "index.html", atendente: "atendente.html", motorista: "motorista.html" }[perfil];
       if (dest) window.location.replace(dest);
@@ -255,10 +282,11 @@
     // ── Submit ────────────────────────────────────────────────────────────────
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const nome  = document.getElementById("nomeInput").value.trim();
-      const senha = document.getElementById("senhaInput").value;
-      const erro  = document.getElementById("loginError");
-      const btn   = document.getElementById("loginBtn");
+      const nome    = document.getElementById("nomeInput").value.trim();
+      const senha   = document.getElementById("senhaInput").value;
+      const lembrar = document.getElementById("lembrarInput").checked;
+      const erro    = document.getElementById("loginError");
+      const btn     = document.getElementById("loginBtn");
 
       if (!nome || !senha) {
         erro.textContent = "Preencha o nome de usuário e a senha.";
@@ -274,7 +302,7 @@
         const res  = await fetch(`${API_BASE}/api/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ nome, senha })
+          body: JSON.stringify({ nome, senha, lembrarDeMim: lembrar })
         });
         const json = await res.json();
 
@@ -286,9 +314,15 @@
           return;
         }
 
-        sessionStorage.setItem("madcenter_token",  json.token);
-        sessionStorage.setItem("madcenter_nome",   json.nome);
-        sessionStorage.setItem("madcenter_perfil", json.perfil);
+        // "Lembrar de mim" → localStorage (persiste ao fechar o navegador, token de ~30d).
+        // Sem marcar → sessionStorage (expira ao fechar, token de 8h). Limpa a outra storage
+        // para as duas nunca coexistirem e a leitura ficar previsível.
+        const store = lembrar ? localStorage : sessionStorage;
+        const outra = lembrar ? sessionStorage : localStorage;
+        ["madcenter_token", "madcenter_nome", "madcenter_perfil"].forEach((k) => outra.removeItem(k));
+        store.setItem("madcenter_token",  json.token);
+        store.setItem("madcenter_nome",   json.nome);
+        store.setItem("madcenter_perfil", json.perfil);
 
         const destino = { admin: "index.html", atendente: "atendente.html", motorista: "motorista.html" }[json.perfil];
         if (destino) {

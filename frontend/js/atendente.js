@@ -466,34 +466,31 @@ async function salvarPedido() {
   const freteNum         = Number(freteRaw);
   const valorFrete       = (freteRaw !== "" && Number.isFinite(freteNum) && freteNum > 0) ? freteNum : null;
 
-  // Validações
-  if (!cliente)                { showToast("Preencha o nome do cliente."); return; }
-  if (!telefone)               { showToast("Preencha o telefone / WhatsApp."); return; }
-  if (!descricao)              { showToast("Preencha o produto / material."); return; }
-  if (!peso || peso <= 0)      { showToast("Preencha o peso em kg."); return; }
-  if (cepDigits.length !== 8)  { showToast("CEP inválido. Use 8 dígitos."); return; }
-  if (!destinoMunicipio)       { showToast("Preencha o município de destino."); return; }
+  // Nenhum campo é obrigatório: o pedido pode ser salvo mesmo incompleto. Sem endereço/CEP
+  // não há lat/lng, então o backend o envia para a rota "Não encontrados" (revisão manual)
+  // e ele não fica invisível no sistema.
 
   const distKm = (formState.lat && formState.lng)
     ? calcularDistanciaKm(STORE_LAT, STORE_LNG, formState.lat, formState.lng)
     : 0;
 
-  const cepFormatado = `${cepDigits.slice(0, 5)}-${cepDigits.slice(5)}`;
+  // CEP só é formatado quando tem os 8 dígitos; caso contrário vai null.
+  const cepFormatado = cepDigits.length === 8 ? `${cepDigits.slice(0, 5)}-${cepDigits.slice(5)}` : null;
 
   const payload = {
     ...(codigoInput ? { codigo: codigoInput } : {}),
-    descricao,
+    descricao:         descricao        || null,
     tipo,
     peso,
     volume:            volume           || null,
     cep:               cepFormatado,
-    destino_municipio: destinoMunicipio,
+    destino_municipio: destinoMunicipio || null,
     destino_estado:    destinoEstado    || "",
     endereco_entrega:  enderecoEntrega  || null,
     numero:            numero           || null,
     complemento:       complemento      || null,
-    cliente,
-    telefone,
+    cliente:           cliente          || null,
+    telefone:          telefone         || null,
     coleta:            null,
     entrega:           null,
     prioridade,
@@ -561,7 +558,7 @@ function fecharFormulario() {
 }
 
 function mostrarTelaPrincipal() {
-  const nome = sessionStorage.getItem("madcenter_nome");
+  const nome = getStored("madcenter_nome");
   const titulo = document.getElementById("atendHeaderTitle");
   if (titulo && nome) titulo.textContent = `${nome} — Madcenter`;
   todayStr = new Date().toISOString().slice(0, 10);
@@ -741,8 +738,8 @@ function editarPedido(id) {
             <input id="eCodigo" type="text" value="${p.codigo || ""}">
           </div>
           <div class="atend-field">
-            <label for="eCliente">Nome do cliente *</label>
-            <input id="eCliente" type="text" value="${p.cliente || ""}" required autocomplete="name">
+            <label for="eCliente">Nome do cliente</label>
+            <input id="eCliente" type="text" value="${p.cliente || ""}" autocomplete="name">
           </div>
           <div class="atend-field">
             <label for="eTelefone">Telefone / WhatsApp</label>
@@ -755,8 +752,8 @@ function editarPedido(id) {
         <h4 class="atend-edit-section-title">Produto</h4>
         <div class="atend-form-grid">
           <div class="atend-field">
-            <label for="eProduto">Produto / material *</label>
-            <input id="eProduto" type="text" value="${p.descricao || ""}" required>
+            <label for="eProduto">Produto / material</label>
+            <input id="eProduto" type="text" value="${p.descricao || ""}">
           </div>
           <div class="atend-field">
             <label for="eCategoria">Categoria</label>
@@ -766,8 +763,8 @@ function editarPedido(id) {
             </select>
           </div>
           <div class="atend-field">
-            <label for="ePeso">Peso (kg) *</label>
-            <input id="ePeso" type="number" value="${p.peso || ""}" min="0" step="0.1" required>
+            <label for="ePeso">Peso (kg)</label>
+            <input id="ePeso" type="number" value="${p.peso || ""}" min="0" step="0.1">
           </div>
           <div class="atend-field">
             <label for="ePrioridade">Prioridade</label>
@@ -799,8 +796,8 @@ function editarPedido(id) {
             <input id="eComplemento" type="text" value="${p.complemento || ""}">
           </div>
           <div class="atend-field">
-            <label for="eMunicipio">Município de destino *</label>
-            <input id="eMunicipio" type="text" value="${p.destino_municipio || ""}" required>
+            <label for="eMunicipio">Município de destino</label>
+            <input id="eMunicipio" type="text" value="${p.destino_municipio || ""}">
           </div>
           <div class="atend-field">
             <label for="eEstado">Estado</label>
@@ -856,25 +853,22 @@ async function salvarEdicaoPedido(id) {
   const descricao = document.getElementById("eProduto").value.trim();
   const peso      = Number(document.getElementById("ePeso").value || 0);
 
-  if (!cliente)   { showToast("Preencha o nome do cliente.");        return; }
-  if (!descricao) { showToast("Preencha o produto / material.");     return; }
-  if (!peso || peso <= 0) { showToast("Preencha o peso em kg.");    return; }
-  if (!municipio) { showToast("Preencha o município de destino."); return; }
+  // Nenhum campo é obrigatório na edição — o pedido pode ser salvo mesmo incompleto.
 
   const cepDigits = document.getElementById("eCep").value.replace(/\D/g, "");
   const payload = {
     codigo:            document.getElementById("eCodigo").value.trim() || undefined,
-    cliente,
+    cliente:           cliente || null,
     telefone:          document.getElementById("eTelefone").value.trim() || null,
-    descricao,
+    descricao:         descricao || null,
     tipo:              document.getElementById("eCategoria").value,
     peso,
     prioridade:        document.getElementById("ePrioridade").value,
-    cep:               cepDigits.length === 8 ? `${cepDigits.slice(0,5)}-${cepDigits.slice(5)}` : undefined,
+    cep:               cepDigits.length === 8 ? `${cepDigits.slice(0,5)}-${cepDigits.slice(5)}` : null,
     endereco_entrega:  document.getElementById("eEndereco").value.trim()     || null,
     numero:            document.getElementById("eNumero").value.trim()        || null,
     complemento:       document.getElementById("eComplemento").value.trim()   || null,
-    destino_municipio: municipio,
+    destino_municipio: municipio || null,
     destino_estado:    document.getElementById("eEstado").value.trim().toUpperCase() || null,
     entrega:           document.getElementById("eDataEntrega").value          || null,
     veiculo_tipo:      document.getElementById("eVeiculo").value,
@@ -911,8 +905,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (themeBtn) themeBtn.addEventListener("click", alternarTema);
 
   // Verificação de autenticação
-  const token  = sessionStorage.getItem("madcenter_token");
-  const perfil = sessionStorage.getItem("madcenter_perfil");
+  const token  = getStored("madcenter_token");
+  const perfil = getStored("madcenter_perfil");
   if (!token || perfil !== "atendente") {
     window.location.replace("login.html");
     return;

@@ -179,17 +179,22 @@ async function agruparPedidosEmRotas(novoPedido) {
     // Busca pedidos aguardando motorista
     const { data: pedidosAguardando, error: errPed } = await supabaseAdmin
       .from("pedidos")
-      .select("id,lat,lng,destino_municipio,destino_estado,valor_frete,distancia_km")
+      .select("id,lat,lng,geo_preciso,destino_municipio,destino_estado,valor_frete,distancia_km")
       .eq("status", "aguardando motorista");
     if (errPed) { console.error("[agrupar] Erro ao buscar pedidos:", errPed.message); return; }
     console.log(`[agrupar] Pedidos aguardando motorista: ${pedidosAguardando?.length || 0}`);
     if (!pedidosAguardando?.length) return;
 
-    const comCoords = pedidosAguardando.filter(p => p.lat && p.lng);
-    const semCoords = pedidosAguardando.filter(p => !p.lat || !p.lng);
-    console.log(`[agrupar] Com coords: ${comCoords.length} | Sem coords: ${semCoords.length}`);
-    if (comCoords.length) console.log(`[agrupar] IDs com coords:`, comCoords.map(p => p.id));
-    if (semCoords.length) console.log(`[agrupar] IDs sem coords:`, semCoords.map(p => p.id));
+    // Localização confiável = tem lat/lng E o geocode não caiu no centroide aproximado
+    // (geo_preciso === false). geo_preciso null (pedidos antigos / antes da migração) é
+    // tratado como confiável para não jogar histórico na rota de revisão sem necessidade.
+    const temLocalConfiavel = (p) => Boolean(p.lat) && Boolean(p.lng) && p.geo_preciso !== false;
+
+    const comLocal = pedidosAguardando.filter(temLocalConfiavel);
+    const semLocal = pedidosAguardando.filter(p => !temLocalConfiavel(p));
+    console.log(`[agrupar] Com local confiável: ${comLocal.length} | Sem local (→ Não encontrados): ${semLocal.length}`);
+    if (comLocal.length) console.log(`[agrupar] IDs com local:`, comLocal.map(p => p.id));
+    if (semLocal.length) console.log(`[agrupar] IDs sem local:`, semLocal.map(p => p.id));
 
     // Pedidos já vinculados a alguma rota
     const { data: vinculos, error: errVinc } = await supabaseAdmin.from("rota_pedidos").select("pedido_id,rota_id");
@@ -233,16 +238,83 @@ async function agruparPedidosEmRotas(novoPedido) {
       return rota.id;
     }
 
-    // Se o novo pedido tem coords, tenta adicioná-lo a rota existente com < 5 pedidos
-    if (novoPedido?.lat && novoPedido?.lng && pedidosComRota.has(novoPedido.id) === false) {
+    // Cap de pedidos por rota "Não encontrados". Ela não é um trajeto otimizado — só
+    // centraliza pendências para revisão manual (endereço/localização) —, mas evitamos
+    // que cresça sem fim: ao encher, os próximos vão para uma nova rota do mesmo tipo.
+    const NAO_ENCONTRADOS_CAP = 20;
+    const NAO_ENCONTRADOS_NOME = "Não encontrados";
+
+    // Aloca pedidos sem localização confiável na(s) rota(s) "Não encontrados": primeiro
+    // preenche rotas abertas existentes até o cap, depois cria novas em blocos.
+    async function alocarNaoEncontrados(pedidosList) {
+      if (!pedidosList?.length) return;
+      const { data: rotasNE } = await supabaseAdmin
+        .from("rotas")
+        .select("id,cargas_ids,frete_total")
+        .eq("status", "planejada")
+        .eq("tipo_rota", NAO_ENCONTRADOS_NOME)
+        .is("motorista_id", null);
+
+      const pendentes = [...pedidosList];
+
+      // 1. Completa rotas "Não encontrados" já existentes que ainda têm espaço
+      for (const rota of rotasNE || []) {
+        const ids = [...(rota.cargas_ids || [])];
+        if (ids.length >= NAO_ENCONTRADOS_CAP || !pendentes.length) continue;
+        let freteAdd = 0;
+        while (ids.length < NAO_ENCONTRADOS_CAP && pendentes.length) {
+          const p = pendentes.shift();
+          ids.push(p.id);
+          freteAdd += Number(p.valor_frete || 0);
+          const { error: errVinc } = await supabaseAdmin.from("rota_pedidos").insert({ rota_id: rota.id, pedido_id: p.id });
+          if (errVinc) console.error(`[agrupar] Erro ao vincular pedido ${p.id} à rota NE ${rota.id}:`, errVinc.message);
+        }
+        await supabaseAdmin.from("rotas")
+          .update({ cargas_ids: ids, frete_total: Number(rota.frete_total || 0) + freteAdd })
+          .eq("id", rota.id);
+        console.log(`[agrupar] Rota "Não encontrados" ${rota.id} agora com ${ids.length} pedidos`);
+      }
+
+      // 2. Cria novas rotas "Não encontrados" para o restante, em blocos de até o cap
+      while (pendentes.length) {
+        const bloco = pendentes.splice(0, NAO_ENCONTRADOS_CAP);
+        const ids = bloco.map(p => p.id);
+        const payload = {
+          nome: NAO_ENCONTRADOS_NOME,
+          tipo_rota: NAO_ENCONTRADOS_NOME,
+          destino_municipio: null,
+          destino_estado: null,
+          status: "planejada",
+          cargas_ids: ids,
+          frete_total: bloco.reduce((s, p) => s + Number(p.valor_frete || 0), 0),
+          distancia: 0,
+        };
+        const { data: rota, error: errRota } = await supabaseAdmin
+          .from("rotas").insert(payload).select("id").single();
+        if (errRota || !rota?.id) {
+          console.error(`[agrupar] ERRO ao criar rota "Não encontrados":`, JSON.stringify(errRota));
+          continue;
+        }
+        for (const id of ids) {
+          const { error: errVinc } = await supabaseAdmin.from("rota_pedidos").insert({ rota_id: rota.id, pedido_id: id });
+          if (errVinc) console.error(`[agrupar] Erro ao vincular pedido ${id} à rota NE ${rota.id}:`, errVinc.message);
+        }
+        console.log(`[agrupar] Rota "Não encontrados" ${rota.id} criada com pedidos`, ids);
+      }
+    }
+
+    // Se o novo pedido tem localização confiável, tenta adicioná-lo a rota existente com < 5 pedidos
+    if (temLocalConfiavel(novoPedido || {}) && pedidosComRota.has(novoPedido.id) === false) {
       console.log(`[agrupar] Buscando rota existente próxima para pedido ${novoPedido.id}...`);
       const { data: rotasPlanejadas } = await supabaseAdmin
         .from("rotas")
-        .select("id,cargas_ids")
+        .select("id,cargas_ids,tipo_rota")
         .eq("status", "planejada")
         .is("motorista_id", null);
 
       for (const rota of rotasPlanejadas || []) {
+        // Nunca anexa a uma rota de revisão manual — ela não é trajeto de entrega.
+        if (rota.tipo_rota === NAO_ENCONTRADOS_NOME) continue;
         const idsRota = rota.cargas_ids || [];
         if (idsRota.length >= 5) continue;
         const pedDaRota = idsRota
@@ -267,15 +339,19 @@ async function agruparPedidosEmRotas(novoPedido) {
       console.log(`[agrupar] Nenhuma rota existente próxima encontrada — criando nova.`);
     }
 
-    // Agrupa pedidos sem rota por proximidade (raio 2.5km, máx 5 por grupo)
+    // Pedidos sem rota, separados por confiabilidade da localização
+    const semRotaComLocal = semRota.filter(temLocalConfiavel);
+    const semRotaSemLocal = semRota.filter(p => !temLocalConfiavel(p));
+
+    // Agrupa por proximidade (raio 2.5km, máx 5 por grupo) apenas os que têm local confiável
     const alocados = new Set();
     const grupos = [];
-    for (const pedido of semRota) {
-      if (alocados.has(pedido.id) || !pedido.lat || !pedido.lng) continue;
+    for (const pedido of semRotaComLocal) {
+      if (alocados.has(pedido.id)) continue;
       const grupo = [pedido];
       alocados.add(pedido.id);
-      for (const outro of semRota) {
-        if (alocados.has(outro.id) || !outro.lat || !outro.lng || grupo.length >= 5) continue;
+      for (const outro of semRotaComLocal) {
+        if (alocados.has(outro.id) || grupo.length >= 5) continue;
         if (haversineKm(Number(pedido.lat), Number(pedido.lng), Number(outro.lat), Number(outro.lng)) <= 2.5) {
           grupo.push(outro);
           alocados.add(outro.id);
@@ -283,19 +359,16 @@ async function agruparPedidosEmRotas(novoPedido) {
       }
       grupos.push(grupo);
     }
-    console.log(`[agrupar] Grupos com coords formados: ${grupos.length}`);
+    console.log(`[agrupar] Grupos com local formados: ${grupos.length}`);
 
     for (const grupo of grupos) {
       const ordenados = ordenarVizinhoMaisProximo(grupo, lojaLat, lojaLng);
       await criarRota(ordenados, `[grupo ${ordenados.map(p=>p.id)}]`);
     }
 
-    // Pedidos sem coords: cada um vira uma rota solo
-    const naoAlocados = semRota.filter(p => !alocados.has(p.id));
-    console.log(`[agrupar] Pedidos sem coords para rotas solo: ${naoAlocados.length}`, naoAlocados.map(p => p.id));
-    for (const pedido of naoAlocados) {
-      await criarRota([pedido], `[solo ${pedido.id}]`);
-    }
+    // Pedidos sem localização confiável → rota especial "Não encontrados" (revisão manual)
+    console.log(`[agrupar] Pedidos para "Não encontrados": ${semRotaSemLocal.length}`, semRotaSemLocal.map(p => p.id));
+    await alocarNaoEncontrados(semRotaSemLocal);
 
     console.log(`[agrupar] === FIM para pedido ${novoPedido?.id} ===`);
   } catch (err) {
@@ -693,8 +766,10 @@ app.post("/api/rotas/:id/pegar", autenticar, async (req, res) => {
   try {
     // Busca a rota
     const { data: rota, error: errRota } = await supabaseAdmin
-      .from("rotas").select("id,status,cargas_ids,motorista_id").eq("id", id).single();
+      .from("rotas").select("id,status,cargas_ids,motorista_id,tipo_rota").eq("id", id).single();
     if (errRota || !rota) return res.status(404).json({ error: "Rota não encontrada." });
+    // Rota de revisão manual não é uma rota de entrega — motorista não pode pegá-la.
+    if (rota.tipo_rota === "Não encontrados") return res.status(403).json({ error: "Rota de revisão manual — deve ser resolvida pelo admin/atendente." });
     if (rota.status !== "planejada") return res.status(400).json({ error: "Rota não está disponível." });
     if (rota.motorista_id) return res.status(409).json({ error: "Rota já foi pega por outro motorista." });
 
@@ -934,10 +1009,13 @@ app.patch("/api/usuarios/:id/toggle", async (req, res) => {
 
 // POST /api/auth/login — tenta admin_auth primeiro, depois usuarios
 app.post("/api/auth/login", async (req, res) => {
-  const { nome, senha } = req.body;
+  const { nome, senha, lembrarDeMim } = req.body;
   if (!nome || !senha) {
     return res.status(400).json({ error: "Dados incompletos." });
   }
+  // "Lembrar de mim": token de 30 dias (persistido no localStorage pelo front). Sem marcar,
+  // mantém o padrão de 8h (sessionStorage, expira ao fechar o navegador).
+  const tokenExpiresIn = lembrarDeMim === true ? "30d" : "8h";
   try {
     // 1. Tenta autenticar como admin (usa service_role para contornar RLS)
     const { data: admin } = await supabaseAdmin
@@ -953,7 +1031,7 @@ app.post("/api/auth/login", async (req, res) => {
       const token = jwt.sign(
         { id: admin.id, nome: admin.usuario, perfil: "admin" },
         JWT_SECRET,
-        { expiresIn: "8h" }
+        { expiresIn: tokenExpiresIn }
       );
       return res.json({ token, nome: admin.usuario, perfil: "admin" });
     }
@@ -976,7 +1054,7 @@ app.post("/api/auth/login", async (req, res) => {
     const token = jwt.sign(
       { id: usuario.id, nome: usuario.nome, perfil: usuario.perfil },
       JWT_SECRET,
-      { expiresIn: "8h" }
+      { expiresIn: tokenExpiresIn }
     );
     return res.json({ token, nome: usuario.nome, perfil: usuario.perfil });
   } catch (e) {

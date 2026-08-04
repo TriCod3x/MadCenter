@@ -88,9 +88,7 @@ function showEl(id, flex = false) {
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 function sair() {
-  sessionStorage.removeItem("madcenter_token");
-  sessionStorage.removeItem("madcenter_nome");
-  sessionStorage.removeItem("madcenter_perfil");
+  limparSessaoStorage();
   if (state.geoWatchId !== null) {
     navigator.geolocation.clearWatch(state.geoWatchId);
     state.geoWatchId = null;
@@ -768,7 +766,11 @@ async function carregarMural(silencioso = false) {
     if (todasRotas?.length) console.log("[mural] Rota[0] raw:", JSON.stringify(todasRotas[0]));
     console.log("[mural] Total pedidos recebidos:", todosPedidos?.length);
 
-    const rotasFiltradas = (todasRotas || []).filter(r => r.status === "planejada" && !r.motorista_id);
+    // Exclui rotas de revisão manual ("Não encontrados"): são pendências para o admin/atendente
+    // resolverem (corrigir endereço/localização), não trajetos de entrega para o motorista pegar.
+    const rotasFiltradas = (todasRotas || []).filter(r =>
+      r.status === "planejada" && !r.motorista_id && r.tipo_rota !== "Não encontrados"
+    );
     console.log("[mural] Rotas planejadas sem motorista:", rotasFiltradas.length);
     // Diagnóstico: mostrar status e motorista_id de cada rota recebida
     (todasRotas || []).forEach(r => {
@@ -983,9 +985,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (themeBtn) themeBtn.addEventListener("click", alternarTema);
 
   // Verificação de autenticação
-  const token      = sessionStorage.getItem("madcenter_token");
-  const perfil     = sessionStorage.getItem("madcenter_perfil");
-  const nomeLogado = sessionStorage.getItem("madcenter_nome");
+  const token      = getStored("madcenter_token");
+  const perfil     = getStored("madcenter_perfil");
+  const nomeLogado = getStored("madcenter_nome");
   if (!token || perfil !== "motorista") {
     window.location.replace("login.html");
     return;

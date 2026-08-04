@@ -1171,6 +1171,12 @@ tr:hover td {
   background: rgba(245, 158, 11, .06);
 }
 
+/* Rota "Não encontrados": pendências de revisão manual, não um trajeto real. */
+.map-route-card-revisao {
+  border-left-color: #9ca3af;
+  background: rgba(156, 163, 175, .07);
+}
+
 .map-route-title {
   display: flex;
   justify-content: space-between;
