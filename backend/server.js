@@ -167,6 +167,37 @@ function criarCache(ttlMs) {
 const ROTA_CACHE    = criarCache(60 * 60 * 1000);      // 1h
 const GEOCODE_CACHE = criarCache(24 * 60 * 60 * 1000); // 24h
 
+// ── Falhas de agrupamento ─────────────────────────────────────────────────────
+//
+// Quando o agrupamento falha, o pedido fica sem rota nenhuma: não aparece no mural
+// do motorista nem na tela de Rotas do admin — some do fluxo sem rastro. Antes isso
+// era só um console.error no meio do log; agora tem prefixo próprio e fica registrado
+// para o admin ver. A fonte de verdade para o alerta do admin é o próprio banco
+// (GET /api/admin/pedidos-sem-rota conta os órfãos), então o histórico em memória
+// abaixo é só um detalhe extra — em serverless ele não sobrevive entre invocações.
+const FALHAS_AGRUPAMENTO_MAX = 50;
+const falhasAgrupamento = [];
+
+function registrarFalhaAgrupamento(etapa, detalhe, pedidoIds = []) {
+  const falha = {
+    quando: new Date().toISOString(),
+    etapa,
+    detalhe: typeof detalhe === "string" ? detalhe : (detalhe?.message || JSON.stringify(detalhe)),
+    pedido_ids: pedidoIds,
+  };
+  falhasAgrupamento.unshift(falha);
+  if (falhasAgrupamento.length > FALHAS_AGRUPAMENTO_MAX) falhasAgrupamento.length = FALHAS_AGRUPAMENTO_MAX;
+  console.error(
+    `\n!!!!!!!!!! [FALHA-AGRUPAMENTO] !!!!!!!!!!\n` +
+    `  etapa   : ${etapa}\n` +
+    `  detalhe : ${falha.detalhe}\n` +
+    `  pedidos : ${pedidoIds.join(", ") || "—"}\n` +
+    `  efeito  : ${pedidoIds.length || "os"} pedido(s) ficaram SEM ROTA e invisíveis no mural.\n` +
+    `!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n`
+  );
+  return falha;
+}
+
 async function agruparPedidosEmRotas(novoPedido) {
   try {
     console.log(`[agrupar] === INÍCIO para pedido ${novoPedido?.id} ===`);
@@ -227,15 +258,40 @@ async function agruparPedidosEmRotas(novoPedido) {
         .insert(payload)
         .select("id").single();
       if (errRota || !rota?.id) {
-        console.error(`[agrupar] ${prefixo} ERRO ao criar rota:`, JSON.stringify(errRota));
+        registrarFalhaAgrupamento("criar rota por proximidade", errRota || "insert não retornou id", ids);
         return null;
       }
       console.log(`[agrupar] ${prefixo} Rota ${rota.id} criada com pedidos`, ids);
-      for (const id of ids) {
-        const { error: errVinc } = await supabaseAdmin.from("rota_pedidos").insert({ rota_id: rota.id, pedido_id: id });
-        if (errVinc) console.error(`[agrupar] Erro ao vincular pedido ${id} à rota ${rota.id}:`, errVinc.message);
+      const vinculados = await vincularPedidos(rota.id, ids);
+      if (!vinculados.length) {
+        // Ninguém pôde ser vinculado (rota_pedidos.pedido_id é UNIQUE): outro
+        // agrupamento pegou estes pedidos primeiro. Desfaz para não deixar rota fantasma.
+        await supabaseAdmin.from("rotas").delete().eq("id", rota.id);
+        console.warn(`[agrupar] ${prefixo} Rota ${rota.id} desfeita — pedidos já pertenciam a outra rota.`);
+        return null;
+      }
+      if (vinculados.length !== ids.length) {
+        await supabaseAdmin.from("rotas").update({ cargas_ids: vinculados }).eq("id", rota.id);
       }
       return rota.id;
+    }
+
+    // Vincula pedidos a uma rota e devolve os que realmente entraram. Um pedido já
+    // vinculado a outra rota é recusado pelo UNIQUE de rota_pedidos.pedido_id — isso
+    // é a trava que impede o mesmo pedido de acabar em duas rotas.
+    async function vincularPedidos(rotaId, ids) {
+      const ok = [];
+      for (const id of ids) {
+        const { error: errVinc } = await supabaseAdmin.from("rota_pedidos").insert({ rota_id: rotaId, pedido_id: id });
+        if (errVinc) {
+          // 23505 = já vinculado a outra rota; corrida esperada, não é falha de sistema.
+          if (errVinc.code === "23505") console.warn(`[agrupar] Pedido ${id} já estava em outra rota — ignorado.`);
+          else registrarFalhaAgrupamento(`vincular pedido à rota ${rotaId}`, errVinc, [id]);
+          continue;
+        }
+        ok.push(id);
+      }
+      return ok;
     }
 
     // Cap de pedidos por rota "Não encontrados". Ela não é um trajeto otimizado — só
@@ -264,10 +320,10 @@ async function agruparPedidosEmRotas(novoPedido) {
         let freteAdd = 0;
         while (ids.length < NAO_ENCONTRADOS_CAP && pendentes.length) {
           const p = pendentes.shift();
+          const [vinculado] = await vincularPedidos(rota.id, [p.id]);
+          if (!vinculado) continue;   // já estava em outra rota
           ids.push(p.id);
           freteAdd += Number(p.valor_frete || 0);
-          const { error: errVinc } = await supabaseAdmin.from("rota_pedidos").insert({ rota_id: rota.id, pedido_id: p.id });
-          if (errVinc) console.error(`[agrupar] Erro ao vincular pedido ${p.id} à rota NE ${rota.id}:`, errVinc.message);
         }
         await supabaseAdmin.from("rotas")
           .update({ cargas_ids: ids, frete_total: Number(rota.frete_total || 0) + freteAdd })
@@ -292,14 +348,21 @@ async function agruparPedidosEmRotas(novoPedido) {
         const { data: rota, error: errRota } = await supabaseAdmin
           .from("rotas").insert(payload).select("id").single();
         if (errRota || !rota?.id) {
-          console.error(`[agrupar] ERRO ao criar rota "Não encontrados":`, JSON.stringify(errRota));
+          // Causa provável se o erro for 23502/23514: a migração
+          // 2026-08-05-rotas-nao-encontrados.sql ainda não foi rodada no banco.
+          registrarFalhaAgrupamento(`criar rota "${NAO_ENCONTRADOS_NOME}"`, errRota || "insert não retornou id", ids);
           continue;
         }
-        for (const id of ids) {
-          const { error: errVinc } = await supabaseAdmin.from("rota_pedidos").insert({ rota_id: rota.id, pedido_id: id });
-          if (errVinc) console.error(`[agrupar] Erro ao vincular pedido ${id} à rota NE ${rota.id}:`, errVinc.message);
+        const vinculados = await vincularPedidos(rota.id, ids);
+        if (!vinculados.length) {
+          await supabaseAdmin.from("rotas").delete().eq("id", rota.id);
+          console.warn(`[agrupar] Rota "Não encontrados" ${rota.id} desfeita — pedidos já pertenciam a outra rota.`);
+          continue;
         }
-        console.log(`[agrupar] Rota "Não encontrados" ${rota.id} criada com pedidos`, ids);
+        if (vinculados.length !== ids.length) {
+          await supabaseAdmin.from("rotas").update({ cargas_ids: vinculados }).eq("id", rota.id);
+        }
+        console.log(`[agrupar] Rota "Não encontrados" ${rota.id} criada com pedidos`, vinculados);
       }
     }
 
@@ -372,8 +435,25 @@ async function agruparPedidosEmRotas(novoPedido) {
 
     console.log(`[agrupar] === FIM para pedido ${novoPedido?.id} ===`);
   } catch (err) {
-    console.error("[agruparPedidosEmRotas] Exceção não tratada:", err?.message, err?.stack);
+    console.error(err?.stack);
+    registrarFalhaAgrupamento("exceção não tratada", err, novoPedido?.id ? [novoPedido.id] : []);
   }
+}
+
+// Pedidos que ficaram de fora de qualquer rota — o sintoma de que o agrupamento falhou.
+// Calculado direto do banco (stateless), então funciona em serverless e depois de deploy.
+async function listarPedidosSemRota() {
+  const { data: pedidosAguardando, error: errPed } = await supabaseAdmin
+    .from("pedidos")
+    .select("id,codigo,cliente,endereco_entrega,destino_municipio,destino_estado,lat,lng,geo_preciso,criado_em")
+    .eq("status", "aguardando motorista");
+  if (errPed) throw new Error(errPed.message);
+
+  const { data: vinculos, error: errVinc } = await supabaseAdmin.from("rota_pedidos").select("pedido_id");
+  if (errVinc) throw new Error(errVinc.message);
+
+  const comRota = new Set((vinculos || []).map(v => v.pedido_id));
+  return (pedidosAguardando || []).filter(p => !comRota.has(p.id));
 }
 
 function autenticar(req, res, next) {
@@ -697,6 +777,57 @@ app.put("/api/pedidos/:id", async (req, res) => {
 
   res.json(data);
 });
+// POST /api/pedidos/:id/resolver-local — admin corrige a localização de um pedido da
+// rota "Não encontrados" e o devolve ao agrupamento normal.
+//
+// Faz as três etapas no servidor, em sequência: corrigir → desvincular → reagrupar.
+// Se o frontend fizesse as três chamadas separadas, o DELETE dispararia um agrupamento
+// em background que correria junto com o reagrupamento explícito, e os dois criariam
+// uma rota cada para o mesmo pedido (rotas duplicadas).
+app.post("/api/pedidos/:id/resolver-local", autenticar, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const body = { ...req.body, geo_preciso: true, status: "aguardando motorista" };
+    delete body.id;
+    await aplicarFreteSeNecessario(body);
+
+    const { data: pedido, error: errUp } = await persistirPedidoTolerante(
+      (b) => supabaseAdmin.from("pedidos").update(b).eq("id", id).select().single(),
+      body
+    );
+    if (errUp) return res.status(400).json({ error: errUp.message });
+
+    // Tira o pedido da rota de revisão (e cancela a rota se ela ficar vazia)
+    const { data: vinculo } = await supabaseAdmin
+      .from("rota_pedidos").select("rota_id").eq("pedido_id", id).maybeSingle();
+    if (vinculo?.rota_id) {
+      await supabaseAdmin.from("rota_pedidos").delete().eq("pedido_id", id);
+      const { data: rota } = await supabaseAdmin
+        .from("rotas").select("cargas_ids").eq("id", vinculo.rota_id).single();
+      const novasIds = (rota?.cargas_ids || []).filter(x => String(x) !== String(id));
+      await supabaseAdmin.from("rotas").update({
+        cargas_ids: novasIds,
+        ...(novasIds.length === 0 ? { status: "cancelada" } : {})
+      }).eq("id", vinculo.rota_id);
+    }
+
+    // Reagrupa uma única vez, aguardando o resultado (nada em background aqui)
+    await agruparPedidosEmRotas(pedido);
+
+    const { data: novoVinculo } = await supabaseAdmin
+      .from("rota_pedidos").select("rota_id").eq("pedido_id", id).maybeSingle();
+    const { data: rotaFinal } = novoVinculo?.rota_id
+      ? await supabaseAdmin.from("rotas").select("id,codigo,nome,tipo_rota,status").eq("id", novoVinculo.rota_id).single()
+      : { data: null };
+
+    if (!rotaFinal) registrarFalhaAgrupamento("resolver-local: pedido não entrou em nenhuma rota", "sem vínculo após agrupar", [id]);
+
+    res.json({ ok: Boolean(rotaFinal), pedido, rota: rotaFinal });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.delete("/api/pedidos/:id", async (req, res) => {
   const { id } = req.params;
   try {
@@ -763,7 +894,14 @@ app.delete("/api/rotas/:id", (req, res) => deletar(req, res, "rotas"));
 app.post("/api/rotas/:id/pegar", autenticar, async (req, res) => {
   const { id } = req.params;
   const motoristaId = req.body.motorista_id || req.usuario.id;
+  // Veículo escolhido pelo motorista no modal ao pegar a rota. Vale para a rota
+  // inteira: é gravado em todos os pedidos dela (pedidos.veiculo_tipo).
+  const veiculoId = req.body.veiculo_id || null;
   try {
+    if (veiculoId) {
+      const { data: veiculo } = await supabaseAdmin.from("veiculos").select("id").eq("id", veiculoId).single();
+      if (!veiculo) return res.status(400).json({ error: "Veículo inválido." });
+    }
     // Busca a rota
     const { data: rota, error: errRota } = await supabaseAdmin
       .from("rotas").select("id,status,cargas_ids,motorista_id,tipo_rota").eq("id", id).single();
@@ -780,17 +918,19 @@ app.post("/api/rotas/:id/pegar", autenticar, async (req, res) => {
       .eq("id", id);
     if (errUpRota) return res.status(400).json({ error: errUpRota.message });
 
-    // Atualiza pedidos: em rota
+    // Atualiza pedidos: em rota (+ veículo escolhido, quando informado)
     const ids = rota.cargas_ids || [];
     if (ids.length) {
+      const patch = { status: "em rota" };
+      if (veiculoId) patch.veiculo_tipo = veiculoId;
       const { error: errPed } = await supabaseAdmin
         .from("pedidos")
-        .update({ status: "em rota" })
+        .update(patch)
         .in("id", ids);
       if (errPed) console.error("[pegar rota] Erro ao atualizar pedidos:", errPed);
     }
 
-    res.json({ ok: true, rota_id: id, pedidos_atualizados: ids.length });
+    res.json({ ok: true, rota_id: id, pedidos_atualizados: ids.length, veiculo_id: veiculoId });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1215,31 +1355,47 @@ app.get("/api/relatorios/:id/csv", async (req, res) => {
 
 // ── Admin utilitários ─────────────────────────────────────────────────────────
 
+// GET /api/admin/pedidos-sem-rota — pedidos órfãos (agrupamento falhou) + últimas falhas
+app.get("/api/admin/pedidos-sem-rota", async (req, res) => {
+  try {
+    const pedidos = await listarPedidosSemRota();
+    res.json({ total: pedidos.length, pedidos, ultimas_falhas: falhasAgrupamento });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/admin/reagrupar-todos — força reagrupamento de todos pedidos sem rota
 app.post("/api/admin/reagrupar-todos", async (req, res) => {
   try {
-    // Pedidos aguardando motorista
-    const { data: pedidosAguardando, error: errPed } = await supabaseAdmin
-      .from("pedidos")
-      .select("id,lat,lng,destino_municipio,destino_estado,valor_frete,distancia_km")
-      .eq("status", "aguardando motorista");
-    if (errPed) return res.status(400).json({ error: errPed.message });
+    // Marca onde o histórico de falhas estava antes, para reportar só as desta rodada
+    const falhasAntes = falhasAgrupamento.length;
 
-    // IDs já vinculados a alguma rota
-    const { data: vinculos } = await supabaseAdmin.from("rota_pedidos").select("pedido_id");
-    const comRota = new Set((vinculos || []).map(v => v.pedido_id));
-
-    const semRota = (pedidosAguardando || []).filter(p => !comRota.has(p.id));
+    const semRota = await listarPedidosSemRota();
     if (!semRota.length) {
-      return res.json({ ok: true, reagrupados: 0, mensagem: "Nenhum pedido sem rota encontrado." });
+      return res.json({ ok: true, reagrupados: 0, restantes: 0, falhas: [], mensagem: "Nenhum pedido sem rota encontrado." });
     }
 
-    // Chama agrupar para cada pedido sem rota (background, não paralelo para evitar duplicatas)
+    // Chama agrupar para cada pedido sem rota (sequencial, para evitar rotas duplicadas)
     for (const pedido of semRota) {
       await agruparPedidosEmRotas(pedido);
     }
 
-    res.json({ ok: true, reagrupados: semRota.length, ids: semRota.map(p => p.id) });
+    // Confere o resultado real: quem continuou sem rota é falha que precisa aparecer.
+    const restantes = await listarPedidosSemRota();
+    const falhas = falhasAgrupamento.slice(0, Math.max(0, falhasAgrupamento.length - falhasAntes));
+    if (restantes.length) {
+      console.error(`[FALHA-AGRUPAMENTO] ${restantes.length} pedido(s) continuam sem rota após o reagrupamento:`,
+        restantes.map(p => p.codigo || p.id).join(", "));
+    }
+
+    res.json({
+      ok: restantes.length === 0,
+      reagrupados: semRota.length - restantes.length,
+      restantes: restantes.length,
+      ids_restantes: restantes.map(p => p.id),
+      falhas,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

@@ -917,13 +917,95 @@ function toggleRotaExpand(rotaId) {
   renderMural();
 }
 
+// ── Modal de seleção de veículo ───────────────────────────────────────────────
+//
+// O veículo é escolhido UMA VEZ, ao pegar a rota inteira — não por pedido. O backend
+// grava o veiculo_tipo escolhido em todos os pedidos daquela rota.
+
+let _modalVeiculoRotaId      = null;
+let _modalVeiculoSelecionado = null;
+
+async function abrirModalVeiculo(rotaId) {
+  _modalVeiculoRotaId      = rotaId;
+  _modalVeiculoSelecionado = null;
+
+  const list         = document.getElementById("veiculoList");
+  const confirmarBtn = document.getElementById("veiculoModalConfirmar");
+  confirmarBtn.disabled = true;
+  list.innerHTML = '<div class="moto-veiculo-loading">Carregando veículos…</div>';
+
+  document.getElementById("veiculoModalBackdrop").classList.remove("hidden");
+
+  try {
+    const [veiculos, pedidos] = await Promise.all([
+      apiGet(`${API_BASE}/api/veiculos`),
+      apiGet(`${API_BASE}/api/pedidos`)
+    ]);
+
+    // Exclui pedidos do próprio motorista: veículo só é "Em uso" se for de OUTRO motorista
+    const meusPedidoIds = new Set(state.pedidos.map(p => p.id));
+    const emUso = new Set(
+      (pedidos || [])
+        .filter(p => p.status === "em rota" && p.veiculo_tipo && !meusPedidoIds.has(p.id))
+        .map(p => p.veiculo_tipo)
+    );
+
+    list.innerHTML = (veiculos || []).map(v => {
+      const usado = emUso.has(v.id);
+      return `<div class="moto-veiculo-card${usado ? " is-disabled" : ""}"
+                   data-id="${v.id}"
+                   ${usado ? "" : `onclick="selecionarVeiculo('${v.id}')"`}>
+        ${usado ? '<span class="moto-veiculo-badge-uso">Em uso</span>' : ""}
+        <div class="moto-veiculo-nome">${v.nome}</div>
+        <div class="moto-veiculo-specs">
+          <span>${Number(v.capacidade || 0).toLocaleString("pt-BR")} kg</span>
+          <span>R$ ${Number(v.custo_km || 0).toFixed(2)}/km</span>
+        </div>
+        ${v.uso ? `<div class="moto-veiculo-uso">${v.uso}</div>` : ""}
+       </div>`;
+    }).join("") || '<div class="moto-veiculo-erro">Nenhum veículo cadastrado.</div>';
+  } catch {
+    list.innerHTML = '<div class="moto-veiculo-erro">Erro ao carregar veículos.</div>';
+  }
+}
+
+function selecionarVeiculo(id) {
+  _modalVeiculoSelecionado = id;
+  document.querySelectorAll(".moto-veiculo-card").forEach(card => {
+    card.classList.toggle("is-selected", card.dataset.id === id);
+  });
+  document.getElementById("veiculoModalConfirmar").disabled = false;
+}
+
+function fecharModalVeiculo() {
+  document.getElementById("veiculoModalBackdrop").classList.add("hidden");
+  _modalVeiculoRotaId      = null;
+  _modalVeiculoSelecionado = null;
+}
+
+async function confirmarVeiculo() {
+  const rotaId    = _modalVeiculoRotaId;
+  const veiculoId = _modalVeiculoSelecionado;
+  if (!rotaId || !veiculoId) return;
+  fecharModalVeiculo();
+  await _executarPegarRota(rotaId, veiculoId);
+}
+
+// Ao aceitar a rota o motorista escolhe o veículo antes de confirmar.
 async function pegarRota(rotaId) {
+  await abrirModalVeiculo(rotaId);
+}
+
+async function _executarPegarRota(rotaId, veiculoId) {
   const card = document.getElementById(`rota-mural-${rotaId}`);
   const btn  = card?.querySelector(".moto-btn-pegar");
   if (btn) { btn.disabled = true; btn.textContent = "Processando…"; }
 
   try {
-    await apiPost(`${API_BASE}/api/rotas/${rotaId}/pegar`, { motorista_id: state.motorista.id });
+    await apiPost(`${API_BASE}/api/rotas/${rotaId}/pegar`, {
+      motorista_id: state.motorista.id,
+      veiculo_id:   veiculoId
+    });
     showToast("Rota adicionada às suas entregas!");
     muralState.rotas = muralState.rotas.filter(r => r.id !== rotaId);
     renderMural();
@@ -1024,6 +1106,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   document.getElementById("logoutBtn").addEventListener("click", sair);
+
+  // Modal de seleção de veículo (aberto ao pegar uma rota)
+  document.getElementById("veiculoModalClose").addEventListener("click", fecharModalVeiculo);
+  document.getElementById("veiculoModalCancelar").addEventListener("click", fecharModalVeiculo);
+  document.getElementById("veiculoModalConfirmar").addEventListener("click", confirmarVeiculo);
+  document.getElementById("veiculoModalBackdrop").addEventListener("click", e => {
+    if (e.target === e.currentTarget) fecharModalVeiculo();
+  });
 
   mostrarTelaPrincipal();
 });

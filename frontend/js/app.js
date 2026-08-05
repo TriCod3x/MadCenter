@@ -214,6 +214,9 @@ function renderDashboard() {
   const availableDrivers = motoristas.filter((m) => m.status === "disponível").length;
   const plannedRoutes = rotas.filter((r) => r.status === "planejada").length;
   const activeRoutes = rotas.filter((r) => r.status === "em andamento").length;
+  // Pedidos que o agrupamento não conseguiu colocar em rota nenhuma: não aparecem
+  // no mural do motorista nem na tela de Rotas. Sem este contador eles somem sem rastro.
+  const orfaos = getPedidosSemRota();
 
   const metrics = [
     ["Pedidos cadastrados",    cargas.length,        Icons.package(20),    "mc-neutral"],
@@ -223,7 +226,8 @@ function renderDashboard() {
     ["Entregues",              completed,            Icons.checkCircle(20),"mc-green"],
     ["Motoristas disponíveis", availableDrivers,     Icons.users(20),      "mc-teal"],
     ["Rotas planejadas",       plannedRoutes,        Icons.map(20),        "mc-yellow"],
-    ["Rotas em andamento",     activeRoutes,         Icons.route(20),      "mc-blue"]
+    ["Rotas em andamento",     activeRoutes,         Icons.route(20),      "mc-blue"],
+    ["Pedidos sem rota",       orfaos.length,        Icons.alertTriangle(20), orfaos.length ? "mc-red" : "mc-neutral"]
   ];
 
   document.getElementById("dashboardMetrics").innerHTML = metrics.map(([label, value, icon, cls]) => `
@@ -238,8 +242,8 @@ function renderDashboard() {
   document.getElementById("latestCargas").innerHTML = cargas.slice(-5).reverse().map((c) => `
     <div class="list-item" style="border-left-color:${statusBorder[c.status] || "var(--line)"}">
       <div class="list-item-body">
-        <strong>${c.codigo} — ${c.descricao}</strong>
-        <span>${c.cliente} · ${c.destinoMunicipio}/${c.destinoEstado} · ${vehicleName(c.veiculoTipo)}</span>
+        <strong>${c.codigo} — ${texto(c.descricao)}</strong>
+        <span>${texto(c.cliente)} · ${destinoLabel(c)} · ${vehicleName(c.veiculoTipo)}</span>
       </div>
       ${badge(c.status)}
     </div>
@@ -257,6 +261,13 @@ function renderDashboard() {
   `).join("") || emptyText("Nenhuma rota prevista.");
 
   const alerts = [];
+  if (orfaos.length) {
+    const codigos = orfaos.slice(0, 5).map((c) => c.codigo || "—").join(", ");
+    alerts.push(
+      `<span class="alert-critico">${Icons.alertTriangle(14)} ${orfaos.length} pedido(s) sem rota — o agrupamento falhou e eles não aparecem para nenhum motorista (${codigos}${orfaos.length > 5 ? "…" : ""}).</span>` +
+      `<button class="secondary-button alert-action" onclick="reagruparPedidosSemRota(this)">Tentar agrupar novamente</button>`
+    );
+  }
   const suggestions = buildRouteSuggestions();
   if (suggestions.length) {
     alerts.push(`Há ${suggestions.length} municípios com 2+ pedidos pendentes para gerar rota.`);
@@ -269,7 +280,7 @@ function renderDashboard() {
   }
   if (!alerts.length) alerts.push("Nenhum alerta no momento.");
 
-  document.getElementById("alertsList").innerHTML = alerts.map((alert) => `<div class="list-item"><strong>${alert}</strong></div>`).join("");
+  document.getElementById("alertsList").innerHTML = alerts.map((alert) => `<div class="list-item alert-item">${alert}</div>`).join("");
 
   renderEntregasChart("semana");
 }
@@ -470,6 +481,9 @@ function downloadCSV(filename, rows) {
 function buildRouteSuggestions() {
   const groups = {};
   getCargas().filter((c) => ["aguardando motorista", "próximo dia"].includes(c.status)).forEach((c) => {
+    // Sem município informado não dá para sugerir rota por destino — esses pedidos
+    // são tratados pela rota "Não encontrados", não por sugestão de agrupamento.
+    if (!c.destinoMunicipio) return;
     const key = `${c.destinoMunicipio}|${c.destinoEstado}`;
     groups[key] = groups[key] || { municipio: c.destinoMunicipio, estado: c.destinoEstado, pedidos: [] };
     groups[key].pedidos.push(c);
@@ -509,21 +523,35 @@ function renderTables() {
   renderRotasTable();
 }
 
+// Campos opcionais do pedido (descricao, cliente, telefone, destino_municipio) são NULL
+// quando o atendente não preenche — NULL significa "não informado", não string vazia.
+// Estes dois helpers existem para isso nunca virar o texto "null" na tela.
+function texto(valor, vazio = "—") {
+  return (valor === null || valor === undefined || valor === "") ? vazio : String(valor);
+}
+
+function destinoLabel(c) {
+  const partes = [c.destinoMunicipio, c.destinoEstado].filter(Boolean);
+  return partes.length ? partes.join("/") : "—";
+}
+
 function renderPedidosTable() {
   const filters = App.filters;
   const rows = getCargas().filter((c) => {
     const query = filters.text.trim().toLowerCase();
-    const haystack = `${c.codigo} ${c.descricao} ${c.cliente} ${c.destinoMunicipio} ${c.destinoEstado}`.toLowerCase();
+    // Campos opcionais do formulário do atendente chegam como null — sempre via texto().
+    const haystack = [c.codigo, c.descricao, c.cliente, c.destinoMunicipio, c.destinoEstado].map(texto).join(" ").toLowerCase();
+    const destinoQuery = (filters.destino || "").toLowerCase();
     return (!filters.status || c.status === filters.status)
       && (!filters.prioridade || c.prioridade === filters.prioridade)
-      && (!filters.destino || c.destinoMunicipio.toLowerCase().includes(filters.destino.toLowerCase()) || c.destinoEstado.toLowerCase().includes(filters.destino.toLowerCase()))
+      && (!filters.destino || texto(c.destinoMunicipio).toLowerCase().includes(destinoQuery) || texto(c.destinoEstado).toLowerCase().includes(destinoQuery))
       && (!query || haystack.includes(query));
   });
   table("pedidosTable", ["Código", "Cliente", "Material", "Destino", "Peso", "Veículo", "Frete", "Status", "Ações"], rows.map((c) => [
     c.codigo,
-    c.cliente,
-    c.descricao,
-    `${c.destinoMunicipio}/${c.destinoEstado}${geoAproxBadge(c)}`,
+    texto(c.cliente),
+    texto(c.descricao),
+    `${destinoLabel(c)}${geoAproxBadge(c)}`,
     `${c.peso} kg`,
     vehicleName(c.veiculoTipo),
     money.format(Number(c.valorFrete || 0)),
@@ -1315,8 +1343,10 @@ function _destroyMapPicker() {
   }
 }
 
-function openMapPicker() {
-  _mapPickerForm = document.getElementById("entityForm");
+// `form` opcional: por padrão usa o formulário de cadastro/edição de pedido, mas o
+// modal de Rotas passa o mini-formulário de resolução da rota "Não encontrados".
+function openMapPicker(form) {
+  _mapPickerForm = form || document.getElementById("entityForm");
   if (!_mapPickerForm) return;
 
   document.getElementById("mapPickerBackdrop").classList.add("active");
@@ -1387,6 +1417,12 @@ async function confirmMapLocation() {
   setCepField(form, "geoPreciso", "true");
   destacarBotaoMapPicker(form, false);
   _pickerAutoAbertoAprox = false;
+
+  // Formulário de resolução da rota "Não encontrados": mostra o ponto escolhido ali mesmo.
+  if (form.id && form.id.startsWith("resolveForm-")) {
+    const infoEl = document.getElementById(form.id.replace("resolveForm-", "resolveInfo-"));
+    if (infoEl) infoEl.textContent = `Ponto marcado: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }
 
   closeMapPicker();
 
@@ -1618,6 +1654,36 @@ async function autoGenerateRouteForMunicipality(municipio, estado) {
   toast(`Rota criada automaticamente para ${municipio}/${estado}.`);
 }
 
+// ── Pedidos órfãos (agrupamento falhou) ───────────────────────────────────────
+
+// Pedido aguardando motorista que não está em nenhuma rota. Enquanto ficar assim ele
+// não aparece no mural do motorista NEM na tela de Rotas — some do fluxo sem rastro.
+function getPedidosSemRota() {
+  const emAlgumaRota = new Set(getRotas().flatMap((r) => r.cargasIds || []));
+  return getCargas().filter((c) => c.status === "aguardando motorista" && !emAlgumaRota.has(c.id));
+}
+
+async function reagruparPedidosSemRota(btn) {
+  const original = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "Agrupando…"; }
+  try {
+    const r = await apiPost(`${API_BASE}/api/admin/reagrupar-todos`, {});
+    await initStorage();
+    renderAll();
+    if (r.restantes) {
+      // Falhou de novo: o motivo mais provável é a migração do banco não ter sido rodada.
+      const motivo = (r.falhas || []).map((f) => f.detalhe).find(Boolean);
+      toast(`${r.restantes} pedido(s) continuam sem rota. ${motivo || "Veja o log do servidor."}`);
+    } else {
+      toast(`${r.reagrupados} pedido(s) agrupados em rota.`);
+    }
+  } catch (e) {
+    console.error(e);
+    toast("Erro ao reagrupar pedidos.");
+    if (btn) { btn.disabled = false; btn.textContent = original; }
+  }
+}
+
 async function autoAssignPedidoToRoute(pedido) {
   const { id, lat, lng, destinoMunicipio, destinoEstado, cliente, valorFrete, distanciaKm, geoPreciso } = pedido;
   const hasCoords = lat && lng && Number(lat) !== 0 && Number(lng) !== 0;
@@ -1657,7 +1723,7 @@ async function autoAssignPedidoToRoute(pedido) {
 
   // Nenhuma rota próxima — cria nova rota planejada
   await saveRota({
-    nome: `${destinoMunicipio} · ${cliente}`,
+    nome: [destinoMunicipio, cliente].filter(Boolean).join(" · ") || "Rota sem destino informado",
     tipoRota: "Rodoviária",
     destinoMunicipio,
     destinoEstado,
@@ -1685,20 +1751,28 @@ function openRotaPedidos(rotaId) {
   openModal();
 }
 
+// Pedido sem localização confiável: é o que faz ele cair na rota "Não encontrados".
+// Mesmo critério do backend (temLocalConfiavel em server.js).
+function precisaRevisaoLocal(c) {
+  return !c.lat || !c.lng || c.geoPreciso === false;
+}
+
 function buildRotaPedidosHtml(rotaId) {
   const rota = getRotas().find((r) => r.id === rotaId);
   if (!rota) return "";
   const pedidos = getCargas().filter((c) => (rota.cargasIds || []).includes(c.id));
   const motorista = driverName(rota.motoristaId);
+  const revisao = rota.tipoRota === "Não encontrados";
 
   const header = `
     <div class="rota-pedidos-header">
       <div class="rota-pedidos-meta">
-        <strong>${rota.nome}</strong>
-        <span>${rota.destinoMunicipio}/${rota.destinoEstado} · ${motorista} · ${money.format(Number(rota.freteTotal || 0))}</span>
+        <strong>${revisao ? "Não encontrados" : rota.nome}</strong>
+        <span>${revisao ? "Revisão manual" : `${rota.destinoMunicipio}/${rota.destinoEstado}`} · ${revisao ? "sem motorista" : motorista} · ${money.format(Number(rota.freteTotal || 0))}</span>
       </div>
-      ${badge(rota.status)}
+      ${revisao ? `<span class="badge badge-gray">revisão manual</span>` : badge(rota.status)}
     </div>
+    ${revisao ? `<div class="rota-revisao-aviso">${Icons.alertTriangle(14)} Estes pedidos não têm localização confiável e ficam ocultos do mural do motorista. Corrija o endereço ou marque o ponto no mapa para liberá-los.</div>` : ""}
   `;
 
   if (!pedidos.length) {
@@ -1707,22 +1781,24 @@ function buildRotaPedidosHtml(rotaId) {
 
   const cards = pedidos.map((c) => {
     const endereco = [c.enderecoEntrega, c.numero, c.complemento].filter(Boolean).join(", ");
-    const local = [endereco, `${c.destinoMunicipio}/${c.destinoEstado}`].filter(Boolean).join(" · ");
+    const local = [endereco, [c.destinoMunicipio, c.destinoEstado].filter(Boolean).join("/")].filter(Boolean).join(" · ");
     const entregue = c.status === "entregue";
     const pendente = c.status === "próximo dia";
+    const revisar  = precisaRevisaoLocal(c);
     return `
-      <div class="pedido-detail-card${entregue ? " pedido-entregue" : ""}">
+      <div class="pedido-detail-card${entregue ? " pedido-entregue" : ""}${revisar ? " pedido-revisao" : ""}" id="pedido-card-${c.id}">
         <div class="pedido-detail-info">
           <div class="pedido-detail-title">
-            <strong>${c.codigo} — ${c.descricao}</strong>
+            <strong>${c.codigo} — ${texto(c.descricao)}</strong>
             ${badge(c.status)}
           </div>
           <div class="pedido-detail-row">
-            <span>${Icons.user(14)} <strong>${c.cliente}</strong></span>
+            <span>${Icons.user(14)} <strong>${texto(c.cliente)}</strong></span>
             ${c.telefone ? `<span>${Icons.phone(14)} ${c.telefone}</span>` : ""}
           </div>
           <div class="pedido-detail-row">
             <span>${Icons.mapPin(14)} ${local || "Endereço não informado"}</span>
+            ${revisar ? `<span class="pedido-revisao-tag">${Icons.alertTriangle(12)} ${!c.lat || !c.lng ? "sem localização" : "localização aproximada"}</span>` : ""}
           </div>
           <div class="pedido-detail-row">
             <span>${Icons.package(14)} ${c.tipo} · ${c.peso} kg${c.volume ? " · " + c.volume : ""}</span>
@@ -1736,15 +1812,114 @@ function buildRotaPedidosHtml(rotaId) {
           ${c.observacoes ? `<div class="pedido-detail-obs">${Icons.file(14)} ${c.observacoes}</div>` : ""}
         </div>
         <div class="pedido-detail-actions">
-          ${!entregue ? `<button class="primary-button" onclick="markPedidoEntregue('${c.id}','${rotaId}')">${Icons.checkCircle(14)} Entregue</button>` : ""}
+          ${revisar ? `<button class="primary-button" onclick="abrirResolucaoLocal('${c.id}','${rotaId}')">${Icons.mapPin(14)} Resolver localização</button>` : ""}
+          ${!entregue && !revisar ? `<button class="primary-button" onclick="markPedidoEntregue('${c.id}','${rotaId}')">${Icons.checkCircle(14)} Entregue</button>` : ""}
           ${!entregue && !pendente ? `<button class="secondary-button" onclick="marcarPedidoPendente('${c.id}','${rotaId}')">${Icons.calendar(14)} Pendente para outro dia</button>` : ""}
           ${c.status === "cancelado" ? `<button class="secondary-button" onclick="removerPedidoDaRota('${c.id}','${rotaId}')">${Icons.trash(14)} Remover da rota</button>` : ""}
         </div>
+        <div class="pedido-resolve-slot" id="pedido-resolve-${c.id}"></div>
       </div>
     `;
   }).join("");
 
   return header + `<div class="rota-pedidos-list">${cards}</div>`;
+}
+
+// ── Resolver pendência de localização direto na tela de Rotas ─────────────────
+//
+// Fecha o ciclo da rota "Não encontrados": o admin corrige o endereço (ou marca o
+// ponto no mapa) sem sair para a tela de Pedidos. Ao salvar, o pedido sai da rota de
+// revisão e volta para o agrupamento normal — passando a aparecer para o motorista.
+
+function abrirResolucaoLocal(pedidoId, rotaId) {
+  const c = getCargas().find((item) => item.id === pedidoId);
+  const slot = document.getElementById(`pedido-resolve-${pedidoId}`);
+  if (!c || !slot) return;
+
+  if (slot.innerHTML) { slot.innerHTML = ""; return; }  // clique de novo fecha
+
+  slot.innerHTML = `
+    <form class="pedido-resolve-form" id="resolveForm-${pedidoId}" onsubmit="return false">
+      <div class="pedido-resolve-grid">
+        <label>Endereço
+          <input type="text" name="enderecoEntrega" value="${c.enderecoEntrega || ""}" placeholder="Rua / logradouro">
+        </label>
+        <label>Número
+          <input type="text" name="numero" value="${c.numero || ""}" placeholder="s/n">
+        </label>
+        <label>Município
+          <input type="text" name="destinoMunicipio" value="${c.destinoMunicipio || ""}">
+        </label>
+        <label>UF
+          <input type="text" name="destinoEstado" maxlength="2" value="${c.destinoEstado || ""}">
+        </label>
+        <label>CEP
+          <input type="text" name="cep" value="${c.cep || ""}" placeholder="00000-000">
+        </label>
+      </div>
+      <input type="hidden" name="lat" value="${c.lat || ""}">
+      <input type="hidden" name="lng" value="${c.lng || ""}">
+      <input type="hidden" name="geoPreciso" value="${c.geoPreciso === true ? "true" : ""}">
+      <input type="hidden" name="distanciaKm" value="${c.distanciaKm || ""}">
+      <input type="hidden" name="valorFrete" value="${c.valorFrete || ""}">
+      <div class="pedido-resolve-actions">
+        <span class="pedido-resolve-info" id="resolveInfo-${pedidoId}">
+          ${c.lat && c.lng ? `Ponto atual: ${Number(c.lat).toFixed(5)}, ${Number(c.lng).toFixed(5)}` : "Sem ponto marcado"}
+        </span>
+        <button type="button" class="secondary-button btn-map-picker" onclick="openMapPicker(document.getElementById('resolveForm-${pedidoId}'))">
+          ${Icons.mapPin(14)} Marcar no mapa
+        </button>
+        <button type="button" class="secondary-button" onclick="document.getElementById('pedido-resolve-${pedidoId}').innerHTML = ''">Cancelar</button>
+        <button type="button" class="primary-button" onclick="salvarResolucaoLocal('${pedidoId}','${rotaId}', this)">
+          ${Icons.save(14)} Salvar e liberar
+        </button>
+      </div>
+    </form>
+  `;
+}
+
+async function salvarResolucaoLocal(pedidoId, rotaId, btn) {
+  const form = document.getElementById(`resolveForm-${pedidoId}`);
+  if (!form) return;
+
+  const val  = (name) => (form.querySelector(`[name="${name}"]`)?.value || "").trim();
+  const lat  = Number(val("lat"));
+  const lng  = Number(val("lng"));
+
+  if (!lat || !lng) {
+    toast('Marque o ponto no mapa (ou preencha o endereço e use "Marcar no mapa") antes de salvar.');
+    return;
+  }
+
+  const original = btn ? btn.innerHTML : "";
+  if (btn) { btn.disabled = true; btn.textContent = "Salvando…"; }
+
+  try {
+    // Corrigir + desvincular da rota de revisão + reagrupar são feitos numa chamada só.
+    // Separado em três chamadas, o DELETE dispara um agrupamento em background que corre
+    // junto com o reagrupamento e os dois criam uma rota para o mesmo pedido.
+    // geo_preciso = true é gravado pelo backend: ponto conferido por uma pessoa.
+    const r = await apiPost(`${API_BASE}/api/pedidos/${pedidoId}/resolver-local`, {
+      endereco_entrega:  val("enderecoEntrega") || null,
+      numero:            val("numero") || null,
+      destino_municipio: val("destinoMunicipio") || null,
+      destino_estado:    (val("destinoEstado") || "").toUpperCase(),
+      cep:               val("cep") || null,
+      lat, lng,
+      distancia_km:      Number(val("distanciaKm") || 0)
+    });
+
+    await initStorage();
+    renderAll();
+    closeModal();
+    toast(r.rota
+      ? `Localização corrigida. Pedido liberado na rota ${r.rota.codigo || r.rota.nome}.`
+      : "Localização corrigida, mas o pedido não entrou em nenhuma rota — veja o alerta na visão geral.");
+  } catch (e) {
+    console.error(e);
+    toast("Erro ao salvar a localização do pedido.");
+    if (btn) { btn.disabled = false; btn.innerHTML = original; }
+  }
 }
 
 async function markPedidoEntregue(pedidoId, rotaId) {

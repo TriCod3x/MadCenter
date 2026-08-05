@@ -89,10 +89,12 @@ O **Madcenter Entregas** é um sistema de gestão operacional desenvolvido para 
 ### 📱 Tela do Motorista (Mobile)
 - Tela exclusiva e responsiva para uso no celular
 - Login com usuário e senha do banco de dados
-- Abas: **Minhas Entregas** e **Mural de Pedidos disponíveis**
-- O motorista escolhe quais pedidos quer pegar
-- **Modal de seleção de veículo** ao aceitar pedido
-- Criação automática de rota ao aceitar pedidos
+- Abas: **Minhas Entregas** e **Mural de Rotas disponíveis**
+- O motorista pega a **rota inteira** (com todas as paradas), não pedidos avulsos
+- **Modal de seleção de veículo** ao aceitar a rota — escolhido uma vez e gravado em
+  todos os pedidos daquela rota
+- Rotas de **revisão manual** ("Não encontrados") não aparecem no mural: são pendências
+  do admin, não trajetos de entrega
 - Barra de progresso das entregas
 - Mapa com rota real via OSRM e geolocalização em tempo real
 - Botão "Abrir no Google Maps" para navegação
@@ -299,6 +301,9 @@ CREATE TABLE rotas (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   codigo TEXT,
   nome TEXT,
+  -- "Não encontrados" é a rota de revisão manual (pedidos sem localização confiável).
+  -- Ela não tem destino, por isso as colunas abaixo aceitam NULL.
+  tipo_rota TEXT CHECK (tipo_rota IN ('Rodoviária','Urbana','Mista','Não encontrados')),
   destino_municipio TEXT,
   destino_estado TEXT,
   motorista_id UUID REFERENCES motoristas(id),
@@ -358,6 +363,21 @@ CREATE TABLE relatorios (
 );
 ```
 
+### 🧩 Migrações
+
+Bancos criados antes das mudanças abaixo precisam rodar os scripts de
+`backend/migrations/` no **SQL Editor do Supabase** (são idempotentes):
+
+| Arquivo | O que faz | Se não rodar |
+|---|---|---|
+| `2026-07-18-add-geo-preciso.sql` | Adiciona `pedidos.geo_preciso` | Sem marcação de precisão do geocode |
+| `2026-08-05-rotas-nao-encontrados.sql` | `rotas.destino_municipio`/`destino_estado` viram nullable e o CHECK de `tipo_rota` passa a aceitar `'Não encontrados'` | A rota de revisão manual **não consegue ser criada** (erros 23502/23514) e os pedidos sem localização confiável ficam **sem rota nenhuma**, invisíveis para motorista e admin |
+| `2026-08-05-pedidos-campos-opcionais.sql` | `descricao`, `destino_municipio`, `cliente` e `telefone` viram nullable em `pedidos` | O formulário do atendente diz que nenhum campo é obrigatório, mas **salvar com qualquer um deles em branco falha** (erro 23502) |
+
+> `NULL` nesses campos significa **"não informado"**. Não converta para string vazia: `''`
+> apaga a diferença entre "ficou em branco" e "foi informado vazio", e distorce relatórios
+> e exportação CSV. Na exibição use os helpers `texto()` / `destinoLabel()` (app.js).
+
 ---
 
 ## 🔄 Fluxo Operacional
@@ -365,11 +385,15 @@ CREATE TABLE relatorios (
 ```
 Atendente cadastra pedido
         ↓
-Status: "aguardando rota" → sistema cria rota → "disponivel"
+Status: "aguardando motorista" → sistema agrupa por proximidade → cria a rota
+        ↓                                    ↓
+Aparece no Mural de Rotas          sem localização confiável?
+                                             ↓
+                                   rota "Não encontrados" (oculta do motorista)
+                                             ↓
+                                   Admin resolve na tela de Rotas → volta ao agrupamento
         ↓
-Aparece no Mural de Pedidos
-        ↓
-Motorista escolhe pedido → seleciona veículo → aceita
+Motorista pega a ROTA inteira → seleciona veículo → confirma
         ↓
 Data de saída registrada · Rota: planejada → em andamento
         ↓

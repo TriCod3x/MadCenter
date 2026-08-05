@@ -804,6 +804,97 @@ tr:hover td {
   font-size: 13px;
 }
 
+/* ── Rota "Não encontrados": pendências de revisão no modal de Rotas ────────── */
+
+.rota-revisao-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid #d1d5db;
+  background: rgba(156, 163, 175, .1);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.pedido-detail-card.pedido-revisao {
+  border-left: 3px solid #9ca3af;
+}
+
+.pedido-revisao-tag {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.pedido-resolve-slot:empty { display: none; }
+
+.pedido-resolve-form {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.pedido-resolve-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.pedido-resolve-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.pedido-resolve-grid input {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.pedido-resolve-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pedido-resolve-actions .primary-button,
+.pedido-resolve-actions .secondary-button {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+.pedido-resolve-info {
+  flex: 1;
+  min-width: 160px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Alerta de pedidos órfãos na visão geral */
+.alert-item { font-weight: 600; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.alert-critico { display: flex; align-items: center; gap: 6px; color: var(--danger, #dc2626); }
+.alert-action { min-height: 30px; padding: 0 12px; font-size: 12px; }
+
+.metric-card.mc-red::before { background: #dc2626; }
+.metric-card.mc-red .metric-icon { background: #fee2e2; color: #b91c1c; }
+[data-theme="dark"] .metric-card.mc-red .metric-icon { background: #450a0a; color: #fca5a5; }
+
 .table-action-pedidos {
   font-weight: 600;
   color: var(--primary-2);
